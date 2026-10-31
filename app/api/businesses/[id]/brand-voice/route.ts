@@ -1,9 +1,10 @@
-import { ownerRoute } from "../../../../../lib/authorization";
+import { currentOwner, ownerRoute } from "../../../../../lib/authorization";
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "../../../../../lib/db";
 import {
   BrandVoiceError,
   MAX_STORED_VOICE_CHARS,
+  assertBrandVoicePlan,
   learnBrandVoice
 } from "../../../../../lib/services/brandVoice";
 
@@ -53,6 +54,10 @@ async function handlePUT(req: NextRequest, context: BusinessIdContext) {
     if (voice.length > MAX_STORED_VOICE_CHARS) {
       return NextResponse.json({ error: `Keep the voice profile to ${MAX_STORED_VOICE_CHARS} characters or fewer` }, { status: 400 });
     }
+
+    // ownerRoute proved the business is the caller's; the plan is a separate check. A downgraded
+    // owner can still reset (DELETE) but not write a new profile.
+    await assertBrandVoicePlan(currentOwner());
 
     const updated = await query<VoiceRow>(
       `UPDATE businesses

@@ -172,6 +172,16 @@ async function databaseTests() {
       assert.match((await freeResponse.json()).error, /Pro feature/);
       assert.equal(await ownerCalls("free-owner"), 0);
 
+      // A Free owner cannot save a profile by hand either, but can still reset (DELETE) one.
+      const freePut = await route.PUT(
+        request("free-owner", `/api/businesses/${freeBusiness}/brand-voice`, "PUT", { voice: PROFILE }),
+        params(freeBusiness)
+      );
+      assert.equal(freePut.status, 403);
+      assert.match((await freePut.json()).error, /Pro feature/);
+      assert.equal((await c.query("SELECT brand_voice FROM businesses WHERE id=$1", [freeBusiness])).rows[0].brand_voice, null);
+      assert.equal((await route.DELETE(request("free-owner", `/api/businesses/${freeBusiness}/brand-voice`, "DELETE"), params(freeBusiness))).status, 200);
+
       // Learning through the route stores the profile and charges one call.
       process.env.OWNER_GENERATION_DAILY_LIMIT = "25";
       const learnedRoute = await route.POST(

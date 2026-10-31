@@ -37,6 +37,14 @@ export function normalizeVoiceProfile(raw: string): string {
   return text.replace(/[ \t]+/g, " ").replace(/ ?\n ?/g, "\n").trim();
 }
 
+/** Brand voice is a Pro feature; every write path (learn and manual save) checks it here. */
+export async function assertBrandVoicePlan(ownerId: string) {
+  const entitlements = await entitlementsFor(ownerId);
+  if (!entitlements.limits.brandVoice) {
+    throw new BrandVoiceError("Brand voice is a Pro feature. Upgrade to learn it from your website.", 403);
+  }
+}
+
 /**
  * Learn a voice profile from one public page. Pro only, one AI call against the
  * owner's daily limit, and nothing is stored unless the whole flow succeeds.
@@ -51,10 +59,7 @@ export async function learnBrandVoice(businessId: number, url: string, deps: Bra
   ).rows[0];
   if (!business?.owner_id) throw new BrandVoiceError("business not found", 404);
 
-  const entitlements = await entitlementsFor(business.owner_id);
-  if (!entitlements.limits.brandVoice) {
-    throw new BrandVoiceError("Brand voice is a Pro feature. Upgrade to learn it from your website.", 403);
-  }
+  await assertBrandVoicePlan(business.owner_id);
 
   const trimmed = typeof url === "string" ? url.trim() : "";
   if (!trimmed) throw new BrandVoiceError("Enter your website URL");
