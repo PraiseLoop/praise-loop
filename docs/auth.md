@@ -1,7 +1,8 @@
 # Owner authentication and access (#42)
 
-Uses maintained NextAuth 4.24.15 (Next 15/React 19 support) with Google OAuth and a
-small Postgres adapter. Sources: https://next-auth.js.org/configuration/providers/google,
+Uses maintained NextAuth 4.24.15 (Next 15/React 19 support) with Google and Microsoft
+(Entra ID) OAuth and a small Postgres adapter. Sources: https://next-auth.js.org/configuration/providers/google,
+https://next-auth.js.org/configuration/providers/azure-ad,
 https://support.google.com/cloud/answer/15549945
 and https://next-auth.js.org/tutorials/creating-a-database-adapter (checked 2026-10-15).
 The adapter stores provider identity only, discards provider access/refresh tokens,
@@ -207,6 +208,72 @@ does not depend on it. Owner steps when it is built:
 4. Add the Services ID to `APPLE_CLIENT_ID` alongside the bundle id so the server
    verifier accepts web identity tokens too.
 
+## Sign in with Microsoft (Entra ID, #158)
+
+Microsoft sign-in is available on the web and in the phone app. The web uses
+NextAuth's built-in Azure AD provider (provider id `azure-ad`; the redirect URI is
+`${NEXTAUTH_URL}/api/auth/callback/azure-ad`) with `tenantId: "common"` so both
+work/school and personal Microsoft accounts can sign in. It requests only
+`openid email profile`; the provider is enabled only when both
+`MICROSOFT_CLIENT_ID` and `MICROSOFT_CLIENT_SECRET` are set, so a deployment
+without Microsoft credentials keeps the email and Google paths and simply hides
+the button. The phone uses the same app registration as a public client:
+`expo-auth-session` fetches Microsoft's discovery document, runs the
+authorization-code flow with PKCE and no secret, and sends the resulting ID token
+to `POST /api/mobile/session/microsoft`.
+
+The phone route is public like the Google and Apple exchanges. The server
+verifies the RS256 signature against Microsoft's multi-tenant key set
+(https://login.microsoftonline.com/common/discovery/v2.0/keys, cached by `jose`),
+requires `exp` and `sub`, and accepts the audience only when it is one of the
+comma-separated values in `MICROSOFT_CLIENT_ID`. A multi-tenant token has no
+single fixed issuer, so the issuer must have the form
+`https://login.microsoftonline.com/<tid>/v2.0` and the `<tid>` in it must equal
+the token's own `tid` claim; anything else is rejected. The identity subject is
+`${tid}:${sub}`, so ids from different tenants cannot collide. The display name
+comes from the token's `name` claim. The address comes from `email`, or from
+`preferred_username` when it looks like an address, lower-cased, and is recorded
+on the method row for display only. Missing `MICROSOFT_CLIENT_ID` makes every
+phone request fail closed with the same generic 401, and the body limit is 8 KB.
+Failed attempts share the Google limiter: 10 per 15 minutes per client IP, in
+process memory, as described above. The ID token is never stored or logged.
+
+Microsoft never links to an existing owner by email. Its `email` claim is not
+guaranteed to be verified or to belong to the account holder, so
+`lib/authLinking.ts` is called with `emailVerified: false`: a new Microsoft
+sign-in creates its own owner with no login email, even when the address equals a
+Google owner's. A signed-in owner can attach Microsoft from a web sign-in (the
+NextAuth callback sees the live session) or from `POST /api/account/methods` with
+`{ "provider": "microsoft", "idToken": "..." }`; the live session already proves
+control, and a subject that belongs to another owner is refused. `/account` and
+the phone profile label the provider "Microsoft".
+
+Owner setup (nothing was run against Microsoft's live service in this change):
+
+1. In the Microsoft Entra admin center open **App registrations > New
+   registration**. Choose **Accounts in any organizational directory and personal
+   Microsoft accounts** (multi-tenant plus personal). No Microsoft Graph
+   permission is needed; the OIDC scopes `openid email profile` are enough.
+2. Under **Authentication > Add a platform**, add a **Web** redirect URI
+   `${NEXTAUTH_URL}/api/auth/callback/azure-ad` (use the real HTTPS host in
+   production). For the phone add a **Mobile and desktop applications** redirect
+   URI `praiseloop://auth/microsoft`, matching the app's Expo scheme and the path
+   in `mobile/src/auth/microsoft.ts`. The same registration can carry both.
+3. Copy the **Application (client) ID** into `MICROSOFT_CLIENT_ID` (the server
+   accepts a comma-separated list for the phone audience check) and into the
+   app's build environment as `EXPO_PUBLIC_MICROSOFT_CLIENT_ID`. Create a client
+   secret under **Certificates & secrets** and put it in
+   `MICROSOFT_CLIENT_SECRET`; the secret is used by the web provider only, never
+   by the phone and never committed.
+4. Rebuild the phone app (a development or store build; the Microsoft button is
+   hidden without the client id) and restart the web app. A Microsoft-only owner
+   still cannot set up a business on the phone; like an Apple-only owner they
+   link Google or email from the profile and finish setup on the web.
+
+Live web sign-in, live phone sign-in and a real work/school or personal account
+were not run in this change. They wait on the owner's Entra registration and a
+device check.
+
 ## Linking several sign-in methods to one owner (#156)
 
 One owner can have several methods in `auth_accounts`. Every sign-in path (web
@@ -233,8 +300,8 @@ NextAuth callback and the mobile exchange) calls the same policy in
   web this happens when an owner on `/account` presses "Link Google": the
   NextAuth callback sees the live session and links instead of switching
   accounts. `POST /api/account/methods` does the same for the phone with a
-  verified Google or Apple ID token. Neither action requires the emails to
-  match.
+  verified Google, Apple or Microsoft ID token. Neither action requires the
+  emails to match.
 - **Unlinking is refused for the last method.** `DELETE /api/account/methods`
   with `{ "provider": "google" }` removes a method only while another remains,
   so an owner cannot lock themselves out. `GET /api/account/methods` is the

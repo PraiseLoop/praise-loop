@@ -37,7 +37,7 @@ export function initials(profile: Profile | null): string {
   return (words.length > 1 ? [words[0], words[words.length - 1]] : [words[0]]).join("").toUpperCase();
 }
 
-const PROVIDER_NAMES: Record<string, string> = { google: "Google", email: "Email" };
+const PROVIDER_NAMES: Record<string, string> = { google: "Google", apple: "Apple", microsoft: "Microsoft", email: "Email" };
 
 // The provider as the owner knows it, matching the web page. An unknown provider
 // is shown by its stored key rather than hidden.

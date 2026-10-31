@@ -8,7 +8,7 @@ export type AuthMethod = {
 };
 
 // The same labels the web uses; an unknown provider falls back to its raw id.
-export const providerNames: Record<string, string> = { google: "Google", apple: "Apple" };
+export const providerNames: Record<string, string> = { google: "Google", apple: "Apple", microsoft: "Microsoft" };
 export const providerName = (provider: string) => providerNames[provider] ?? provider;
 
 function timestamp(value: unknown) {

@@ -21,6 +21,10 @@ const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? "";
 const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? "";
 const googleIosUrlScheme = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME ?? "";
 
+// Microsoft Entra ID app registration (public client). It is not a secret; an
+// empty value keeps the Microsoft button hidden instead of failing at runtime.
+const microsoftClientId = process.env.EXPO_PUBLIC_MICROSOFT_CLIENT_ID ?? "";
+
 // Public EAS project id used to fetch Expo push tokens (#89). It is not a secret;
 // leaving it empty keeps push unavailable instead of failing at launch.
 const easProjectId = process.env.EXPO_PUBLIC_EAS_PROJECT_ID ?? "";
@@ -69,6 +73,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     mediaLibraryPlugin,
     "expo-notifications",
     "expo-apple-authentication",
+    "expo-web-browser",
     ...googlePlugins
   ],
   experiments: {
@@ -78,6 +83,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     apiBaseUrl,
     googleWebClientId,
     googleIosClientId,
+    microsoftClientId,
     appVariant: variant,
     ...(easProjectId ? { eas: { projectId: easProjectId } } : {})
   }

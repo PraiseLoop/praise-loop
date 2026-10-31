@@ -36,10 +36,10 @@ describe("sign-in methods API", () => {
     expect(calls[0].body).toEqual({ provider: "google", idToken: "synthetic-id-token" });
   });
 
-  it("labels Apple and Google the same way as the web", () => {
+  it("labels Apple, Google and Microsoft the same way as the web", () => {
     expect(providerName("apple")).toBe("Apple");
     expect(providerName("google")).toBe("Google");
-    expect(providerName("microsoft")).toBe("microsoft");
+    expect(providerName("microsoft")).toBe("Microsoft");
   });
 
   it("rejects malformed methods instead of showing another owner's data", async () => {

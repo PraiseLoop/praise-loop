@@ -47,6 +47,19 @@ export async function signInWithAppleToken(identityToken: string, fullName: stri
   await sessionStore.save(session.token);
 }
 
+// Native Microsoft Entra ID sign-in (#158): the ID token goes to the server once,
+// is exchanged for our own bearer session and is never stored or logged here.
+export async function signInWithMicrosoftToken(idToken: string): Promise<void> {
+  const session = await api.request<{ token?: unknown }>("/api/mobile/session/microsoft", {
+    method: "POST",
+    body: { idToken }
+  });
+  if (typeof session?.token !== "string" || session.token.length === 0) {
+    throw new Error("The Microsoft sign-in response was invalid.");
+  }
+  await sessionStore.save(session.token);
+}
+
 // Revoking is best-effort: the local token is cleared even when the server is
 // unreachable, so the next launch starts signed out. The push token is removed
 // first, while the session that owns it is still valid.

@@ -1,5 +1,6 @@
 import type { AppleIdentity } from "./appleIdToken";
 import type { GoogleIdentity } from "./googleIdToken";
+import type { MicrosoftIdentity } from "./microsoftIdToken";
 import { signInWithIdentity } from "./authLinking";
 
 // Same identity as the web: auth_accounts(provider='google', provider_account_id=sub).
@@ -27,6 +28,19 @@ export async function findOrCreateAppleOwner(identity: AppleIdentity, name: stri
     email: identity.email,
     emailVerified: identity.emailVerified,
     name
+  });
+  return result.ok ? result.ownerId : null;
+}
+
+// Microsoft's address is not guaranteed verified, so the shared policy never
+// uses it to find an existing owner; the subject already includes the tenant id.
+export async function findOrCreateMicrosoftOwner(identity: MicrosoftIdentity) {
+  const result = await signInWithIdentity({
+    provider: "microsoft",
+    subject: identity.subject,
+    email: identity.email,
+    emailVerified: false,
+    name: identity.name
   });
   return result.ok ? result.ownerId : null;
 }

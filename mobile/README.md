@@ -15,6 +15,10 @@ of the root `package.json` and is never part of the web Docker build.
 - Apple sign-in needs iOS 13+, a development or store build, an App ID with the
   **Sign in with Apple** capability, and `APPLE_CLIENT_ID=ca.visda.praiseloop`
   (plus any future Services ID) on the server. Expo Go and Android hide it.
+- Microsoft sign-in needs a development or store build, the Entra ID app
+  registration from `docs/auth.md`, `MICROSOFT_CLIENT_ID` on the server and
+  `EXPO_PUBLIC_MICROSOFT_CLIENT_ID` in the app. It uses `expo-auth-session` with
+  PKCE and no client secret, and the button is hidden without the client id.
 
 ## Run it
 
@@ -50,6 +54,16 @@ Native Google sign-in reads these public values through `app.config.ts`:
 | `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` | iOS OAuth client ID from #78. |
 | `EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME` | Reversed iOS client ID (`com.googleusercontent.apps.…`). Only needed for `expo prebuild`; the config plugin is added only when it is set. |
 
+Microsoft sign-in reads one public value:
+
+| Variable | Purpose |
+|---|---|
+| `EXPO_PUBLIC_MICROSOFT_CLIENT_ID` | Entra ID application (client) id, the same value as the server's `MICROSOFT_CLIENT_ID`. Empty hides **Continue with Microsoft**. |
+
+The phone uses the public-client redirect URI `praiseloop://auth/microsoft`;
+register it under **Mobile and desktop applications** in the Entra app. No
+secret is shipped or used on the phone.
+
 The server accepts ID tokens for `GOOGLE_IOS_CLIENT_ID` and
 `GOOGLE_ANDROID_CLIENT_ID` (`docs/auth.md`). Android's native sign-in requests
 the token for the web client ID, so include that ID in the server's
@@ -62,15 +76,18 @@ avatar in the queue header. The profile shows the owner's name and email (the na
 is editable, the email is not), the linked sign-in methods (link Google, or
 unlink one after a confirmation while another remains), the plan and this week's
 usage, the notification toggle, the app version and API server, and **Sign out**.
-Sign-in offers **Continue with Google** (#85/#81) and, on iOS 13+ with the native
-module, **Continue with Apple** (#92) in a development or store build; the same
+Sign-in offers **Continue with Google** (#85/#81), **Continue with Apple** (#92) on
+iOS 13+ with the native module, and **Continue with Microsoft** (#158) when
+`EXPO_PUBLIC_MICROSOFT_CLIENT_ID` is set, all in a development or store build; the same
 screen always offers an email-code option, and a development server with
 `MOBILE_DEV_AUTH=1` also offers a demo owner, which is the fastest way to walk the
 whole flow with synthetic data. Expo Go hides Google and Apple because their
-native modules are absent, so demo and email-code sign-in are the paths there.
+native modules are absent, so demo and email-code sign-in are the paths there;
+Microsoft needs a development or store build for its registered redirect URI.
 Apple sends the owner's name only on the first authorization; the app forwards it
 with the identity token so the server can fill a missing name without replacing
-an edited one.
+an edited one. Microsoft uses the browser-based PKCE flow, sends only the ID
+token to the server, and never links to an existing owner by email.
 
 ```bash
 # repo root
@@ -137,8 +154,9 @@ npm test
 ```
 
 CI runs the same commands in the `mobile` job. Tests cover the API client's error
-mapping (401/409/429/network/timeout), the version gate, native Google and Apple
-sign-in availability/cancellation, both token exchanges (success, invalid
+mapping (401/409/429/network/timeout), the version gate, native Google, Apple and
+Microsoft sign-in availability/cancellation (and Microsoft's PKCE exchange), all
+three token exchanges (success, invalid
 response, 401), the no-business screen's onboarding link and visibility, the keychain
 session store, draft/version API shapes, queue list states and generation
 progress, the draft image cache (bearer header, shared downloads, retry, eviction
@@ -159,8 +177,12 @@ committed. Google sign-in is compiled in at prebuild through the config plugin,
 so set `EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME` and rebuild after changing OAuth
 clients; changing it does not affect `expo start` or Expo Go. Apple sign-in is
 compiled in through the `expo-apple-authentication` plugin and `usesAppleSignIn`,
-so it also needs a rebuild after the App ID gains the capability. The bundle ID /
+so it also needs a rebuild after the App ID gains the capability. Microsoft
+sign-in uses `expo-auth-session` with `expo-crypto` and `expo-web-browser`; they
+are installed through `npx expo install` for SDK 58 and the `expo-web-browser`
+config plugin is registered, so a development build also needs a rebuild after
+the dependency change. The bundle ID /
 package name is `ca.visda.praiseloop` as a placeholder:
 the owner must confirm it before store setup (#91), because it cannot change after
-release. No device or simulator check of Apple sign-in was run in #92; it waits on
-the owner's Apple Developer setup.
+release. No device or simulator check of Apple or Microsoft sign-in was run; it
+waits on the owner's Apple Developer and Entra setup.

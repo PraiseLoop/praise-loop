@@ -3,6 +3,7 @@ import { verifyAppleIdToken } from "../../../../lib/appleIdToken";
 import { currentOwner, ownerRoute } from "../../../../lib/authorization";
 import { linkIdentityToOwner, listMethods, unlinkMethod, type LinkFailure } from "../../../../lib/authLinking";
 import { verifyGoogleIdToken } from "../../../../lib/googleIdToken";
+import { verifyMicrosoftIdToken } from "../../../../lib/microsoftIdToken";
 
 const messages: Record<LinkFailure, string> = {
   invalid_identity: "That sign-in method is not valid",
@@ -51,7 +52,19 @@ async function handlePOST(req: NextRequest) {
     });
     return result.ok ? NextResponse.json({ methods: result.methods }) : fail(result.reason);
   }
-  return NextResponse.json({ error: "Only Google and Apple can be linked right now" }, { status: 400 });
+  if (body?.provider === "microsoft") {
+    const identity = typeof body.idToken === "string" ? await verifyMicrosoftIdToken(body.idToken) : null;
+    if (!identity) return NextResponse.json({ error: "Invalid Microsoft sign-in" }, { status: 400 });
+    const result = await linkIdentityToOwner(currentOwner(), {
+      provider: "microsoft",
+      subject: identity.subject,
+      email: identity.email,
+      emailVerified: false,
+      name: identity.name
+    });
+    return result.ok ? NextResponse.json({ methods: result.methods }) : fail(result.reason);
+  }
+  return NextResponse.json({ error: "Only Google, Apple and Microsoft can be linked right now" }, { status: 400 });
 }
 
 // Unlink by provider. The last method is refused by the shared policy.

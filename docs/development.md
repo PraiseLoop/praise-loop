@@ -58,11 +58,12 @@ QR code (or enter the URL under "Enter URL manually"), then see the demo flow be
 - A firewall may block the phone from reaching ports 3000 and 8081. On Fedora with
   firewalld, allow them for your network (for example `sudo firewall-cmd --add-port=8081/tcp
   --add-port=3000/tcp`, which lasts until reboot).
-- Expo Go covers the demo flow. Native Google and Apple sign-in and push
-  notifications need a development build (#85, #89, #92); push also needs the EAS
+- Expo Go covers the demo flow. Native Google, Apple and Microsoft sign-in and push
+  notifications need a development build (#85, #89, #92, #158); push also needs the EAS
   project id and APNs/FCM credentials listed in `mobile/README.md#push-notifications`,
-  and Apple needs iOS 13+ and `APPLE_CLIENT_ID` on the server; the button stays
-  hidden elsewhere.
+  Apple needs iOS 13+ and `APPLE_CLIENT_ID` on the server, and Microsoft needs
+  `MICROSOFT_CLIENT_ID` on the server plus `EXPO_PUBLIC_MICROSOFT_CLIENT_ID` in the
+  app; a button stays hidden elsewhere.
 
 ## Demo flow with synthetic data
 
@@ -181,6 +182,8 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `OPENAI_TIMEOUT_MS` | no | Caption provider timeout in milliseconds (default `20000`, applies to either provider); on timeout the draft is marked `failed` with an actionable error |
 | `DRAFT_PIPELINE_INTERVAL_MS` | no | Worker sweep interval (default `60000`) |
 | `APPLE_CLIENT_ID` | for Apple sign-in | Comma-separated audiences accepted from Apple identity tokens. The native app uses its bundle id `ca.visda.praiseloop`; a Services ID is added only when web Apple sign-in exists. Empty fails closed with 401 (see [auth.md](auth.md)) |
+| `MICROSOFT_CLIENT_ID` | for Microsoft sign-in | Entra ID application (client) id, also the comma-separated audience list for phone ID tokens. The same id goes in the app's `EXPO_PUBLIC_MICROSOFT_CLIENT_ID`. Empty hides the web button and fails the phone exchange closed with 401 (see [auth.md](auth.md)) |
+| `MICROSOFT_CLIENT_SECRET` | for web Microsoft sign-in | Client secret for the NextAuth `azure-ad` provider. The phone uses PKCE and never needs it. Never commit the value |
 | `EXPO_ACCESS_TOKEN` | no | Expo push access token; only needed if enhanced push security is enabled on the Expo project |
 | `EMAIL_TRANSPORT` | no | `fake` (default outside production) or `resend`. `fake` records to an in-memory outbox and logs an `email_outbox` line, and is refused in a production process |
 | `EMAIL_FROM` | for real sends | Sender, for example `Praise Loop <no-reply@mail.example.com>`, on a domain verified in Resend. With the fake transport it defaults to `Praise Loop <no-reply@praiseloop.invalid>` |

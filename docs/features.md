@@ -284,7 +284,9 @@ rollback can leave the plan tables in place while reverting the checks.
 differs (posts each week per business, templates, watermark, review sync, AI
 replies, businesses) and a "Continue with Google" call to action. The landing
 page links to it from the header and the call to action, and also offers an
-"Email me a sign-in code" option (#157) for owners without Google. `AppShell`
+"Email me a sign-in code" option (#157) for owners without Google. When the server
+has Microsoft credentials, the landing page adds "Continue with Microsoft" too
+(#158); the button is hidden otherwise. `AppShell`
 treats `/plans` as a bare route, like `/` and onboarding, so the signed-out
 sign-in wall does not hide it.
 
@@ -341,7 +343,7 @@ provider plus its stable subject is the identity, never the email alone. Google
 and our own email codes may still link an owner that has the same verified
 address but no row for that provider; a different subject on an already-linked
 address is rejected, as before (#116/#117). Apple never links by email. A provider whose email claim is not guaranteed verified
-(Microsoft later) creates a new owner instead of linking by email. A signed-in owner can
+(Microsoft) creates a new owner instead of linking by email. A signed-in owner can
 link another method from `/account` or the phone profile even when the emails
 differ, and the last method cannot be unlinked. The phone links Google from the
 profile with a native ID token through the same route.
@@ -349,9 +351,9 @@ profile with a native ID token through the same route.
 The shared code is `lib/authLinking.ts`; `docs/auth.md` records the policy and
 `docs/decisions.md` records why. Migration 017 records the method's email and
 its added/last-used timestamps, and is additive. `GET /api/account/methods`,
-`POST /api/account/methods` (a verified Google or Apple ID token) and
+`POST /api/account/methods` (a verified Google, Apple or Microsoft ID token) and
 `DELETE /api/account/methods` are owner-wide and work with cookie and bearer
-sessions. `/account` labels both providers "Google" and "Apple".
+sessions. `/account` labels the providers "Google", "Apple" and "Microsoft".
 
 Rollback: stop linking writes, retain `auth_accounts.email`, `created_at` and
 `last_used_at`; old code ignores the extra columns. No owner or business data is
@@ -390,7 +392,7 @@ instead of spreading account things through the nav and the business switcher.
   states can be walked with `npm run dev:seed`.
 
 
-## Phone sign-in (#85, #92)
+## Phone sign-in (#85, #92, #158)
 
 The phone signs in to the same owner account as the web. Google uses the native
 account picker: the app sends the Google ID token to `POST /api/mobile/session`
@@ -407,20 +409,32 @@ and keeps only our bearer token in the keychain.
   the Apple sheet is also a quiet no-op. The server verifies Apple's signature,
   issuer, expiry and `APPLE_CLIENT_ID`; Apple never links to an existing owner by
   email (link it from a signed-in session instead).
+- **Continue with Microsoft** appears when `expo-auth-session` is present and
+  `EXPO_PUBLIC_MICROSOFT_CLIENT_ID` is set. It opens Microsoft's discovery
+  document and authorization page with PKCE, requests `openid email profile`,
+  exchanges the code for an ID token and sends that token to
+  `POST /api/mobile/session/microsoft`. Closing the browser is a quiet no-op.
+  The server verifies the RS256 signature against Microsoft's multi-tenant keys,
+  the v2.0 issuer and its `tid` claim, the audience and expiry, and uses
+  `${tid}:${sub}` as the identity; Microsoft never links to an existing owner by
+  email. No secret is used or stored on the phone.
 - Expo Go hides the Google and Apple buttons and keeps the dev-only demo owner
   and the email-code sign-in. Android hides Apple because the module and the
-  platform do not offer it.
+  platform do not offer it. Microsoft uses a browser flow and needs a development
+  or store build for its registered `praiseloop://auth/microsoft` redirect URI.
 - An owner with no business sees a short setup screen instead of the queue: a
   heading, one sentence that setup and branding happen on the web, **Set up on
   the web** (opens `${apiBaseUrl}/onboarding`; hidden when the build has no API
   URL) and **Check again** to reload the business list.
 - Covered by `mobile/__tests__/google.test.ts`,
   `mobile/__tests__/googleSignIn.test.ts`, `mobile/__tests__/apple.test.ts`,
-  `mobile/__tests__/appleSignIn.test.ts` and
+  `mobile/__tests__/appleSignIn.test.ts`,
+  `mobile/__tests__/microsoft.test.ts`,
+  `mobile/__tests__/microsoftSignIn.test.ts` and
   `mobile/__tests__/onboarding.test.ts`. The server side is
-  `scripts/test-apple-signin.ts`. A device or simulator check with the real
-  OAuth clients and Apple account still waits on #78 and #92 owner setup; none
-  was run in this change.
+  `scripts/test-apple-signin.ts` and `scripts/test-microsoft-signin.ts`. A device
+  or simulator check with the real OAuth clients, Apple account and Microsoft
+  account still waits on owner setup; none was run in this change.
 
 ## Phone profile screen (#151)
 

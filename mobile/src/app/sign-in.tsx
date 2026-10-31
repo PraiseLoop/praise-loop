@@ -6,6 +6,7 @@ import { ApiError } from "../api/client";
 import { fetchMobileConfig, type MobileConfig } from "../api/config";
 import { appleSignInAvailable, isAppleSignInCancelled, signInWithApple } from "../auth/apple";
 import { googleSignInAvailable, isGoogleSignInCancelled, signInWithGoogle } from "../auth/google";
+import { isMicrosoftSignInCancelled, microsoftSignInAvailable, signInWithMicrosoft } from "../auth/microsoft";
 import { useSession } from "../auth/SessionProvider";
 import { DEMO_OWNERS, type DemoOwnerKey } from "../auth/demoOwners";
 import { appConfig } from "../config";
@@ -13,7 +14,7 @@ import { Banner, Button } from "../ui/components";
 import { colors } from "../ui/theme";
 
 export default function SignInScreen() {
-  const { status, sessionEnded, signInDemo, signInEmail, signInGoogle, signInApple } = useSession();
+  const { status, sessionEnded, signInDemo, signInEmail, signInGoogle, signInApple, signInMicrosoft } = useSession();
   const [config, setConfig] = useState<MobileConfig | null>(null);
   const [appleReady, setAppleReady] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
@@ -101,6 +102,7 @@ export default function SignInScreen() {
   }, [busy, code, email, signInEmail]);
 
   const googleReady = googleSignInAvailable();
+  const microsoftReady = microsoftSignInAvailable();
 
   const continueWithGoogle = useCallback(async () => {
     if (busy) return;
@@ -138,6 +140,24 @@ export default function SignInScreen() {
     }
   }, [busy, signInApple]);
 
+  const continueWithMicrosoft = useCallback(async () => {
+    if (busy) return;
+    setBusy(true); setError(null); setNotice(null);
+    try {
+      const idToken = await signInWithMicrosoft();
+      await signInMicrosoft(idToken);
+      router.replace("/queue");
+    } catch (cause) {
+      // Closing the Microsoft browser is a no-op, not an error.
+      if (isMicrosoftSignInCancelled(cause)) return;
+      setError(cause instanceof ApiError && cause.kind === "signedOut"
+        ? "That Microsoft account couldn’t sign in. Try a different one."
+        : cause instanceof Error ? cause.message : "Microsoft sign-in failed. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, signInMicrosoft]);
+
   if (status === "signedIn") return <Redirect href="/queue" />;
 
   return (
@@ -161,6 +181,10 @@ export default function SignInScreen() {
 
       {googleReady ? (
         <Button label="Continue with Google" onPress={() => { void continueWithGoogle(); }} loading={busy} />
+      ) : null}
+
+      {microsoftReady ? (
+        <Button label="Continue with Microsoft" onPress={() => { void continueWithMicrosoft(); }} loading={busy} />
       ) : null}
 
       <View style={styles.form}>

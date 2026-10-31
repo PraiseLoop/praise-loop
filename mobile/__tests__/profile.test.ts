@@ -115,7 +115,7 @@ describe("sign-in method display", () => {
   it("names the providers the way the web page does", () => {
     expect(methodName("google")).toBe("Google");
     expect(methodName("email")).toBe("Email");
-    expect(methodName("microsoft")).toBe("microsoft");
+    expect(methodName("microsoft")).toBe("Microsoft");
   });
 
   it("shows the added date, or the old-data wording when there is none", () => {

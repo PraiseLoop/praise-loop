@@ -12,7 +12,7 @@ const sources = { default: "Default plan", manual: "Set by PraiseLoop support", 
 const yesNo = (value: boolean) => value ? "Included" : "Not included";
 
 type AuthMethod = { provider: string; email: string | null; addedAt: string | null; lastUsedAt: string | null };
-const providerNames: Record<string, string> = { google: "Google", apple: "Apple" };
+const providerNames: Record<string, string> = { google: "Google", apple: "Apple", microsoft: "Microsoft" };
 const methodName = (provider: string) => providerNames[provider] ?? provider;
 const methodAdded = (addedAt: string | null) => addedAt ? `Added ${addedAt.slice(0, 10)}` : "Added before we tracked method dates";
 

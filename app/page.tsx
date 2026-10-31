@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { getProviders, signIn } from "next-auth/react";
 import { useEffect, useState, type FormEvent } from "react";
 import { landingNotice } from "../lib/sessionExpiry";
 import { useBusiness } from "./AppShell";
@@ -28,6 +28,16 @@ export default function HomePage() {
   // Sent here by apiFetch when the session ended: say so, and return to the same page after sign-in.
   const [notice, setNotice] = useState<ReturnType<typeof landingNotice>>({ message: null, callbackUrl: null });
   useEffect(() => { setNotice(landingNotice(window.location.search)); }, []);
+  // Microsoft is optional like Google: only offer it when the server has its
+  // client configured, which NextAuth reports in its provider list.
+  const [microsoftReady, setMicrosoftReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    getProviders()
+      .then(providers => { if (!cancelled) setMicrosoftReady(!!providers?.["azure-ad"]); })
+      .catch(() => { /* The Google and email options still work. */ });
+    return () => { cancelled = true; };
+  }, []);
   useEffect(() => {
     if (status === "ready") router.replace(notice.callbackUrl ?? (businesses.length ? "/approval" : "/onboarding"));
   }, [status, businesses.length, router, notice.callbackUrl]);
@@ -142,6 +152,11 @@ export default function HomePage() {
             <button type="button" className="pl-btn pl-btn-dark pl-btn-lg" onClick={() => signIn("google", { callbackUrl: notice.callbackUrl ?? "/approval" })} disabled={status === "loading" || status === "ready"}>
               Continue with Google
             </button>
+            {microsoftReady ? (
+              <button type="button" className="pl-btn pl-btn-dark pl-btn-lg" onClick={() => signIn("azure-ad", { callbackUrl: notice.callbackUrl ?? "/approval" })} disabled={status === "loading" || status === "ready"}>
+                Continue with Microsoft
+              </button>
+            ) : null}
             {!emailOpen ? (
               <button type="button" className="pl-btn" onClick={() => { setEmailOpen(true); setEmailError(null); }} disabled={status === "loading" || status === "ready"}>
                 Email me a sign-in code
