@@ -69,11 +69,11 @@ export async function processGeneration(id: number, deps: GenerationDeps = defau
   if (!claimed) return false;
   const heartbeat = setInterval(()=> { void query("UPDATE generation_jobs SET lease_until=$3::timestamptz+interval '90 seconds' WHERE id=$1 AND lease=$2",[id,lease,deps.clock()]).catch(()=>{}); },10000);
   try {
-    const row = (await query(`SELECT d.*,b.name,b.owner_id,b.brand_colors,b.logo_url,b.brand_tone,r.rating,r.author_name FROM draft_posts d JOIN businesses b ON b.id=d.business_id LEFT JOIN reviews r ON r.id=d.review_id AND r.business_id=d.business_id WHERE d.id=$1`,[claimed.draft_id])).rows[0];
+    const row = (await query(`SELECT d.*,b.name,b.owner_id,b.brand_colors,b.logo_url,b.brand_tone,b.brand_voice,r.rating,r.author_name FROM draft_posts d JOIN businesses b ON b.id=d.business_id LEFT JOIN reviews r ON r.id=d.review_id AND r.business_id=d.business_id WHERE d.id=$1`,[claimed.draft_id])).rows[0];
     if (!row || !["draft","failed"].includes(row.status)) throw new Error("draft_not_editable");
     if (!row.caption_text.trim()) {
       if (!await chargeGeneration(row.owner_id)) throw new Error("daily_limit");
-      const captions = await deps.captions({businessName:row.name,quoteText:row.quote_text,brandTone:row.brand_tone as BrandTone});
+      const captions = await deps.captions({businessName:row.name,quoteText:row.quote_text,brandTone:row.brand_tone as BrandTone,brandVoice:row.brand_voice as string | null});
       const caption = captions[row.brand_tone as BrandTone];
       if (!caption?.trim()) throw new Error("caption_empty");
       const saved = await query("UPDATE draft_posts SET caption_text=$2,updated_at=now() WHERE id=$1 AND status IN ('draft','failed') AND EXISTS(SELECT 1 FROM generation_jobs WHERE id=$3 AND lease=$4 AND state='running') RETURNING id",[row.id,caption,id,lease]);

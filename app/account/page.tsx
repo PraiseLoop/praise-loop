@@ -108,6 +108,7 @@ export default function AccountPage() {
     ["Watermark on images", limits.watermark ? "Yes" : "No"],
     ["Automatic review sync", yesNo(limits.reviewSync)],
     ["AI review replies", yesNo(limits.aiReplies)],
+    ["Brand voice", limits.brandVoice ? "Learn from your website" : "Not included"],
     ["Businesses", String(limits.businesses)]
   ];
 

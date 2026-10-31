@@ -120,9 +120,9 @@ async function seedDraft(businessId: number, owner: string, seed: BusinessSeed, 
 
 async function seedBusiness(seed: BusinessSeed, owner: string, plan: Plan) {
   const businessId = (await query<{ id: number }>(
-    `INSERT INTO businesses(name,timezone,brand_colors,brand_tone,weekly_target,owner_id)
-     VALUES($1,$2,$3::jsonb,$4,$5,$6) RETURNING id`,
-    [seed.name, seed.timezone, JSON.stringify(seed.colors), seed.tone, seed.weeklyTarget, owner]
+    `INSERT INTO businesses(name,timezone,brand_colors,brand_tone,weekly_target,owner_id,brand_voice,brand_voice_updated_at)
+     VALUES($1,$2,$3::jsonb,$4,$5,$6,$7::text,CASE WHEN $7::text IS NULL THEN NULL ELSE now() - interval '2 days' END) RETURNING id`,
+    [seed.name, seed.timezone, JSON.stringify(seed.colors), seed.tone, seed.weeklyTarget, owner, seed.brandVoice ?? null]
   )).rows[0].id;
 
   const summary = await importReviewsCsv(businessId, readFileSync(join(CSV_DIR, seed.csv), "utf8"));

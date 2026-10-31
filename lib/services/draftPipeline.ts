@@ -10,6 +10,7 @@ type BusinessRow = {
   brand_colors: Record<string, string> | null;
   logo_url: string | null;
   brand_tone: BrandTone;
+  brand_voice?: string | null;
 };
 
 type CandidateRow = {
@@ -35,7 +36,7 @@ export type PipelineResult = {
 type DraftPipelineDeps = {
   listBusinesses: () => Promise<BusinessRow[]>;
   selectQuoteCandidates: (businessId: number, limit: number) => Promise<CandidateRow[]>;
-  generateCaptionVariants: (params: { businessName: string; quoteText: string; brandTone?: BrandTone }) => Promise<CaptionSet>;
+  generateCaptionVariants: (params: { businessName: string; quoteText: string; brandTone?: BrandTone; brandVoice?: string | null }) => Promise<CaptionSet>;
   updateDraftCaption: (draftPostId: number, captionText: string) => Promise<void>;
   renderDraftImage: (params: {
     draftPostId: number;
@@ -73,7 +74,8 @@ export function createDraftGenerationRunner(deps: DraftPipelineDeps) {
           const captions = await deps.generateCaptionVariants({
             businessName: business.name,
             quoteText: candidate.quoteText,
-            brandTone: business.brand_tone
+            brandTone: business.brand_tone,
+            brandVoice: business.brand_voice
           });
 
           await deps.updateDraftCaption(candidate.draftPostId, pickCaption(captions, business.brand_tone));
@@ -113,7 +115,7 @@ export function createDraftGenerationRunner(deps: DraftPipelineDeps) {
 const runDraftGenerationWithDb = createDraftGenerationRunner({
   listBusinesses: async () => {
     const businesses = await query<BusinessRow>(
-      `SELECT id, name, brand_colors, logo_url, brand_tone
+      `SELECT id, name, brand_colors, logo_url, brand_tone, brand_voice
        FROM businesses
        ORDER BY id ASC`
     );

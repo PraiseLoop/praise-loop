@@ -21,6 +21,8 @@ export type BusinessSeed = {
   tone: BrandTone;
   colors: { primary: string; secondary: string; template: string; quoteSize: string };
   weeklyTarget: number;
+  /** A sample voice profile so the Pro demo can walk the brand voice feature. */
+  brandVoice?: string;
   /** A stub row only: no refresh token is stored, so nothing can sync. */
   googleLocation?: string;
   drafts: DraftSeed[];
@@ -35,6 +37,7 @@ export const SEED_BUSINESSES: BusinessSeed[] = [
     tone: "friendly",
     colors: { primary: "#8c3b2e", secondary: "#f3e6d6", template: "quote-card-v1", quoteSize: "standard" },
     weeklyTarget: 4,
+    brandVoice: "Warm, neighbourly and unhurried, with a fondness for small everyday details. We speak like a barista who knows your order, using plain words and gentle humour. Sentences stay short and inviting, never salesy or grand. We celebrate regulars, early mornings and the quiet corner table.\nExamples: “Your usual is ready.” “Save room for a cinnamon bun.”",
     googleLocation: "accounts/1000000001/locations/2000000001",
     drafts: [
       {

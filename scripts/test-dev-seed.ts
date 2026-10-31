@@ -20,7 +20,7 @@ async function snapshot(client: PoolClient, media: string) {
     plans: await rows("SELECT owner_id,plan,source FROM owner_plans ORDER BY owner_id"),
     planEvents: await rows("SELECT owner_id,plan,actor FROM owner_plan_events ORDER BY owner_id,id"),
     tokens: await rows("SELECT owner_id,token,platform FROM device_push_tokens ORDER BY token"),
-    businesses: await rows("SELECT name,owner_id,timezone,brand_tone,brand_colors,weekly_target FROM businesses ORDER BY name"),
+    businesses: await rows("SELECT name,owner_id,timezone,brand_tone,brand_colors,weekly_target,brand_voice FROM businesses ORDER BY name"),
     reviews: await rows(`SELECT b.name,r.source_review_id,r.rating,r.author_name,r.text,r.reviewed_at,r.duplicate_of IS NULL canonical
       FROM reviews r JOIN businesses b ON b.id=r.business_id ORDER BY b.name,r.source_review_id`),
     drafts: await rows(`SELECT b.name,r.source_review_id,d.status,d.quote_text,d.caption_text,d.audit_note,d.image_path IS NOT NULL has_image,
@@ -115,6 +115,8 @@ async function main() {
       assert.deepEqual(one.google.map(g => [g.name, g.no_token]), [["Demo — Copper Kettle Café", true]]);
       assert.equal(one.periods.length, SEED_BUSINESSES.length);
       assert.ok(one.periods.find(p => p.name.includes("Harbour"))!.target <= 1, "the Free business is capped at its plan");
+      assert.match(one.businesses.find(b => b.name.includes("Copper Kettle"))!.brand_voice, /Warm, neighbourly/, "the Pro demo business has a sample voice");
+      assert.equal(one.businesses.filter(b => b.name.startsWith("Demo — ") && !b.name.includes("Copper Kettle")).every(b => b.brand_voice === null), true, "the other demo businesses keep the tone fallback");
 
       // The seeded rows are the only ones changed.
       assert.equal((await client.query("SELECT count(*) n FROM businesses WHERE owner_id='real-owner'")).rows[0].n, "1");

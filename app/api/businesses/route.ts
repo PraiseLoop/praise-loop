@@ -14,6 +14,9 @@ type BusinessRow = {
   logo_url: string | null;
   brand_tone: BrandTone;
   weekly_target: number;
+  brand_voice?: string | null;
+  brand_voice_source_url?: string | null;
+  brand_voice_updated_at?: Date | string | null;
 };
 
 function normalizeBrandTone(input: unknown): BrandTone {
@@ -23,16 +26,9 @@ function normalizeBrandTone(input: unknown): BrandTone {
 }
 
 async function handleGET() {
-  const result = await query<{
-    id: number;
-    name: string;
-    timezone: string;
-    brand_colors: Record<string, string> | null;
-    logo_url: string | null;
-    brand_tone: BrandTone;
-    weekly_target: number;
-  }>(
-    `SELECT id, name, timezone, brand_colors, logo_url, brand_tone, weekly_target
+  const result = await query<BusinessRow>(
+    `SELECT id, name, timezone, brand_colors, logo_url, brand_tone, weekly_target,
+            brand_voice, brand_voice_source_url, brand_voice_updated_at
      FROM businesses WHERE owner_id=$1
      ORDER BY id ASC`, [currentOwner()]
   );
@@ -44,6 +40,9 @@ async function handleGET() {
     logo_url: row.logo_url,
     brand_tone: row.brand_tone,
     weekly_target: row.weekly_target,
+    brand_voice: row.brand_voice ?? null,
+    brand_voice_source_url: row.brand_voice_source_url ?? null,
+    brand_voice_updated_at: row.brand_voice_updated_at ?? null,
     brand_colors: {
       primary: row.brand_colors?.primary ?? "#1f2937",
       secondary: row.brand_colors?.secondary ?? "#374151",

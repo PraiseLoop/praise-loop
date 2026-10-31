@@ -19,8 +19,9 @@ async function handlePOST(req: NextRequest) {
       quote_text: string;
       business_name: string;
       brand_tone: BrandTone;
+      brand_voice?: string | null;
     }>(
-      `SELECT d.id, d.quote_text, b.name AS business_name, b.brand_tone
+      `SELECT d.id, d.quote_text, b.name AS business_name, b.brand_tone, b.brand_voice
        FROM draft_posts d
        JOIN businesses b ON b.id = d.business_id
        WHERE d.id = $1
@@ -36,7 +37,8 @@ async function handlePOST(req: NextRequest) {
     const captions = await generateCaptionVariants({
       businessName: row.business_name,
       quoteText: row.quote_text,
-      brandTone: row.brand_tone
+      brandTone: row.brand_tone,
+      brandVoice: row.brand_voice
     });
 
     return NextResponse.json({ captions });

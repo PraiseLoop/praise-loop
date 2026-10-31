@@ -89,6 +89,18 @@ Define and maintain the core stack in this section as the source of truth:
 - Never store OAuth refresh tokens unencrypted at rest
 - Do not store more customer review data than needed (quote + rating + date + source id)
 - No secrets in repo; env vars only
+- Brand voice fetches one owner-supplied public page through `lib/services/safeFetch.ts`.
+  The URL must be `http`/`https` with no credentials. The hostname is resolved
+  with `node:dns` (all answers) and every address must be public: loopback,
+  private, link-local, CGNAT, multicast, unspecified, unique-local and
+  IPv4-mapped/6to4 forms of those ranges are rejected, as are `localhost` names.
+  The HTTP client connects to the verified address through its own lookup, so a
+  second DNS answer cannot rebind the request. Redirects are limited to 3 and each
+  hop is re-resolved and must stay on the same host or its `www.` variant. The
+  request times out after 5 seconds, reads at most 512 KB, accepts only
+  `text/html` or `text/plain`, and keeps at most 6,000 characters of readable
+  text. Fetched page text is passed to the model as quoted untrusted data and is
+  never logged.
 - Account deletion is immediate and complete: `DELETE /api/account` removes the
   owner, businesses, reviews, drafts, generated images, sign-in methods, plan and
   usage records, push tokens and sessions. **What is kept: nothing today** — there

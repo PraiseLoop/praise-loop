@@ -21,6 +21,8 @@ async function main() {
     // Pure plan resolution: default free, configured pro, and expired pro.
     assert.deepEqual(entitlementsForPlan("free", "default", null), { plan: "free", source: "default", expiresAt: null, expired: false, limits: PLAN_LIMITS.free });
     assert.equal(entitlementsForPlan("pro", "manual", null).limits.postsPerWeek, 5);
+    assert.equal(PLAN_LIMITS.free.brandVoice, false);
+    assert.equal(PLAN_LIMITS.pro.brandVoice, true);
     const expiredPlan = entitlementsForPlan("pro", "manual", "2020-01-01T00:00:00Z", new Date("2026-01-01T00:00:00Z"));
     assert.equal(expiredPlan.plan, "free");
     assert.equal(expiredPlan.limits.watermark, true);

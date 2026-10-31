@@ -175,6 +175,35 @@ Saving settings never changes existing draft images; explicitly regenerate and
 review a new image. `TEST_DATABASE_URL=postgres://... npm test` also verifies real
 Postgres migration preservation and settings round-trip in a disposable schema.
 
+## Brand voice (#97)
+
+A Pro owner can learn a short voice profile from one public page on their own
+website, then edit or reset it. Captions use the profile when it exists; without
+one the prompt falls back to the tone setting exactly as before.
+
+- **Learn:** `POST /api/businesses/[id]/brand-voice` with `{ "url": "https://..." }`.
+  The server reads one page, asks the existing caption provider (OpenAI or
+  OpenRouter) for 3–5 sentences plus up to five example phrases, and stores at
+  most 900 characters in `businesses.brand_voice` with the source URL and
+  updated time. It counts as one `generation` call against the owner's daily AI
+  limit, and a failure stores nothing and returns a plain error. The page text and
+  profile are never logged.
+- **Edit/reset:** `PUT` with `{ "voice": "..." }` trims and caps the text at 1,200
+  characters; `DELETE` clears the profile and source URL so captions use the tone
+  setting again. All three routes are inside `ownerRoute`, so another owner's
+  business is a 404.
+- **Bounded fetch:** only `http`/`https`; the host must resolve only to public
+  addresses; no URL credentials; at most 3 redirects, each staying on the same
+  host or its `www.` variant; 5 second timeout; 512 KB of body; only
+  `text/html` or `text/plain`; at most 6,000 characters of readable text. The
+  full SSRF rules are in [architecture.md](architecture.md#security--privacy).
+- **Free owners:** the Brand page says brand voice is a Pro feature and links to
+  the plan page; the API refuses before fetching or calling the provider.
+- **Demo:** `npm run dev:seed` gives the Pro Copper Kettle Café business a sample
+  profile; the Free business keeps the tone fallback.
+- **Rollback:** stop calling the route and clear the three columns if needed. The
+  migration is additive and old code ignores them.
+
 ## CSV review import
 
 CSV imports are limited to 1 MB / 1000 logical rows; quoted multiline cells are
@@ -219,6 +248,7 @@ the owner's plan, which is what lets the plan limit "more than one business".
 | Image watermark | Yes | No |
 | Automatic review sync | No | Yes |
 | AI review replies | No | Yes |
+| Brand voice from your website | No | Yes |
 | Owned businesses | 1 | 3 |
 
 The limits live in `lib/services/entitlements.ts` and are enforced on the server:

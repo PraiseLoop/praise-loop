@@ -10,6 +10,7 @@ import type { Profile } from "../lib/services/profile";
 
 export type Business = {
   id: number | string; name: string; timezone: string; logo_url: string | null; brand_tone: string; weekly_target: number;
+  brand_voice?: string | null; brand_voice_source_url?: string | null; brand_voice_updated_at?: string | null;
   brand_colors: { primary: string; secondary: string; template: string; quoteSize: string };
 };
 type BusinessState = {
