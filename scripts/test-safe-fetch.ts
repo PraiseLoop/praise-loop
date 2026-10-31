@@ -230,6 +230,20 @@ async function timeoutTest() {
   );
 }
 
+async function slowDnsTest() {
+  // A resolver that never answers must not hold the request past the overall limit.
+  const started = Date.now();
+  await assert.rejects(
+    () => fetchReadablePage("https://example.com/slow-dns", {
+      lookup: () => new Promise(() => {}),
+      timeoutMs: 30,
+      request: async () => { throw new Error("never reached"); }
+    }),
+    /took too long/
+  );
+  assert.ok(Date.now() - started < 2000, "gave up near the deadline");
+}
+
 async function readableTextTest() {
   assert.equal(readableText("<p>One</p><script>bad()</script><style>p{}</style><p>Two &nbsp; three</p>", "text/html"), "One Two three");
   assert.equal(readableText("a\r\n\tb   c", "text/plain"), "a b c");
@@ -244,6 +258,7 @@ async function main() {
   await bodyLimitTest();
   await rejectionTests();
   await timeoutTest();
+  await slowDnsTest();
   await readableTextTest();
   console.log("safe fetch tests passed");
 }

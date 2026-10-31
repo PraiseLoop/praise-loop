@@ -290,6 +290,18 @@ const defaultRequest: SafeHttpRequest = (url, options) =>
     req.end();
   });
 
+// Bounds any promise (here the DNS lookup) by the time left, so a stalled resolver cannot hold the
+// request past the advertised limit.
+function withinDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const expired = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new SafeFetchError("That website took too long to respond", 504)), Math.max(ms, 0));
+  });
+  return Promise.race([promise, expired]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
 function timeout<T>(promise: Promise<T>, ms: number, controller: AbortController): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const expired = new Promise<never>((_resolve, reject) => {
@@ -318,7 +330,8 @@ export async function fetchReadablePage(rawUrl: string, deps: SafeFetchDeps = {}
   let redirects = 0;
 
   for (;;) {
-    const verified = await verifyHost(current, lookup);
+    if (deadline - Date.now() <= 0) throw new SafeFetchError("That website took too long to respond", 504);
+    const verified = await withinDeadline(verifyHost(current, lookup), deadline - Date.now());
     const remaining = deadline - Date.now();
     if (remaining <= 0) throw new SafeFetchError("That website took too long to respond", 504);
 
