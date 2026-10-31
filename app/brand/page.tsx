@@ -14,6 +14,8 @@ export default function BrandPage() {
   const [primary, setPrimary] = useState("#1f2937"), [secondary, setSecondary] = useState("#374151");
   const [tone, setTone] = useState<BrandTone>("friendly"), [quoteSize, setQuoteSize] = useState<"standard" | "large">("standard");
   const [logo, setLogo] = useState(""), [weeklyTarget, setWeeklyTarget] = useState(3);
+  const [voice, setVoice] = useState(""), [voiceUrl, setVoiceUrl] = useState("");
+  const [voiceBusy, setVoiceBusy] = useState(false), [voiceMessage, setVoiceMessage] = useState("");
   const [message, setMessage] = useState(""), [busy, setBusy] = useState(false);
   const { plan } = usePlan();
 
@@ -27,8 +29,70 @@ export default function BrandPage() {
     setQuoteSize(business.brand_colors.quoteSize === "large" ? "large" : "standard");
     setLogo(business.logo_url ?? "");
     setWeeklyTarget(business.weekly_target ?? 3);
+    setVoice(business.brand_voice ?? "");
+    setVoiceUrl(business.brand_voice_source_url ?? "");
     setMessage("");
+    setVoiceMessage("");
   }, [business]);
+
+  async function learnVoice() {
+    if (!business || !voiceUrl.trim()) return;
+    setVoiceBusy(true);
+    setVoiceMessage("");
+    try {
+      const response = await apiFetch(`/api/businesses/${business.id}/brand-voice`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: voiceUrl.trim() })
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) { setVoiceMessage(`Couldn’t learn your voice: ${data?.error ?? "unknown error"}`); return; }
+      setVoice(data.voice ?? "");
+      await reload();
+      setVoiceMessage("Voice learned. Edit it if you like, then save.");
+    } catch {
+      setVoiceMessage("Connection problem — nothing was saved. Try again.");
+    } finally { setVoiceBusy(false); }
+  }
+
+  async function saveVoice() {
+    if (!business) return;
+    const trimmed = voice.trim();
+    if (!trimmed) { setVoiceMessage("Enter a voice profile or reset to the tone setting."); return; }
+    setVoiceBusy(true);
+    setVoiceMessage("");
+    try {
+      const response = await apiFetch(`/api/businesses/${business.id}/brand-voice`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ voice: trimmed })
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) { setVoiceMessage(`Couldn’t save: ${data?.error ?? "unknown error"}`); return; }
+      setVoice(data.voice ?? trimmed);
+      await reload();
+      setVoiceMessage("Voice saved. New captions will use it.");
+    } catch {
+      setVoiceMessage("Connection problem — your changes weren’t saved. Try again.");
+    } finally { setVoiceBusy(false); }
+  }
+
+  async function resetVoice() {
+    if (!business) return;
+    setVoiceBusy(true);
+    setVoiceMessage("");
+    try {
+      const response = await apiFetch(`/api/businesses/${business.id}/brand-voice`, { method: "DELETE" });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) { setVoiceMessage(`Couldn’t reset: ${data?.error ?? "unknown error"}`); return; }
+      setVoice("");
+      setVoiceUrl("");
+      await reload();
+      setVoiceMessage("Reset. Captions use the tone setting again.");
+    } catch {
+      setVoiceMessage("Connection problem — nothing was changed. Try again.");
+    } finally { setVoiceBusy(false); }
+  }
 
   async function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -98,6 +162,48 @@ export default function BrandPage() {
           </fieldset>
 
           <TonePicker name="brand-tone" value={tone} onChange={setTone} />
+
+          <fieldset style={{ margin: 0, padding: 0, border: 0 }}>
+            <legend style={{ padding: 0, marginBottom: 10, fontSize: 14, fontWeight: 600 }}>Brand voice</legend>
+            {plan && !plan.limits.brandVoice ? (
+              <p className="pl-small pl-muted" style={{ margin: 0 }}>
+                Brand voice is a Pro feature. Your {planName(plan.plan)} plan uses the tone setting above.{" "}
+                <Link href="/account">See your plan</Link>
+              </p>
+            ) : (
+              <>
+                <p className="pl-small pl-muted" style={{ margin: "0 0 10px" }}>
+                  Paste your own website and we’ll learn how your business sounds. We read one public page; nothing from social accounts.
+                </p>
+                <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+                  <label className="pl-field" style={{ flex: "1 1 240px" }}>Website URL
+                    <input className="pl-input" type="url" placeholder="https://yourbusiness.com" value={voiceUrl} onChange={e => setVoiceUrl(e.target.value)} />
+                  </label>
+                  <button type="button" className="pl-btn" onClick={() => void learnVoice()} disabled={voiceBusy || !voiceUrl.trim()}>
+                    {voiceBusy ? "Working…" : "Learn my voice"}
+                  </button>
+                </div>
+                <label className="pl-field" style={{ marginTop: 12 }}>Voice profile
+                  <textarea
+                    className="pl-input"
+                    style={{ minHeight: 120, resize: "vertical" }}
+                    maxLength={1200}
+                    value={voice}
+                    onChange={e => setVoice(e.target.value)}
+                    placeholder="A few sentences about how your business sounds, with example phrases."
+                  />
+                  <span className="pl-small pl-muted" style={{ fontWeight: 400 }}>
+                    {voice.length}/1200 characters.{business.brand_voice_source_url ? ` Learned from ${business.brand_voice_source_url}.` : ""}
+                  </span>
+                </label>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <button type="button" className="pl-btn pl-btn-primary" onClick={() => void saveVoice()} disabled={voiceBusy || !voice.trim()}>Save voice</button>
+                  <button type="button" className="pl-btn" onClick={() => void resetVoice()} disabled={voiceBusy || (!voice && !business.brand_voice)}>Reset to tone setting</button>
+                </div>
+                {voiceMessage ? <p role="status" className="pl-small" style={{ margin: "10px 0 0" }}>{voiceMessage}</p> : null}
+              </>
+            )}
+          </fieldset>
 
           <fieldset style={{ margin: 0, padding: 0, border: 0 }}>
             <legend style={{ padding: 0, marginBottom: 10, fontSize: 14, fontWeight: 600 }}>Quote text size</legend>

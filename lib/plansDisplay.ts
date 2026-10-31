@@ -43,6 +43,12 @@ export const PLAN_ROWS: PlanComparisonRow[] = [
     note: "AI review replies are planned for Pro but are not available yet.",
     value: l => l.aiReplies ? notAvailable : "Not included"
   },
+  {
+    key: "brandVoice",
+    label: "Brand voice",
+    note: "Brand voice learns a short, editable profile from your own public website; nothing is scraped from social accounts.",
+    value: l => l.brandVoice ? "Learn from your website" : "Not included"
+  },
   { key: "businesses", label: "Businesses", value: l => count(l.businesses, "business", "businesses") }
 ];
 

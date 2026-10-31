@@ -19,6 +19,7 @@ assert.deepEqual(rows.map(row => ({ label: row.label, free: row.values.free, pro
   { label: "Watermark on images", free: "Small PraiseLoop watermark", pro: "No watermark" },
   { label: "Automatic review sync", free: "Not included", pro: "Planned — not available yet" },
   { label: "AI review replies", free: "Not included", pro: "Planned — not available yet" },
+  { label: "Brand voice", free: "Not included", pro: "Learn from your website" },
   { label: "Businesses", free: "1 business", pro: "3 businesses" }
 ], "a plan limit changed; update the comparison wording and this expectation together");
 
@@ -26,7 +27,8 @@ assert.deepEqual(rows.map(row => ({ label: row.label, free: row.values.free, pro
 assert.deepEqual(planNotes(rows), [
   "Only one template design exists today. The Pro allowance covers designs added later.",
   "Automatic review sync (Google reviews) is planned for Pro but is not available yet, so both plans start with a spreadsheet import.",
-  "AI review replies are planned for Pro but are not available yet."
+  "AI review replies are planned for Pro but are not available yet.",
+  "Brand voice learns a short, editable profile from your own public website; nothing is scraped from social accounts."
 ]);
 for (const plan of PLAN_ORDER) {
   for (const row of rows.filter(entry => entry.key === "reviewSync" || entry.key === "aiReplies")) {
