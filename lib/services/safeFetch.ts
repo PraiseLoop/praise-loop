@@ -156,6 +156,9 @@ function parsePageUrl(raw: string): URL {
     throw new SafeFetchError("Only http and https websites are supported");
   }
   if (url.username || url.password) throw new SafeFetchError("The website URL cannot include credentials");
+  // The URL parser drops a default port, so any port left here is non-standard. Refusing those keeps this
+  // from being used to probe other services on a public host.
+  if (url.port) throw new SafeFetchError("Use the website address without a port number");
   if (!url.hostname) throw new SafeFetchError("Use a valid website URL");
   return url;
 }

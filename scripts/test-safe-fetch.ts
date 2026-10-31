@@ -199,6 +199,13 @@ async function rejectionTests() {
   );
 
   await assert.rejects(
+    () => fetchReadablePage("https://example.com:6379/", { lookup: publicLookup, request: async () => html("x") }),
+    /without a port number/
+  );
+  // The default port written out is the same as none, so it is accepted.
+  await fetchReadablePage("https://example.com:443/", { lookup: publicLookup, request: async () => html("<p>ok</p>") });
+
+  await assert.rejects(
     () => fetchReadablePage("file:///etc/passwd", { lookup: publicLookup, request: async () => html("x") }),
     /Only http and https/
   );
