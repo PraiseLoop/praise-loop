@@ -182,7 +182,7 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `OPENAI_TIMEOUT_MS` | no | Caption provider timeout in milliseconds (default `20000`, applies to either provider); on timeout the draft is marked `failed` with an actionable error |
 | `DRAFT_PIPELINE_INTERVAL_MS` | no | Worker sweep interval (default `60000`) |
 | `APPLE_CLIENT_ID` | for Apple sign-in | Comma-separated audiences accepted from Apple identity tokens. The native app uses its bundle id `ca.visda.praiseloop`; a Services ID is added only when web Apple sign-in exists. Empty fails closed with 401 (see [auth.md](auth.md)) |
-| `MICROSOFT_CLIENT_ID` | for Microsoft sign-in | Entra ID application (client) id, also the comma-separated audience list for phone ID tokens. The same id goes in the app's `EXPO_PUBLIC_MICROSOFT_CLIENT_ID`. Empty hides the web button and fails the phone exchange closed with 401 (see [auth.md](auth.md)) |
+| `MICROSOFT_CLIENT_ID` | for Microsoft sign-in | Entra ID application (client) id, also the comma-separated audience list for phone ID tokens (the web sign-in uses the first id). The same id goes in the app's `EXPO_PUBLIC_MICROSOFT_CLIENT_ID`. Empty hides the web button and fails the phone exchange closed with 401 (see [auth.md](auth.md)) |
 | `MICROSOFT_CLIENT_SECRET` | for web Microsoft sign-in | Client secret for the NextAuth `azure-ad` provider. The phone uses PKCE and never needs it. Never commit the value |
 | `EXPO_ACCESS_TOKEN` | no | Expo push access token; only needed if enhanced push security is enabled on the Expo project |
 | `EMAIL_TRANSPORT` | no | `fake` (default outside production) or `resend`. `fake` records to an in-memory outbox and logs an `email_outbox` line, and is refused in a production process |

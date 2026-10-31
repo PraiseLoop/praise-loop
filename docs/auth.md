@@ -260,7 +260,8 @@ Owner setup (nothing was run against Microsoft's live service in this change):
    URI `praiseloop://auth/microsoft`, matching the app's Expo scheme and the path
    in `mobile/src/auth/microsoft.ts`. The same registration can carry both.
 3. Copy the **Application (client) ID** into `MICROSOFT_CLIENT_ID` (the server
-   accepts a comma-separated list for the phone audience check) and into the
+   accepts a comma-separated list for the phone audience check; the web sign-in
+   uses the first id in the list, so put the web registration first) and into the
    app's build environment as `EXPO_PUBLIC_MICROSOFT_CLIENT_ID`. Create a client
    secret under **Certificates & secrets** and put it in
    `MICROSOFT_CLIENT_SECRET`; the secret is used by the web provider only, never

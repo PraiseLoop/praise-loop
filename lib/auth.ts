@@ -40,7 +40,10 @@ async function signedInOwner() {
 // sign-out with an empty provider list, which keeps the email session's sign-out
 // button working.
 const googleConfigured = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
-const microsoftConfigured = !!(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET);
+// MICROSOFT_CLIENT_ID may list several ids for the phone token check. The web flow needs exactly one
+// application, and it is the first id in the list, so the web registration goes first.
+const microsoftWebClientId = (process.env.MICROSOFT_CLIENT_ID ?? "").split(",")[0].trim();
+const microsoftConfigured = !!(microsoftWebClientId && process.env.MICROSOFT_CLIENT_SECRET);
 
 // NextAuth's provider id is `azure-ad`; auth_accounts uses the canonical
 // `microsoft` name, so lib/auth-adapter.ts maps between them. The subject is
@@ -54,7 +57,7 @@ if (googleConfigured) {
 }
 if (microsoftConfigured) {
   providers.push(AzureADProvider({
-    clientId: process.env.MICROSOFT_CLIENT_ID ?? "",
+    clientId: microsoftWebClientId,
     clientSecret: process.env.MICROSOFT_CLIENT_SECRET ?? "",
     tenantId: "common",
     authorization: { params: { scope: "openid email profile" } },
