@@ -283,6 +283,26 @@ owner runs them.
    `curl -I https://praise.example.com/` works, and
    `nc -vz <home public IP> 3000 5432 6379` is refused.
 
+### One-file stack for Dockhand, Portainer and similar
+
+Tools that take a single compose file can't merge `docker-compose.yml` with the pilot
+overlay, and have no repo checkout to build from. `docker-compose.standalone.yml` is the
+same stack in one file: published `ghcr.io` images only, no host ports (Postgres and
+Redis are reachable inside the stack only, so they can't clash with other stacks on the
+server), and `cloudflared` included with the tunnel pointing at `http://web:3000`.
+
+- Paste or point the tool at `docker-compose.standalone.yml` and set the variables in the
+  tool's stack environment, not in the file. Required: `POSTGRES_PASSWORD`,
+  `NEXTAUTH_SECRET`, `NEXTAUTH_URL` and `CLOUDFLARE_TUNNEL_TOKEN`; the stack won't start
+  without them. The rest match `.env.example`. If the images are private, add `ghcr.io`
+  registry credentials to the tool first.
+- Pin `PRAISELOOP_TAG` to a release tag, or leave it at `latest` to follow master.
+- Keep it in step with the two real files. `scripts/test-tooling.ts` fails when a
+  variable they pass to a service is missing from it.
+- `ops/backup.sh` and `ops/restore.sh` use `docker compose ... exec`, which needs the
+  file and the stack's project name: set `COMPOSE="docker compose -p <stack name> -f docker-compose.standalone.yml"`
+  (with the variables exported) when running them from a checkout on the server.
+
 ### Backups and restore
 
 `ops/backup.sh` writes a gzipped `pg_dump` and a tarball of the `generated_media`
