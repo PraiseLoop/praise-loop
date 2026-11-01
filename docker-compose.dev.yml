@@ -139,6 +139,14 @@ services:
       - EXPO_NO_TELEMETRY=1
       - DEV_LAN_IP=${DEV_LAN_IP:-}
       - MOBILE_PORT=${MOBILE_PORT:-8081}
+      # Public settings the app reads when it starts (Expo only sees variables in its own environment,
+      # not the rest of .env). The Google web client id defaults to the server's GOOGLE_CLIENT_ID,
+      # since it is the same value. Empty hides the matching sign-in button.
+      - EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=${EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID:-${GOOGLE_CLIENT_ID:-}}
+      - EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=${EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID:-}
+      - EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME=${EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME:-}
+      - EXPO_PUBLIC_MICROSOFT_CLIENT_ID=${EXPO_PUBLIC_MICROSOFT_CLIENT_ID:-}
+      - EXPO_PUBLIC_EAS_PROJECT_ID=${EXPO_PUBLIC_EAS_PROJECT_ID:-}
     command: ["sh", "/app/mobile/dev-container.sh"]
     volumes:
       - .:/app:z

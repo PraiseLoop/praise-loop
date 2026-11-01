@@ -63,7 +63,11 @@ QR code (or enter the URL under "Enter URL manually"), then see the demo flow be
   project id and APNs/FCM credentials listed in `mobile/README.md#push-notifications`,
   Apple needs iOS 13+ and `APPLE_CLIENT_ID` on the server, and Microsoft needs
   `MICROSOFT_CLIENT_ID` on the server plus `EXPO_PUBLIC_MICROSOFT_CLIENT_ID` in the
-  app; a button stays hidden elsewhere.
+  app; a button stays hidden elsewhere. Expo only sees variables in its own environment, so the
+  dev compose stack passes the `EXPO_PUBLIC_*` values from `.env` to the `mobile` service
+  (`EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` defaults to `GOOGLE_CLIENT_ID`); restart the `mobile` service
+  after changing them. For phone Google sign-in the server must also accept the web client id:
+  put it in `GOOGLE_ANDROID_CLIENT_ID` (or `GOOGLE_IOS_CLIENT_ID`).
 
 ## Demo flow with synthetic data
 
