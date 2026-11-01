@@ -15,6 +15,7 @@ type GoogleProfile = {
 
 type MicrosoftProfile = {
   tid?: unknown;
+  oid?: unknown;
   sub?: unknown;
   email?: unknown;
   preferred_username?: unknown;
@@ -47,7 +48,7 @@ const microsoftConfigured = !!(microsoftWebClientId && process.env.MICROSOFT_CLI
 
 // NextAuth's provider id is `azure-ad`; auth_accounts uses the canonical
 // `microsoft` name, so lib/auth-adapter.ts maps between them. The subject is
-// `${tid}:${sub}` for both web and phone, so ids from different tenants cannot collide.
+// `${tid}:${oid}` for both web and phone, so ids from different tenants cannot collide.
 const providers: NextAuthOptions["providers"] = [];
 if (googleConfigured) {
   providers.push(GoogleProvider({
@@ -66,7 +67,7 @@ if (microsoftConfigured) {
     profile(profile) {
       const microsoft = profile as MicrosoftProfile;
       return {
-        id: microsoftSubject(microsoft.tid, microsoft.sub) ?? "",
+        id: microsoftSubject(microsoft.tid, microsoft.oid) ?? "",
         name: typeof microsoft.name === "string" ? microsoft.name : null,
         email: microsoftEmail(microsoft as Record<string, unknown>),
         image: null
@@ -105,7 +106,7 @@ export const authOptions: NextAuthOptions = {
       }
       if (account?.provider === "azure-ad") {
         const microsoft = profile as MicrosoftProfile | undefined;
-        const subject = microsoftSubject(microsoft?.tid, microsoft?.sub);
+        const subject = microsoftSubject(microsoft?.tid, microsoft?.oid);
         if (!subject) return false;
         const identity: AuthIdentity = {
           provider: "microsoft",
