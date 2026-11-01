@@ -244,6 +244,24 @@ async function slowDnsTest() {
   assert.ok(Date.now() - started < 2000, "gave up near the deadline");
 }
 
+async function htmlStrippingTest() {
+  // Pathological pages must be linear: many "<" with no ">", unterminated comments, scripts and tags.
+  const started = Date.now();
+  for (const hostile of ["<".repeat(500_000), "<a ".repeat(160_000), "<!--".repeat(120_000), "<script>".repeat(60_000), "<svg><".repeat(80_000), "a<b".repeat(170_000)]) {
+    readableText(hostile, "text/html");
+  }
+  assert.ok(Date.now() - started < 3000, `hostile HTML was stripped in ${Date.now() - started} ms`);
+
+  assert.equal(readableText("<p>One</p><!-- hidden <b>x</b> --><p>Two</p>", "text/html"), "One Two");
+  assert.equal(readableText("A<SCRIPT type='x'>evil('</p>')</SCRIPT>B<Style>p{}</STYLE>C", "text/html"), "A B C");
+  assert.equal(readableText("keep <script>never closed", "text/html"), "keep");
+  // With no ">" left anywhere nothing can close a tag, so the tail is plain text.
+  assert.equal(readableText("keep <!-- never closed", "text/html"), "keep <!-- never closed");
+  assert.equal(readableText("keep <!-- never closed --", "text/html"), "keep <!-- never closed --");
+  assert.equal(readableText("keep <!-- never closed > more", "text/html"), "keep");
+  assert.equal(readableText("price 5 < 6 and tail", "text/html"), "price 5 < 6 and tail");
+}
+
 async function readableTextTest() {
   assert.equal(readableText("<p>One</p><script>bad()</script><style>p{}</style><p>Two &nbsp; three</p>", "text/html"), "One Two three");
   assert.equal(readableText("a\r\n\tb   c", "text/plain"), "a b c");
@@ -259,6 +277,7 @@ async function main() {
   await rejectionTests();
   await timeoutTest();
   await slowDnsTest();
+  await htmlStrippingTest();
   await readableTextTest();
   console.log("safe fetch tests passed");
 }

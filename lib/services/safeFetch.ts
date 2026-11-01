@@ -205,13 +205,52 @@ function headerValue(headers: Record<string, string | undefined>, name: string):
   return headers[name.toLowerCase()];
 }
 
+const SKIPPED_ELEMENTS = new Set(["script", "style", "noscript", "svg", "math"]);
+
+// One pass over untrusted HTML, linear in its size. Regular expressions that scan ahead from every "<"
+// (for a closing ">" or "</script>") go quadratic on input like thousands of "<" with no ">", and this
+// runs on up to 512 KB of someone else's page, outside any timeout. Here every scan moves the cursor
+// past what it read, and once no ">" remains the rest is plain text.
+export function stripHtml(html: string): string {
+  const lower = html.toLowerCase();
+  const sameLength = lower.length === html.length; // case mapping can change length for rare characters
+  const lastClose = html.lastIndexOf(">");
+  let out = "";
+  let i = 0;
+  while (i < html.length) {
+    const open = html.indexOf("<", i);
+    if (open < 0 || open > lastClose) { out += html.slice(i); break; }
+    out += html.slice(i, open);
+    if (html.startsWith("<!--", open)) {
+      const end = html.indexOf("-->", open + 4);
+      if (end < 0) break; // an unterminated comment swallows the rest
+      out += " ";
+      i = end + 3;
+      continue;
+    }
+    const nameMatch = /^<([a-z][a-z0-9]*)/i.exec(html.slice(open, open + 12));
+    const name = nameMatch ? nameMatch[1].toLowerCase() : "";
+    if (SKIPPED_ELEMENTS.has(name)) {
+      const closing = (sameLength ? lower : html).indexOf(`</${name}`, open + 1 + name.length);
+      if (closing < 0) break; // an unterminated script or style swallows the rest
+      const tagEnd = html.indexOf(">", closing);
+      if (tagEnd < 0) break;
+      out += " ";
+      i = tagEnd + 1;
+      continue;
+    }
+    const end = html.indexOf(">", open + 1);
+    if (end < 0) { out += html.slice(open); break; }
+    out += " ";
+    i = end + 1;
+  }
+  return out;
+}
+
 export function readableText(body: string, contentType: string): string {
   let text = body;
   if (contentType === "text/html") {
-    text = text
-      .replace(/<!--[\s\S]*?-->/g, " ")
-      .replace(/<(script|style|noscript|svg|math)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, " ")
-      .replace(/<[^>]+>/g, " ");
+    text = stripHtml(text);
     text = text.replace(/&(#x?[0-9a-f]+|[a-z][a-z0-9]+);/gi, (match, code: string) => {
       if (code.startsWith("#")) {
         const number = code[1].toLowerCase() === "x" ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
