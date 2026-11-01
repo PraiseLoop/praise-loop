@@ -16,6 +16,9 @@ export default function BrandPage() {
   const [logo, setLogo] = useState(""), [weeklyTarget, setWeeklyTarget] = useState(3);
   const [voice, setVoice] = useState(""), [voiceUrl, setVoiceUrl] = useState("");
   const [voiceBusy, setVoiceBusy] = useState(false), [voiceMessage, setVoiceMessage] = useState("");
+  // What the server holds. The voice actions update it from their own responses instead of reloading the
+  // business, which would repopulate (and so discard unsaved edits to) the rest of the form.
+  const [storedVoice, setStoredVoice] = useState<string | null>(null), [voiceSource, setVoiceSource] = useState<string | null>(null);
   const [message, setMessage] = useState(""), [busy, setBusy] = useState(false);
   const { plan } = usePlan();
 
@@ -31,6 +34,8 @@ export default function BrandPage() {
     setWeeklyTarget(business.weekly_target ?? 3);
     setVoice(business.brand_voice ?? "");
     setVoiceUrl(business.brand_voice_source_url ?? "");
+    setStoredVoice(business.brand_voice ?? null);
+    setVoiceSource(business.brand_voice_source_url ?? null);
     setMessage("");
     setVoiceMessage("");
   }, [business]);
@@ -48,8 +53,9 @@ export default function BrandPage() {
       const data = await response.json().catch(() => null);
       if (!response.ok) { setVoiceMessage(`Couldn’t learn your voice: ${data?.error ?? "unknown error"}`); return; }
       setVoice(data.voice ?? "");
-      await reload();
-      setVoiceMessage("Voice learned. Edit it if you like, then save.");
+      setStoredVoice(data.voice ?? null);
+      setVoiceSource(data.sourceUrl ?? null);
+      setVoiceMessage("Voice learned and saved. Edit it if you like, then save again.");
     } catch {
       setVoiceMessage("Connection problem — nothing was saved. Try again.");
     } finally { setVoiceBusy(false); }
@@ -70,7 +76,8 @@ export default function BrandPage() {
       const data = await response.json().catch(() => null);
       if (!response.ok) { setVoiceMessage(`Couldn’t save: ${data?.error ?? "unknown error"}`); return; }
       setVoice(data.voice ?? trimmed);
-      await reload();
+      setStoredVoice(data.voice ?? trimmed);
+      setVoiceSource(data.sourceUrl ?? null);
       setVoiceMessage("Voice saved. New captions will use it.");
     } catch {
       setVoiceMessage("Connection problem — your changes weren’t saved. Try again.");
@@ -87,7 +94,8 @@ export default function BrandPage() {
       if (!response.ok) { setVoiceMessage(`Couldn’t reset: ${data?.error ?? "unknown error"}`); return; }
       setVoice("");
       setVoiceUrl("");
-      await reload();
+      setStoredVoice(null);
+      setVoiceSource(null);
       setVoiceMessage("Reset. Captions use the tone setting again.");
     } catch {
       setVoiceMessage("Connection problem — nothing was changed. Try again.");
@@ -170,7 +178,15 @@ export default function BrandPage() {
                 Brand voice is a Pro feature. Your {planName(plan.plan)} plan uses the tone setting above.{" "}
                 <Link href="/account">See your plan</Link>
               </p>
-            ) : (
+            ) : null}
+            {plan && !plan.limits.brandVoice && storedVoice ? (
+              <div style={{ marginTop: 10 }}>
+                <p className="pl-small pl-muted" style={{ margin: "0 0 8px" }}>A voice profile from an earlier plan is still saved. Reset it to go back to the tone setting.</p>
+                <button type="button" className="pl-btn" onClick={() => void resetVoice()} disabled={voiceBusy}>Reset to tone setting</button>
+                {voiceMessage ? <p role="status" className="pl-small" style={{ margin: "10px 0 0" }}>{voiceMessage}</p> : null}
+              </div>
+            ) : null}
+            {plan && !plan.limits.brandVoice ? null : (
               <>
                 <p className="pl-small pl-muted" style={{ margin: "0 0 10px" }}>
                   Paste your own website and we’ll learn how your business sounds. We read one public page; nothing from social accounts.
@@ -193,12 +209,12 @@ export default function BrandPage() {
                     placeholder="A few sentences about how your business sounds, with example phrases."
                   />
                   <span className="pl-small pl-muted" style={{ fontWeight: 400 }}>
-                    {voice.length}/1200 characters.{business.brand_voice_source_url ? ` Learned from ${business.brand_voice_source_url}.` : ""}
+                    {voice.length}/1200 characters.{voiceSource ? ` Learned from ${voiceSource}.` : ""}
                   </span>
                 </label>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   <button type="button" className="pl-btn pl-btn-primary" onClick={() => void saveVoice()} disabled={voiceBusy || !voice.trim()}>Save voice</button>
-                  <button type="button" className="pl-btn" onClick={() => void resetVoice()} disabled={voiceBusy || (!voice && !business.brand_voice)}>Reset to tone setting</button>
+                  <button type="button" className="pl-btn" onClick={() => void resetVoice()} disabled={voiceBusy || (!voice && !storedVoice)}>Reset to tone setting</button>
                 </div>
                 {voiceMessage ? <p role="status" className="pl-small" style={{ margin: "10px 0 0" }}>{voiceMessage}</p> : null}
               </>
