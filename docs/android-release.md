@@ -16,6 +16,9 @@ server, and native Google, Apple and Microsoft sign-in work in it (they do not i
    there (or run `npx eas-cli init` from `mobile/`). The app config is a TypeScript file, so
    `eas init` cannot write the project id into it; copy the id from the project page instead.
    The app reads it from `EXPO_PUBLIC_EAS_PROJECT_ID` (this also lets push notifications find it).
+   **Every `eas-cli` command below needs that variable in your shell**, because the config has no
+   saved id for the tool to find: run `export EXPO_PUBLIC_EAS_PROJECT_ID=<project id>` in the
+   terminal you use for steps 3 to 5.
 2. **Token and project id for GitHub.** On expo.dev create an access token (Account settings,
    Access tokens) and add it to the repository as the **secret** `EXPO_TOKEN`. Add the project id
    as the **variable** `EAS_PROJECT_ID` (Settings, Secrets and variables, Actions, Variables). It is
@@ -33,7 +36,7 @@ server, and native Google, Apple and Microsoft sign-in work in it (they do not i
    Until the pilot hosting (#90) is up, use an address your phone can reach (your Tailscale
    or LAN address); builds made then only work for you. Rebuild when the real domain exists.
 5. **First build and the signing key.** Run
-   `EXPO_PUBLIC_EAS_PROJECT_ID=<project id> npx eas-cli build --platform android --profile preview`
+   `npx eas-cli build --platform android --profile preview` (with the variable exported as in step 1)
    once by hand and let EAS generate the Android keystore. **Android installs an update over an
    existing app only if it is signed with the same key**, so never replace the key; lose it and
    everyone has to uninstall and reinstall. Download a backup with `npx eas-cli credentials`
