@@ -171,6 +171,9 @@ choice and the settings toggle.
 
 ## Builds
 
+Android APKs for Obtainium are built by a tagged GitHub workflow through EAS; the profiles are in
+`eas.json` and the setup is in [../docs/android-release.md](../docs/android-release.md).
+
 Local builds and EAS Build both work. Expo Router is the router; Jest with the
 `jest-expo` preset runs the tests. No native `ios/` or `android/` folders are
 committed. Google sign-in is compiled in at prebuild through the config plugin,
