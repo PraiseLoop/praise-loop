@@ -45,14 +45,25 @@ jobs:
 
       - name: Build the APK in EAS
         working-directory: mobile
-        run: eas build --platform android --profile preview --non-interactive --wait --json > "$RUNNER_TEMP/build.json"
+        env:
+          # The app config reads the project id from this variable, and EAS needs it before it can
+          # look anything else up (including the environment variables stored in the project).
+          EXPO_PUBLIC_EAS_PROJECT_ID: ${{ vars.EAS_PROJECT_ID }}
+        run: |
+          if [ -z "$EXPO_PUBLIC_EAS_PROJECT_ID" ]; then
+            echo "Set the repository variable EAS_PROJECT_ID (docs/android-release.md)" >&2
+            exit 1
+          fi
+          eas build --platform android --profile preview --non-interactive --wait --json > "$RUNNER_TEMP/build.json"
 
       - name: Download the APK
         id: apk
         run: |
           url=$(jq -r '.[0].artifacts.buildUrl // empty' "$RUNNER_TEMP/build.json")
           if [ -z "$url" ]; then echo "EAS did not return an APK link" >&2; cat "$RUNNER_TEMP/build.json" >&2; exit 1; fi
-          name="praiseloop-${GITHUB_REF_NAME:-manual}.apk"
+          # A branch name can contain "/" (feature/x); keep the file name to safe characters.
+          safe=$(printf '%s' "${GITHUB_REF_NAME:-manual}" | tr -c 'A-Za-z0-9._-' '-')
+          name="praiseloop-${safe}.apk"
           curl --fail --location --silent --show-error --output "$name" "$url"
           echo "file=$name" >> "$GITHUB_OUTPUT"
 
