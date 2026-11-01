@@ -49,6 +49,33 @@ assert.match(pilot, /ports: !reset \[\]/, "pilot overlay must unpublish the web 
 assert.match(pilot, /TUNNEL_TOKEN=\$\{CLOUDFLARE_TUNNEL_TOKEN:\?/, "tunnel token must come from .env, required");
 assert.doesNotMatch(pilot, /eyJ[A-Za-z0-9]{20,}/, "no tunnel token in the repo");
 assert.match(read(".env.example"), /^CLOUDFLARE_TUNNEL_TOKEN=$/m, "token must be blank in .env.example");
+
+// The standalone file is the same stack as docker-compose.yml + docker-compose.pilot.yml for tools that take one
+// file (Dockhand, Portainer). It must run published images only, publish no host ports, and not fall behind: every
+// variable the two real files pass to a service must also be passed here.
+const standalone = read("docker-compose.standalone.yml");
+const serviceBlock = (text: string, name: string): string => {
+  const start = text.indexOf(`\n  ${name}:\n`);
+  assert.ok(start >= 0, `compose file must define the ${name} service`);
+  const rest = text.slice(start + 1);
+  const next = rest.slice(1).search(/\n(?: {2}[a-z_-]+:|[a-z]+:)\n/);
+  return next < 0 ? rest : rest.slice(0, next + 1);
+};
+const envNames = (block: string): string[] => [...block.matchAll(/^ {6}- ([A-Z0-9_]+)=/gm)].map((m) => m[1]);
+assert.doesNotMatch(standalone, /^\s+build:/m, "the standalone stack must use published images, not build from a checkout");
+assert.doesNotMatch(standalone, /^\s+ports:/m, "the standalone stack must not publish host ports");
+assert.match(standalone, /TUNNEL_TOKEN=\$\{CLOUDFLARE_TUNNEL_TOKEN:\?/, "tunnel token must be required and come from the environment");
+assert.match(standalone, /POSTGRES_PASSWORD:\?/, "the database password must be required, not defaulted");
+assert.match(standalone, /NEXTAUTH_SECRET:\?/, "the session secret must be required, not defaulted");
+assert.match(standalone, /TRUST_PROXY_HEADERS=1/, "only cloudflared reaches web, so proxy headers are trusted");
+assert.doesNotMatch(standalone, /eyJ[A-Za-z0-9]{20,}/, "no tunnel token in the repo");
+const baseCompose = read("docker-compose.yml");
+for (const service of ["migrate", "web", "worker", "postgres"]) {
+  const have = new Set(envNames(serviceBlock(standalone, service)));
+  for (const name of envNames(serviceBlock(baseCompose, service))) {
+    assert.ok(have.has(name), `docker-compose.standalone.yml ${service} is missing ${name}, which docker-compose.yml passes`);
+  }
+}
 for (const f of ["backup.sh", "restore.sh", "healthcheck.sh"]) {
   assert.match(read(`ops/${f}`), /^#!\/usr\/bin\/env bash\nset -euo pipefail|^#!\/usr\/bin\/env bash\n(#.*\n)+set -euo pipefail/, `${f} must fail fast`);
 }

@@ -1,0 +1,117 @@
+# Single-file pilot stack for tools that take exactly one compose file (Dockhand,
+# Portainer): docker-compose.yml + docker-compose.pilot.yml merged, with no
+# `build:` (it runs the published ghcr.io images, so no repo checkout is needed)
+# and no host ports (only cloudflared reaches the app; Postgres and Redis are
+# reachable inside the stack only, so they cannot clash with other stacks).
+#
+# Set the variables below in the tool's stack environment, never in this file.
+# Required: POSTGRES_PASSWORD, NEXTAUTH_SECRET, NEXTAUTH_URL, CLOUDFLARE_TUNNEL_TOKEN.
+# Everything else is optional and mirrors .env.example. Keep this file in step with
+# docker-compose.yml and docker-compose.pilot.yml; scripts/test-tooling.ts fails
+# when a variable they pass is missing here.
+services:
+  migrate:
+    image: ghcr.io/iamstevedavis/praise-loop-worker:${PRAISELOOP_TAG:-latest}
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-effective_memory}
+    command: ["node", "dist-worker/scripts/migrate.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  web:
+    image: ghcr.io/iamstevedavis/praise-loop-web:${PRAISELOOP_TAG:-latest}
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-effective_memory}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:?set NEXTAUTH_URL to the public https address}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:?set NEXTAUTH_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - EMAIL_TRANSPORT=${EMAIL_TRANSPORT:-}
+      - EMAIL_FROM=${EMAIL_FROM:-}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - GOOGLE_IOS_CLIENT_ID=${GOOGLE_IOS_CLIENT_ID:-}
+      - GOOGLE_ANDROID_CLIENT_ID=${GOOGLE_ANDROID_CLIENT_ID:-}
+      - APPLE_CLIENT_ID=${APPLE_CLIENT_ID:-}
+      - MICROSOFT_CLIENT_ID=${MICROSOFT_CLIENT_ID:-}
+      - MICROSOFT_CLIENT_SECRET=${MICROSOFT_CLIENT_SECRET:-}
+      # Only cloudflared reaches web here, so its client-IP headers can be trusted (rate limiting).
+      - TRUST_PROXY_HEADERS=1
+      - OWNER_GENERATION_DAILY_LIMIT=${OWNER_GENERATION_DAILY_LIMIT:-25}
+      - MOBILE_MINIMUM_VERSION=${MOBILE_MINIMUM_VERSION:-1.0.0}
+      - MOBILE_LATEST_VERSION=${MOBILE_LATEST_VERSION:-}
+      - MOBILE_FEATURES=${MOBILE_FEATURES:-}
+    volumes: ["generated_media:/app/private-media"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    stop_grace_period: 15s
+    restart: unless-stopped
+
+  worker:
+    image: ghcr.io/iamstevedavis/praise-loop-worker:${PRAISELOOP_TAG:-latest}
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-effective_memory}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-}
+      - EXPO_ACCESS_TOKEN=${EXPO_ACCESS_TOKEN:-}
+      - REDIS_URL=redis://redis:6379
+      - OWNER_GENERATION_DAILY_LIMIT=${OWNER_GENERATION_DAILY_LIMIT:-25}
+      - DRAFT_PIPELINE_INTERVAL_MS=${DRAFT_PIPELINE_INTERVAL_MS:-60000}
+      - EMAIL_TRANSPORT=${EMAIL_TRANSPORT:-}
+      - EMAIL_FROM=${EMAIL_FROM:-}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+    volumes: ["generated_media:/app/private-media"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    stop_grace_period: 60s
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-effective_memory}
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-effective_memory}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes: ["redis_data:/data"]
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:2025.9.1
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  generated_media:

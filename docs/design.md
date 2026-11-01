@@ -61,8 +61,9 @@ business has reviews, a brand, drafts and a weekly target.
 - **Phone app** (`mobile/`, its own package, Expo SDK 58 + Expo Router): sign-in, weekly queue, draft
   detail (edit, approve, archive, new version, share/save), profile. It uses only the HTTP API.
 - **Hosting**: Docker Compose. The pilot runs on a home server behind a Cloudflare Tunnel (see
-  `docker-compose.pilot.yml`, `ops/`, [development.md](development.md#pilot-hosting)); a small VPS is
-  planned for paying customers (#98).
+  `docker-compose.pilot.yml`, `ops/`, [development.md](development.md#pilot-hosting)); managers that
+  take one compose file (Dockhand) use `docker-compose.standalone.yml`, which must stay in step with
+  the two real files; a small VPS is planned for paying customers (#98).
 
 ## 3. Core domain
 
