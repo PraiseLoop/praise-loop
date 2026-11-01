@@ -4,7 +4,7 @@
 who are about to change it. It summarises and links; the detailed, authoritative text lives in the
 other docs. When you change behaviour, update the detailed doc and the matching line here.
 
-Last reviewed: 2026-10-31 (master after PR #190).
+Last reviewed: 2026-11-01 (master after PR #190, plus the Buffer spike decisions below).
 
 | Doc | What it is the source of truth for |
 | --- | --- |
@@ -173,11 +173,47 @@ Expo Router screens: `sign-in`, `queue`, `draft/[id]`, `profile`. Design rules t
 | Postgres, Redis | data, job delivery | live |
 | OpenAI / OpenRouter | captions, brand voice | built, used with fakes in tests; no live run in CI |
 | Resend | sign-in codes (`lib/email.ts`, fake outbox in dev/tests) | **live and verified** (sender `noreply@praiseloop.ca`) |
+| Zoho Mail | a human mailbox for `admin@praiseloop.ca` (vendor and service sign-ups, replies) | **live**; MX/SPF/DKIM for the root domain are Zoho's, Resend sends from the `send`/`rsend` subdomains and `resend._domainkey`; the root domain may have only one SPF record |
+| Cloudflare Tunnel | reaches the home server; `praiseloop-dev` serves `dev.praiseloop.ca` for the Buffer OAuth callback only | tunnel and DNS created; connector not yet run; ingress allows `/api/buffer/*` and returns 404 for everything else |
 | Expo push | "posts ready" notifications | built; needs EAS project id, APNs/FCM, a device test |
 | Google OAuth (web) | sign-in | **live and verified** |
 | Google native, Apple, Microsoft | phone sign-in; Microsoft also on web | built, tested with local keys only, never run live |
-| Buffer | scheduler (#29) | adapter + encrypted credentials built, closed gate, not selectable |
+| Buffer | automatic posting for owners with a Business/Creator Instagram or a Facebook Page (#29) | **feasibility spike done 2026-11-01**: live API key works, an app client exists; adapter and encrypted credentials built against mocks only; Connect flow, media-URL policy and worker submission **not built**; see below |
 | Google Business Profile | review sync (#46) | stubbed client; live client fails closed until access is approved |
+
+### Buffer (#29): findings and decisions, 2026-11-01
+
+Detail and sources are in the comment on #29 and in [integrations.md](integrations.md).
+
+- **Model.** Each owner has their own free Buffer account, connects their Instagram/Facebook inside
+  Buffer, then connects Buffer to PraiseLoop with OAuth (an *app client*, PKCE). We never front
+  everyone's channels on one Buffer account of ours: the API Terms forbid reselling access.
+  A personal API key is only for tests against our own account. Who is billed for connected channels is
+  inferred (the owner) but not stated in Buffer's docs; confirm with Buffer support.
+- **Instagram.** A Professional (Business/Creator) channel gets automatic posting. A Personal one is
+  notification-based only (the owner finishes the post in Instagram), so it gains nothing over the
+  share sheet and must never be shown as published. `createPost` takes `schedulingType`
+  (`automatic` | `notification`) per post.
+- **Schedule lives in PraiseLoop.** The worker submits an approved post at its due time with
+  `mode: shareNow`; Buffer's own queue is not used. This keeps schedule, cancel and reschedule in our
+  code and keeps an image URL public for minutes, not days. The trade-off is that a worker outage delays
+  or misses a post, so it needs the existing claims, bounded retries and a visible failed state.
+  **The existing `lib/integrations/buffer.ts` uses `customScheduled` and must change to match.**
+- **Media.** Buffer has no upload; it fetches a public, direct HTTPS URL that must stay reachable until
+  publication (no signed or expiring URLs). Decision: unguessable per-draft URLs, enabled only while a
+  post is awaiting submission or publication, revoked afterwards, and scoped to approved drafts of the
+  owning business. Private media stays behind `/api/media`. Never make draft filenames public.
+- **Reconciliation.** No webhooks found: poll post status (`draft`, `needs_approval`, `scheduled`,
+  `sending`, `sent`, `error`). `deletePost` and `editPost` exist. Any timeout after submission is
+  ambiguous and must not be retried blindly.
+- **Callback.** `https://dev.praiseloop.ca/api/buffer/callback` (dev, through the `praiseloop-dev`
+  tunnel) and a production URL; Buffer rejects `http://localhost`. The browser arrives there without the
+  owner's session cookie, so the callback must find the owner from a server-stored, short-lived `state`.
+- **Risks.** A brand-new Instagram account was suspended soon after creation and connection to a
+  scheduler, so test with an established Business account and the owner's agreement, never a throwaway.
+  Owners need a second (free) account and a one-time connect step. Free Buffer allows 10 scheduled posts
+  and 1,000 API requests per channel per month. Any externally visible test post needs the maintainer's
+  approval and the connected account owner's.
 
 ## 7. Feature status
 
@@ -193,7 +229,8 @@ Expo Router screens: `sign-in`, `queue`, `draft/[id]`, `profile`. Design rules t
 | Sign in with Apple | phone + server shipped; **web not built** | #92 |
 | Native Google sign-in, push notifications | shipped; **need a development build and a device** | #85, #89 |
 | Android APK release pipeline | merged; not yet run | #190 |
-| Google review sync, real scheduler, AI review replies | blocked on access/policy | #46, #29, #96 |
+| Real scheduler through Buffer | access confirmed; decisions made; **build not started** (Connect flow, media URLs, worker submit/reconcile) | #29 |
+| Google review sync, AI review replies | blocked on access/policy | #46, #96 |
 | Store subscriptions, VPS, pilot hosting, store accounts | not started / owner tasks | #95, #98, #90, #91 |
 | Email + password | needs explicit owner approval first | #159 |
 
@@ -282,4 +319,10 @@ Open work and blockers are tracked in GitHub issues; this table is a snapshot.
 - **Replies to Google reviews** (#96) need a decision on the write API before any code posts.
 - **Manual checks never run on hardware**: native Google/Apple/Microsoft sign-in, push, Save to
   Photos and the Instagram/Facebook share behaviour (#85–#89, #92).
+- **Buffer (#29)** is decided but unbuilt, and two questions need Buffer support: who is billed for
+  channels an app connects, and whether multi-customer commercial use fits the API Terms (only partly
+  readable; a person should read them). No live test post has been made.
+- **Google sign-in on the phone** needs a development build, not Expo Go (native module), plus an
+  Android-type OAuth client with the signing key's SHA-1; the `EXPO_PUBLIC_*` values are already passed
+  through compose.
 - **Email + password** (#159) reverses the "no password database" stance and needs explicit approval.
