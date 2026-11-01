@@ -230,7 +230,7 @@ comma-separated values in `MICROSOFT_CLIENT_ID`. A multi-tenant token has no
 single fixed issuer, so the issuer must have the form
 `https://login.microsoftonline.com/<tid>/v2.0` and the `<tid>` in it must equal
 the token's own `tid` claim; anything else is rejected. The identity subject is
-`${tid}:${sub}`, so ids from different tenants cannot collide. The display name
+`${tid}:${oid}`: the tenant plus the account's object id (`oid`), which is the same in every application registration (`sub` is not, so it would split one person into two owners when web and phone use different client ids). Ids from different tenants cannot collide. The display name
 comes from the token's `name` claim. The address comes from `email`, or from
 `preferred_username` when it looks like an address, lower-cased, and is recorded
 on the method row for display only. Missing `MICROSOFT_CLIENT_ID` makes every

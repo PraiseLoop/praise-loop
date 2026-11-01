@@ -25,10 +25,13 @@ export function microsoftEmail(claims: Record<string, unknown>): string | null {
   return EMAIL.test(preferred) ? preferred : null;
 }
 
-// The tenant id is part of the subject so ids from different tenants cannot collide.
-export function microsoftSubject(tid: unknown, sub: unknown): string | null {
-  if (typeof tid !== "string" || !tid || typeof sub !== "string" || !sub) return null;
-  return `${tid}:${sub}`;
+// The identity is the tenant id plus the account's object id (`oid`). `sub` is different for every
+// application registration, so using it would give the same person one owner on the web and another
+// on the phone when they use different client ids; `oid` is the same everywhere in a tenant. The tenant
+// id is part of the subject so ids from different tenants cannot collide.
+export function microsoftSubject(tid: unknown, oid: unknown): string | null {
+  if (typeof tid !== "string" || !tid || typeof oid !== "string" || !oid) return null;
+  return `${tid}:${oid}`;
 }
 
 // Returns null for any token that is not a currently valid Microsoft Entra ID
@@ -42,7 +45,7 @@ export async function verifyMicrosoftIdToken(idToken: string, keys: JWTVerifyGet
     const issuer = payload.iss;
     const issuerMatch = typeof issuer === "string" ? ISSUER.exec(issuer) : null;
     if (!issuerMatch || issuerMatch[1] !== tid) return null;
-    const subject = microsoftSubject(tid, payload.sub);
+    const subject = microsoftSubject(tid, payload.oid);
     if (!subject) return null;
     return {
       subject,

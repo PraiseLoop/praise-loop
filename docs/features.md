@@ -416,7 +416,7 @@ and keeps only our bearer token in the keychain.
   `POST /api/mobile/session/microsoft`. Closing the browser is a quiet no-op.
   The server verifies the RS256 signature against Microsoft's multi-tenant keys,
   the v2.0 issuer and its `tid` claim, the audience and expiry, and uses
-  `${tid}:${sub}` as the identity; Microsoft never links to an existing owner by
+  `${tid}:${oid}` (tenant plus object id, shared across app registrations) as the identity; Microsoft never links to an existing owner by
   email. No secret is used or stored on the phone.
 - Expo Go hides the Google and Apple buttons and keeps the dev-only demo owner
   and the email-code sign-in. Android hides Apple because the module and the

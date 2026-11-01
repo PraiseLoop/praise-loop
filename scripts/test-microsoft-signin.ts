@@ -26,14 +26,17 @@ async function main() {
     return new Response(JSON.stringify({ keys: [jwk] }), { headers: { "content-type": "application/json", "cache-control": "max-age=300" } });
   }) as typeof fetch;
 
-  const token = (claims: Record<string, unknown> = {}, o: { aud?: string; iss?: string; exp?: string | number; alg?: string; key?: CryptoKey; subject?: string | null; tid?: string } = {}) => {
-    const jwt = new SignJWT({ email: "microsoft-owner@example.invalid", name: "Synthetic Microsoft Owner", tid: o.tid ?? TENANT, ...claims })
+  const token = (claims: Record<string, unknown> = {}, o: { aud?: string; iss?: string; exp?: string | number; alg?: string; key?: CryptoKey; subject?: string | null; tid?: string; noOid?: boolean } = {}) => {
+    // `oid` is the account's id and is the same for every application; `sub` is specific to the app
+    // registration (the audience), as in real tokens.
+    const oid = o.subject === null || o.noOid ? {} : { oid: o.subject ?? "microsoft-sub-1" };
+    const jwt = new SignJWT({ email: "microsoft-owner@example.invalid", name: "Synthetic Microsoft Owner", tid: o.tid ?? TENANT, ...oid, ...claims })
       .setProtectedHeader({ alg: o.alg ?? "RS256", kid: "test-key" })
       .setIssuer(o.iss ?? issuer(o.tid ?? TENANT))
       .setAudience(o.aud ?? CLIENT)
       .setIssuedAt()
       .setExpirationTime(o.exp ?? "1h");
-    if (o.subject !== null) jwt.setSubject(o.subject ?? "microsoft-sub-1");
+    if (o.subject !== null) jwt.setSubject(`${o.aud ?? CLIENT}:${o.subject ?? "microsoft-sub-1"}`);
     return jwt.sign(o.key ?? good.privateKey);
   };
   const exchange = (idToken: unknown, ip = "203.0.113.20") =>
@@ -99,6 +102,13 @@ async function main() {
       assert.equal((await client.query("SELECT count(*)::int n FROM auth_users")).rows[0].n, 1);
       assert.equal((await client.query("SELECT email FROM auth_accounts WHERE provider_account_id=$1", [`${TENANT}:microsoft-sub-1`])).rows[0].email, "moved@example.invalid");
 
+      // The same account signing in through another application registration (a different audience, so a
+      // different `sub`) is the same owner: the identity is the shared `oid`, not the per-app `sub`.
+      const otherClient = await exchange(await token({}, { aud: SECOND_CLIENT, subject: "microsoft-sub-1" }), "203.0.113.21");
+      assert.equal(otherClient.status, 200);
+      assert.equal((await client.query("SELECT count(*)::int n FROM auth_users")).rows[0].n, 1);
+      assert.equal((await client.query("SELECT count(*)::int n FROM auth_accounts WHERE provider='microsoft'")).rows[0].n, 1);
+
       // The same sub under a different tenant is a different owner, because the
       // tenant id is part of the subject.
       const otherTenant = await exchange(await token({ tid: OTHER_TENANT, email: "other@example.invalid" }, { subject: "microsoft-sub-1", tid: OTHER_TENANT }));
@@ -131,6 +141,7 @@ async function main() {
         ["bad signature", await token({}, { key: other.privateKey })],
         ["wrong algorithm", await token({}, { alg: "RS512", key: wrongAlgorithm.privateKey })],
         ["missing subject", await token({}, { subject: null })],
+        ["missing object id", await token({}, { noOid: true })],
         ["missing tenant", await token({ tid: undefined }, { iss: issuer(TENANT) })],
         ["not a jwt", "garbage"], ["missing token", undefined], ["non-string token", 42]
       ];
@@ -186,7 +197,7 @@ async function main() {
       const signIn = require("../lib/auth").authOptions.callbacks.signIn;
       assert.equal(await signIn({
         account: { provider: "azure-ad", providerAccountId: `${TENANT}:microsoft-web-sub` },
-        profile: { tid: TENANT, sub: "microsoft-web-sub", email: "Web@Example.Invalid", name: "Web Microsoft Owner" }
+        profile: { tid: TENANT, sub: "pairwise-web-sub", oid: "microsoft-web-sub", email: "Web@Example.Invalid", name: "Web Microsoft Owner" }
       }), true);
       const webAccount = (await client.query("SELECT owner_id,email FROM auth_accounts WHERE provider='microsoft' AND provider_account_id=$1", [`${TENANT}:microsoft-web-sub`])).rows[0];
       assert.equal(webAccount.email, "web@example.invalid");
@@ -196,7 +207,7 @@ async function main() {
       assert.equal((await adapter.getUserByAccount({ provider: "azure-ad", providerAccountId: `${TENANT}:microsoft-web-sub` }))?.id, webAccount.owner_id);
       assert.equal(await signIn({
         account: { provider: "azure-ad", providerAccountId: "missing-tenant" },
-        profile: { sub: "microsoft-web-sub" }
+        profile: { sub: "microsoft-web-sub", oid: "microsoft-web-sub" }
       }), false);
       assert.equal(await signIn({
         account: { provider: "azure-ad", providerAccountId: "missing-sub" },
