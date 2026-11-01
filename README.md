@@ -44,6 +44,7 @@ All-containers workflows, configuration, tests and deployment:
 
 | Doc | What's in it |
 |---|---|
+| [docs/design.md](docs/design.md) | **Start here.** How the whole app works and why: system map, domain, auth, status, rules, how to change things |
 | [docs/mobile-plan.md](docs/mobile-plan.md) | Where the product is going: phone app, hosting, AI features, plans |
 | [docs/product.md](docs/product.md) | Who it's for and what the MVP does |
 | [docs/architecture.md](docs/architecture.md) | Stack, modules, data flow and rules |
