@@ -1,9 +1,12 @@
-import { Platform } from "react-native";
+import { Platform, TurboModuleRegistry } from "react-native";
 import { appConfig } from "../config";
 
-// The native module is required lazily: Expo Go does not ship it, and the app
-// must still start there. The Google button is hidden when the module is absent.
+// The native module is only loaded when the app runs: Expo Go does not ship it,
+// and the app must still start there. The Google button is hidden when the module
+// is absent.
 type GoogleSignInModule = typeof import("@react-native-google-signin/google-signin");
+
+const NATIVE_MODULE_NAME = "RNGoogleSignin";
 
 export class GoogleSignInCancelledError extends Error {
   constructor() {
@@ -16,7 +19,21 @@ export function isGoogleSignInCancelled(error: unknown): boolean {
   return error instanceof GoogleSignInCancelledError;
 }
 
+// The package's TurboModule spec calls getEnforcing at import time, which throws
+// when the native module is not in the binary. Expo's dev require reports that
+// throw through ErrorUtils before the caller's catch runs, so the package must
+// not be required at all when the module is missing. The non-enforcing registry
+// lookup answers that without throwing.
+function nativeModuleRegistered(): boolean {
+  try {
+    return TurboModuleRegistry.get(NATIVE_MODULE_NAME) != null;
+  } catch {
+    return false;
+  }
+}
+
 function loadNativeModule(): GoogleSignInModule | null {
+  if (!nativeModuleRegistered()) return null;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require("@react-native-google-signin/google-signin") as GoogleSignInModule;
@@ -34,7 +51,7 @@ export function googleSignInAvailable(
   iosClientId: string = appConfig.googleIosClientId,
   platform: string = Platform.OS
 ): boolean {
-  if (module === null || webClientId.length === 0) return false;
+  if (!module || webClientId.length === 0) return false;
   return platform !== "ios" || iosClientId.length > 0;
 }
 
