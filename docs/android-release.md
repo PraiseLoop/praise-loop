@@ -12,25 +12,28 @@ server, and native Google, Apple and Microsoft sign-in work in it (they do not i
 
 ## One-time setup (owner steps)
 
-1. **Expo account and project.** Create an account at expo.dev, then from `mobile/`:
-   `npx eas-cli login` and `npx eas-cli init`. `init` writes the project id; also set it for the
-   app (`EXPO_PUBLIC_EAS_PROJECT_ID`, below) so push notifications can find it.
-2. **Token for GitHub.** On expo.dev create an access token (Account settings, Access tokens) and
-   add it to the repository as the secret `EXPO_TOKEN` (Settings, Secrets and variables, Actions).
+1. **Expo account and project.** Create an account at expo.dev and a project named `praiseloop`
+   there (or run `npx eas-cli init` from `mobile/`). The app config is a TypeScript file, so
+   `eas init` cannot write the project id into it; copy the id from the project page instead.
+   The app reads it from `EXPO_PUBLIC_EAS_PROJECT_ID` (this also lets push notifications find it).
+2. **Token and project id for GitHub.** On expo.dev create an access token (Account settings,
+   Access tokens) and add it to the repository as the **secret** `EXPO_TOKEN`. Add the project id
+   as the **variable** `EAS_PROJECT_ID` (Settings, Secrets and variables, Actions, Variables). It is
+   not a secret, and the workflow stops with a clear message if it is missing.
 3. **Build settings.** The build runs in Expo's cloud, which cannot see GitHub or your `.env`, so
    give it the public app settings as EAS environment variables (they are not secrets):
    ```sh
    cd mobile
    npx eas-cli env:create --environment preview --name EXPO_PUBLIC_API_BASE_URL --value https://<your server>
    npx eas-cli env:create --environment preview --name EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID --value <web client id>
-   npx eas-cli env:create --environment preview --name EXPO_PUBLIC_EAS_PROJECT_ID --value <project id>
    ```
    Add `EXPO_PUBLIC_MICROSOFT_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` and
    `EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME` the same way when you use them.
 4. **The server address is baked in.** A standalone APK talks to the address it was built with.
    Until the pilot hosting (#90) is up, use an address your phone can reach (your Tailscale
    or LAN address); builds made then only work for you. Rebuild when the real domain exists.
-5. **First build and the signing key.** Run `npx eas-cli build --platform android --profile preview`
+5. **First build and the signing key.** Run
+   `EXPO_PUBLIC_EAS_PROJECT_ID=<project id> npx eas-cli build --platform android --profile preview`
    once by hand and let EAS generate the Android keystore. **Android installs an update over an
    existing app only if it is signed with the same key**, so never replace the key; lose it and
    everyone has to uninstall and reinstall. Download a backup with `npx eas-cli credentials`
