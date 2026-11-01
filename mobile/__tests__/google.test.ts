@@ -1,3 +1,4 @@
+import { TurboModuleRegistry } from "react-native";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import { appConfig } from "../src/config";
 import {
@@ -30,11 +31,39 @@ jest.mock("@react-native-google-signin/google-signin", () => ({
 
 const signIn = GoogleSignin.signIn as jest.Mock;
 const configure = GoogleSignin.configure as jest.Mock;
+// Expo Go has no RNGoogleSignin in its binary, and the package throws while it
+// is being imported when the module is missing. The probe keeps that import from
+// happening, so the tests drive it directly.
+const registryGet = jest.spyOn(TurboModuleRegistry, "get");
 
 describe("native Google sign-in", () => {
   beforeEach(() => {
+    registryGet.mockReturnValue({});
     appConfig.googleWebClientId = "web-client.apps.googleusercontent.com";
     appConfig.googleIosClientId = "ios-client.apps.googleusercontent.com";
+  });
+
+  afterAll(() => {
+    registryGet.mockRestore();
+  });
+
+  it("is unavailable when the native module is not registered", () => {
+    registryGet.mockReturnValue(null);
+
+    expect(googleSignInAvailable()).toBe(false);
+    expect(registryGet).toHaveBeenCalledWith("RNGoogleSignin");
+  });
+
+  it("is unavailable when the registry lookup itself throws", () => {
+    registryGet.mockImplementation(() => {
+      throw new Error("no turbo module registry");
+    });
+
+    expect(googleSignInAvailable()).toBe(false);
+  });
+
+  it("loads the package when the native module is registered", () => {
+    expect(googleSignInAvailable()).toBe(true);
   });
 
   it("is unavailable without the native module and without a web client id", () => {
