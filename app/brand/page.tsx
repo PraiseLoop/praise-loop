@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { apiFetch } from "../apiFetch";
 import { useBusiness } from "../AppShell";
 import BrandPreview from "./BrandPreview";
@@ -21,9 +21,27 @@ export default function BrandPage() {
   const [storedVoice, setStoredVoice] = useState<string | null>(null), [voiceSource, setVoiceSource] = useState<string | null>(null);
   const [message, setMessage] = useState(""), [busy, setBusy] = useState(false);
   const { plan } = usePlan();
+  // The business on screen now, and what each business's voice is after this page changed it. AppShell
+  // keeps the business objects it loaded, so switching away and back would otherwise show the old voice,
+  // and a response for a business the owner has since left must not touch the editor now showing another.
+  const activeBusinessId = useRef<string | null>(null);
+  const voiceOverrides = useRef<Record<string, { voice: string | null; source: string | null }>>({});
+
+  function applyVoice(businessId: string, nextVoice: string | null, nextSource: string | null) {
+    voiceOverrides.current[businessId] = { voice: nextVoice, source: nextSource };
+    if (activeBusinessId.current !== businessId) return;
+    setVoice(nextVoice ?? "");
+    setVoiceUrl(nextSource ?? "");
+    setStoredVoice(nextVoice);
+    setVoiceSource(nextSource);
+  }
 
   useEffect(() => {
     if (!business) return;
+    activeBusinessId.current = String(business.id);
+    const changed = voiceOverrides.current[String(business.id)];
+    const shownVoice = changed ? changed.voice : business.brand_voice ?? null;
+    const shownSource = changed ? changed.source : business.brand_voice_source_url ?? null;
     setName(business.name);
     setTimezone(business.timezone || "America/Toronto");
     setPrimary(business.brand_colors.primary);
@@ -32,12 +50,13 @@ export default function BrandPage() {
     setQuoteSize(business.brand_colors.quoteSize === "large" ? "large" : "standard");
     setLogo(business.logo_url ?? "");
     setWeeklyTarget(business.weekly_target ?? 3);
-    setVoice(business.brand_voice ?? "");
-    setVoiceUrl(business.brand_voice_source_url ?? "");
-    setStoredVoice(business.brand_voice ?? null);
-    setVoiceSource(business.brand_voice_source_url ?? null);
+    setVoice(shownVoice ?? "");
+    setVoiceUrl(shownSource ?? "");
+    setStoredVoice(shownVoice);
+    setVoiceSource(shownSource);
     setMessage("");
     setVoiceMessage("");
+    setVoiceBusy(false);
   }, [business]);
 
   async function learnVoice() {
@@ -51,14 +70,16 @@ export default function BrandPage() {
         body: JSON.stringify({ url: voiceUrl.trim() })
       });
       const data = await response.json().catch(() => null);
+      if (activeBusinessId.current !== String(business.id)) {
+        if (response.ok) applyVoice(String(business.id), data?.voice ?? null, data?.sourceUrl ?? null);
+        return;
+      }
       if (!response.ok) { setVoiceMessage(`Couldn’t learn your voice: ${data?.error ?? "unknown error"}`); return; }
-      setVoice(data.voice ?? "");
-      setStoredVoice(data.voice ?? null);
-      setVoiceSource(data.sourceUrl ?? null);
+      applyVoice(String(business.id), data.voice ?? null, data.sourceUrl ?? null);
       setVoiceMessage("Voice learned and saved. Edit it if you like, then save again.");
     } catch {
-      setVoiceMessage("Connection problem — nothing was saved. Try again.");
-    } finally { setVoiceBusy(false); }
+      if (activeBusinessId.current === String(business.id)) setVoiceMessage("Connection problem — nothing was saved. Try again.");
+    } finally { if (activeBusinessId.current === String(business.id)) setVoiceBusy(false); }
   }
 
   async function saveVoice() {
@@ -74,14 +95,16 @@ export default function BrandPage() {
         body: JSON.stringify({ voice: trimmed })
       });
       const data = await response.json().catch(() => null);
+      if (activeBusinessId.current !== String(business.id)) {
+        if (response.ok) applyVoice(String(business.id), data?.voice ?? trimmed, data?.sourceUrl ?? null);
+        return;
+      }
       if (!response.ok) { setVoiceMessage(`Couldn’t save: ${data?.error ?? "unknown error"}`); return; }
-      setVoice(data.voice ?? trimmed);
-      setStoredVoice(data.voice ?? trimmed);
-      setVoiceSource(data.sourceUrl ?? null);
+      applyVoice(String(business.id), data.voice ?? trimmed, data.sourceUrl ?? null);
       setVoiceMessage("Voice saved. New captions will use it.");
     } catch {
-      setVoiceMessage("Connection problem — your changes weren’t saved. Try again.");
-    } finally { setVoiceBusy(false); }
+      if (activeBusinessId.current === String(business.id)) setVoiceMessage("Connection problem — your changes weren’t saved. Try again.");
+    } finally { if (activeBusinessId.current === String(business.id)) setVoiceBusy(false); }
   }
 
   async function resetVoice() {
@@ -91,15 +114,16 @@ export default function BrandPage() {
     try {
       const response = await apiFetch(`/api/businesses/${business.id}/brand-voice`, { method: "DELETE" });
       const data = await response.json().catch(() => null);
+      if (activeBusinessId.current !== String(business.id)) {
+        if (response.ok) applyVoice(String(business.id), null, null);
+        return;
+      }
       if (!response.ok) { setVoiceMessage(`Couldn’t reset: ${data?.error ?? "unknown error"}`); return; }
-      setVoice("");
-      setVoiceUrl("");
-      setStoredVoice(null);
-      setVoiceSource(null);
+      applyVoice(String(business.id), null, null);
       setVoiceMessage("Reset. Captions use the tone setting again.");
     } catch {
-      setVoiceMessage("Connection problem — nothing was changed. Try again.");
-    } finally { setVoiceBusy(false); }
+      if (activeBusinessId.current === String(business.id)) setVoiceMessage("Connection problem — nothing was changed. Try again.");
+    } finally { if (activeBusinessId.current === String(business.id)) setVoiceBusy(false); }
   }
 
   async function save(e: FormEvent<HTMLFormElement>) {
