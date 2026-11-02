@@ -49,7 +49,7 @@ export async function assignSlots(owner:string,businessId:number,items:{draftPos
       const channel=(await c.query("SELECT ch.service,ch.channel_type,bc.status FROM business_buffer_channels ch JOIN buffer_connections bc ON bc.id=ch.connection_id WHERE ch.business_id=$1 AND bc.owner_id=$2",[businessId,owner])).rows[0];
       if(!channel)return fail("Connect Buffer and choose a channel for this business first");
       if(channel.status!=="active")return fail("Reconnect Buffer before scheduling");
-      if(channel.service==="instagram"&&channel.channel_type!=="business")return fail("Buffer can only post automatically to a Business or Creator Instagram account");
+      if(channel.service==="instagram"&&channel.channel_type!=="business")return fail("Buffer can only post automatically to an Instagram account it reports as a Business account");
       const instant=new Date(item.instant);if(!Number.isFinite(instant.getTime())||instant.getTime()<=Date.now())return fail("Choose a future UTC slot",400);
       const occupied=(await c.query("SELECT instant::text FROM posting_slot_claims WHERE business_id=$1 AND draft_id<>$2 UNION SELECT scheduled_for::text FROM draft_posts WHERE business_id=$1 AND scheduled_for IS NOT NULL AND status IN ('scheduled','published') AND id<>$2",[businessId,item.draftPostId])).rows.map(r=>new Date(r.instant).toISOString());
       if(!proposeSlots(b.timezone,b.posting_slots,new Date(),15,occupied).includes(instant.toISOString()))return fail("Slot is occupied or no longer in the proposed schedule");

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import sharp from "sharp";
 import { NextRequest } from "next/server";
 import { databaseFixture } from "./db-fixture";
+import { BufferConnectionError } from "../lib/services/bufferConnection";
 import { SchedulerAmbiguous, SchedulerAuthError, SchedulerRateLimited, SchedulerRejected } from "../lib/integrations/buffer";
 import type { PostStatusReceipt, SchedulerAdapter, SchedulePayload } from "../lib/integrations/scheduler";
 import { CHECK_BACKOFF_MS, DRAFT_IMAGE_TTL_MS, hashImageToken, IMAGE_TOKEN_PATTERN, LATE_WINDOW_MS, MAX_STATUS_CHECKS, postingMode, postingTick, publicImageUrl, resolvePublicImage, STALE_SUBMITTING_MS } from "../lib/services/bufferPosting";
@@ -144,6 +145,15 @@ async function main() {
         r = await tick("live"); assert.equal(r.failed, 1); row = await claim(d);
         assert.deepEqual([row.state, row.error_code, row.image_token_hash], ["error", code, null]); assert.equal(await status(d), "failed");
         await reset();
+      }
+
+      // 10b. Getting a token failed (nothing was sent): a passing failure is retried, a state the owner must fix is not.
+      d = await seed(); script = { submit: async () => { throw new BufferConnectionError("failed", 502); } };
+      r = await tick("live"); assert.equal(r.requeued, 1); assert.deepEqual([(await claim(d)).state, (await claim(d)).image_token_hash], ["queued", null]);
+      await reset();
+      for (const code of ["needs_reconnect", "not_connected"] as const) {
+        d = await seed(); script = { submit: async () => { throw new BufferConnectionError(code, 409); } };
+        r = await tick("live"); assert.equal(r.failed, 1, code); assert.deepEqual([(await claim(d)).state, (await claim(d)).error_code], ["error", code]); await reset();
       }
 
       // 11. Everything is re-checked at submit time; a failed check never reaches Buffer.

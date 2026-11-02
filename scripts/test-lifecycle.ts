@@ -49,6 +49,17 @@ async function main(){
       assert.deepEqual(races.map(r=>r.status).sort(),[200,409]);
       const bulk=await (await post("drafts/bulk",{items:[{draftPostId:a,version:edited.draft.version},{draftPostId:missing,version:0},{draftPostId:other,version:0}]})).json();
       assert.deepEqual(bulk.results.map((r:{status:number})=>r.status),[200,409,404]);
+      // A failed posting attempt is history. A refused edit keeps it; an edit that goes through starts over (#29).
+      const failedPost=await draft("Synthetic caption","/api/media/fixture.png","failed");
+      await c.query("INSERT INTO posting_slot_claims(business_id,instant,draft_id,state,error_code) VALUES($1,'2030-01-01T10:00:00Z',$2,'error','rejected')",[b,failedPost]);
+      const claimCount=async()=>(await c.query("SELECT count(*) FROM posting_slot_claims WHERE draft_id=$1",[failedPost])).rows[0].count;
+      assert.equal((await post("drafts/status",{draftPostId:failedPost,status:"published",version:0})).status,400);
+      assert.equal(await claimCount(),"1","a refused edit leaves the claim history");
+      await c.query("UPDATE posting_slot_claims SET state='unknown' WHERE draft_id=$1",[failedPost]);
+      assert.equal((await post("drafts/status",{draftPostId:failedPost,status:"approved",version:0})).status,409,"an unproven post blocks edits");
+      await c.query("UPDATE posting_slot_claims SET state='error' WHERE draft_id=$1",[failedPost]);
+      assert.equal((await post("drafts/status",{draftPostId:failedPost,status:"approved",version:0})).status,200);
+      assert.equal(await claimCount(),"0","an accepted edit clears the failed attempt");
       const version=(await c.query("SELECT version FROM draft_posts WHERE id=$1",[a])).rows[0].version;
       await c.query("INSERT INTO generation_periods VALUES($1,'2026-10-12','UTC',3,1,1,'quota_met') ON CONFLICT DO NOTHING",[b]);
       await c.query("INSERT INTO generation_jobs(business_id,period_start,draft_id,state) VALUES($1,'2026-10-12',$2,'complete')",[b,a]);
