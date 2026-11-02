@@ -49,6 +49,19 @@ export function connectionView(summary: BufferConnectionSummary): BufferConnecti
   return summary.status === "active" ? "active" : "needs_reconnect";
 }
 
+// The page sends the browser to whatever address the server returns. It is our own
+// authenticated API, but only Buffer's sign-in page is a valid place to go, so anything
+// else is refused rather than navigated to.
+export function isBufferAuthorizeUrl(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === "auth.buffer.com" && url.pathname === "/auth" && !url.username && !url.password && !url.port;
+  } catch {
+    return false;
+  }
+}
+
 export function isPersonalInstagram(channel: { service: string; type: string } | null | undefined): boolean {
   return channel?.service === "instagram" && channel.type !== "business";
 }
