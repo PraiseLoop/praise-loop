@@ -154,8 +154,9 @@ client; refuse unsupported changes instead of changing local dates alone.
 
 ### Remaining implementation / merge gate
 
-Owner OAuth connect/select/disconnect; encrypted credential storage with rotating
-refresh locking; durable submit/reconcile/cancel jobs in the existing worker;
+Owner OAuth connect/select/disconnect and encrypted credential storage with rotating
+refresh locking are built (see “Connecting Buffer” below); the remaining gate is
+durable submit/reconcile/cancel jobs in the existing worker;
 validated channel/media handling; unique local claims and persisted external IDs;
 bounded retries with ambiguity handling; explicit provider-aware lifecycle/audit.
 Fixtures must cover auth/429/timeout-after-acceptance/media failure/concurrent workers,
@@ -177,9 +178,85 @@ responses as `SchedulerAmbiguous` (never auto-resubmitted). Only a returned post
 status `scheduled` yields `confirmed: true`. `lib/integrations/credentials.ts` provides
 AES-256-GCM encryption with owner/business-bound AAD, keyed by `CREDENTIAL_ENCRYPTION_KEY`
 (32 bytes base64). Neither is wired into `getSchedulerAdapter()`, which still fails closed.
-Still open for #29: OAuth connect/select/disconnect, credential tables and refresh
-locking, expiring media capability route, worker submit/reconcile/cancel jobs, persisted
-external IDs/audit, and the owner-approved live test.
+Still open for #29 after the Connect backend below: the expiring media capability
+route, worker submit/reconcile/cancel jobs, persisted external IDs/audit, the web
+and phone UI, and the owner-approved live test.
+
+## Connecting Buffer (#29, backend part 1) — built 2026-11-01
+
+Status: the Connect backend exists and is covered by mocked-fetch tests. There is
+no web page, no phone UI, no posting, no scheduling, no media URL and no worker
+change yet. Nothing here has been run against a live Buffer account or client.
+
+### Flow
+
+1. `POST /api/buffer/connect` (signed-in owner, owner-wide) mints 32 random bytes
+   of `state` and a PKCE `code_verifier`, stores only the SHA-256 hash of the state
+   and the verifier encrypted with `CREDENTIAL_ENCRYPTION_KEY`, and returns the
+   Buffer authorize URL. States live ten minutes and are single use.
+2. The browser goes to `https://auth.buffer.com/auth` with `client_id`,
+   `redirect_uri`, `response_type=code`, `scope`, `state`,
+   `code_challenge` and `code_challenge_method=S256`. No `prompt` is sent.
+   The scope is `posts:read posts:write account:read offline_access`;
+   `offline_access` is what makes Buffer return a refresh token.
+3. Buffer redirects to `GET /api/buffer/callback` (public: the browser has no
+   session cookie here). The route consumes the state row atomically, exchanges
+   the code at `https://auth.buffer.com/token` (form encoded, with
+   `client_secret` and `code_verifier`), reads the owner's organization and stores
+   the encrypted access and refresh tokens. It always answers with a `302` to
+   `${NEXTAUTH_URL}/connections?buffer=<outcome>`, where outcome is `connected`,
+   `denied`, `expired`, `failed` or `not_configured`. A token, code, state or
+   provider error text never appears in the redirect.
+4. `GET /api/buffer/connection` reports `{ connected, status, channels }` and
+   `DELETE` disconnects. `GET|PUT|DELETE /api/businesses/:id/buffer-channel`
+   reads, selects or clears the one Instagram/Facebook channel a business posts
+   to. A selected channel must appear in a fresh channel list; another owner's
+   business is a 404 and writes nothing.
+
+The callback uses the existing process-memory failed-attempt limiter
+(`lib/mobileSignIn.ts`, ten failures per 15 minutes per client IP) rather than a
+new one. It is per replica and resets on restart, like the other public routes.
+
+### Configuration
+
+Set on the `web` service, read at request time, never logged:
+
+- `BUFFER_CLIENT_ID`, `BUFFER_CLIENT_SECRET` — the confidential Buffer app client.
+- `CREDENTIAL_ENCRYPTION_KEY` — 32 random bytes, base64; also used by
+  `lib/integrations/credentials.ts` for the AES-256-GCM envelope.
+- `BUFFER_REDIRECT_URI` — optional. Defaults to
+  `${NEXTAUTH_URL}/api/buffer/callback` with trailing slashes removed from
+  `NEXTAUTH_URL`.
+
+Missing any required value makes connect answer `503` and the callback report
+`not_configured`. In Buffer, register exactly the redirect URI the deployment
+will use, for example `https://dev.example.com/api/buffer/callback` and later the
+production host. Buffer rejects `http://localhost`; development goes through the
+tunnel. Do not commit real values.
+
+### Refresh tokens and disconnect
+
+Refresh tokens are single use: every successful refresh returns a new one and
+invalidates the one sent, and reusing an old one revokes the whole grant. A refresh
+therefore runs in a transaction holding `SELECT ... FOR UPDATE` on the connection
+row, re-checks expiry after the lock, sends one request and stores the new access
+and refresh tokens before committing. Two concurrent callers send exactly one
+refresh. On `invalid_grant`, a 4xx, an unreadable response or a network failure
+after sending, the connection is marked `needs_reconnect` and never refreshed
+again with the old token; the owner reconnects. There is no documented revoke
+endpoint: disconnect deletes our stored tokens and the owner can revoke PraiseLoop
+in their Buffer settings.
+
+### Tests
+
+`scripts/test-buffer-connect.ts` covers the authorize URL, single-use and
+owner-bound state, the form-encoded exchange, encryption at rest, callback
+outcomes and secret-free redirects/logs, single and concurrent refresh,
+`needs_reconnect`, channel filtering, selection ownership and disconnect.
+`scripts/test-account-deletion.ts` proves the three new tables cascade away with
+the owner. The dev seeder deliberately does not create a fake connection: it would
+need real encrypted tokens, and a synthetic connection would make the UI claim an
+account it does not have.
 
 ## Google Business Profile feasibility (#46) — checked 2026-10-15
 

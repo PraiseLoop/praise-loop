@@ -14,6 +14,10 @@ const CSV_DIR = resolve(__dirname, "..", "..", "sample-data", "csv");
 const OWNER_PLANS: Record<DevOwnerKey, Plan> = { pro: "pro", free: "free", email: "free" };
 const OWNER_IDS = Object.values(DEV_OWNERS).map(owner => owner.id);
 
+// No Buffer connection is seeded (#29): a fake connection would need real
+// encrypted tokens and would make the demo claim an account it does not have.
+// Connecting is an owner action against their own Buffer account.
+
 // Owner transitions per final status as [reason, from, to]; a failed draft has none.
 const HISTORY: Record<DraftStatus, [string, string, string][]> = {
   draft: [],

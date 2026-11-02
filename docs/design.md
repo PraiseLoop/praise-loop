@@ -179,7 +179,7 @@ Expo Router screens: `sign-in`, `queue`, `draft/[id]`, `profile`. Design rules t
 | Expo push | "posts ready" notifications | built; needs EAS project id, APNs/FCM, a device test |
 | Google OAuth (web) | sign-in | **live and verified** |
 | Google native, Apple, Microsoft | phone sign-in; Microsoft also on web | built, tested with local keys only, never run live |
-| Buffer | automatic posting for owners with a Business/Creator Instagram or a Facebook Page (#29) | **feasibility spike done 2026-11-01**: live API key works, an app client exists; adapter and encrypted credentials built against mocks only; Connect flow, media-URL policy and worker submission **not built**; see below |
+| Buffer | automatic posting for owners with a Business/Creator Instagram or a Facebook Page (#29) | **feasibility spike done 2026-11-01**: live API key works, an app client exists; adapter and encrypted credentials built against mocks only; **Connect backend built (#29 part 1)**: OAuth, encrypted tokens, channel selection; web/phone UI, media-URL policy and worker submission **not built**; see below |
 | Google Business Profile | review sync (#46) | stubbed client; live client fails closed until access is approved |
 
 ### Buffer (#29): findings and decisions, 2026-11-01
@@ -320,7 +320,9 @@ Open work and blockers are tracked in GitHub issues; this table is a snapshot.
 - **Replies to Google reviews** (#96) need a decision on the write API before any code posts.
 - **Manual checks never run on hardware**: native Google/Apple/Microsoft sign-in, push, Save to
   Photos and the Instagram/Facebook share behaviour (#85–#89, #92).
-- **Buffer (#29)** is decided but unbuilt, and two questions need Buffer support: who is billed for
+- **Buffer (#29)** has its Connect backend built (#29 part 1): OAuth with PKCE, encrypted access and
+  refresh tokens, and one selected Instagram/Facebook channel per business. There is no web or phone
+  UI and no posting yet. Two questions still need Buffer support: who is billed for
   channels an app connects, and whether multi-customer commercial use fits the API Terms (only partly
   readable; a person should read them). No live test post has been made.
 - **Google sign-in on the phone** needs a development build, not Expo Go (native module), plus an
