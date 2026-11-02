@@ -3,10 +3,8 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
-import { NextRequest } from "next/server";
 import { databaseFixture } from "./db-fixture";
-import { sessionHash } from "../lib/auth-adapter";
-import { proposeSlots,defaultPostingSlots,localSlotInstant,validateSlots,assignSlots } from "../lib/services/postingSlots";
+import { proposeSlots,defaultPostingSlots,localSlotInstant,validateSlots,assignSlots,cancelScheduled } from "../lib/services/postingSlots";
 async function main(){
   assert.equal(localSlotInstant("2026-03-08","02:30","America/New_York"),"2026-03-08T07:00:00.000Z");
   assert.equal(localSlotInstant("2026-11-01","01:30","America/New_York"),"2026-11-01T05:30:00.000Z");
@@ -18,40 +16,74 @@ async function main(){
   assert.equal(proposeSlots("UTC",[{weekday:0,time:"10:00"}],new Date("2026-10-18T11:00:00Z"),15).length,4);
   assert.throws(()=>validateSlots([{weekday:2,time:"25:00"}]));assert.throws(()=>validateSlots([{weekday:2,time:"10:00"},{weekday:2,time:"11:00"}]));
   assert.throws(()=>proposeSlots("invalid-zone",defaultPostingSlots,fixed));
-  const root=mkdtempSync(join(tmpdir(),"slots-"));process.env.MEDIA_ROOT=root;process.env.NEXTAUTH_URL="http://localhost";
+  const root=mkdtempSync(join(tmpdir(),"slots-"));process.env.MEDIA_ROOT=root;process.env.NEXTAUTH_URL="https://app.example.invalid";
   writeFileSync(join(root,"fixture.png"),await sharp({create:{width:1080,height:1080,channels:3,background:"#123456"}}).png().toBuffer());
+  // Reserving a slot is a local decision. Nothing in this suite may reach the network.
+  const realFetch=globalThis.fetch;let networkCalls=0;globalThis.fetch=(async()=>{networkCalls++;throw new Error("no network in the slot tests");}) as typeof fetch;
   try{await databaseFixture(async c=>{
-    await c.query("INSERT INTO auth_users(id,email) VALUES('slot-owner','slots@example.invalid')");
-    await c.query("INSERT INTO auth_sessions VALUES($1,'slot-owner',now()+interval '1 hour')",[sessionHash("slot-session")]);
+    await c.query("INSERT INTO auth_users(id,email) VALUES('slot-owner','slots@example.invalid'),('foreign-owner','foreign@example.invalid')");
     const bid=(await c.query("INSERT INTO businesses(name,timezone,owner_id) VALUES('Synthetic slots','UTC','slot-owner') RETURNING id")).rows[0].id;
+    const connection=Number((await c.query("INSERT INTO buffer_connections(owner_id,organization_id,encrypted_access_token,encrypted_refresh_token,access_expires_at,scope) VALUES('slot-owner','org','a','r',now()+interval '1 hour','s') RETURNING id")).rows[0].id);
+    const channel=(service:string,type:string)=>c.query("INSERT INTO business_buffer_channels(business_id,connection_id,channel_id,channel_name,service,channel_type) VALUES($1,$2,'ch1','Synthetic channel',$3,$4) ON CONFLICT(business_id) DO UPDATE SET service=EXCLUDED.service,channel_type=EXCLUDED.channel_type",[bid,connection,service,type]);
     const draft=async(status="approved")=>Number((await c.query("INSERT INTO draft_posts(business_id,quote_text,caption_text,image_path,status) VALUES($1,'Synthetic','Synthetic','/api/media/fixture.png',$2) RETURNING id",[bid,status])).rows[0].id);
     const a=await draft(),b=await draft(),bad=await draft("failed"),future=proposeSlots("UTC",defaultPostingSlots,new Date(),5);
-    assert.equal((await assignSlots("slot-owner",bid,[{draftPostId:a,version:0,instant:future[0]}]))[0].status,503);
-    assert.equal((await c.query("SELECT count(*) FROM posting_slot_claims")).rows[0].count,"0");
-    let calls=0;
-    const submit=async()=>{calls++;return {provider:"buffer" as const,confirmed:true,status:"scheduled" as const,externalId:"synthetic-fixture-id"};};
-    const raced=await Promise.all([assignSlots("slot-owner",bid,[{draftPostId:a,version:0,instant:future[0]}],submit),assignSlots("slot-owner",bid,[{draftPostId:b,version:0,instant:future[0]}],submit)]);
-    assert.equal(raced.flat().filter(r=>r.status===200).length,1);assert.equal(calls,1);
-    assert.equal((await assignSlots("foreign-owner",bid,[{draftPostId:bad,version:0,instant:future[1]}],submit))[0].status,404);
-    assert.equal((await assignSlots("slot-owner",bid,[{draftPostId:bad,version:0,instant:future[1]}],submit))[0].status,409);
-    const unknown=await draft();
-    assert.equal((await assignSlots("slot-owner",bid,[{draftPostId:unknown,version:0,instant:future[1]}],async()=>{throw new Error("synthetic-private-provider-body");}))[0].status,502);
-    assert.equal((await assignSlots("slot-owner",bid,[{draftPostId:unknown,version:0,instant:future[1]}],submit))[0].status,409);
-    const edit=await require("../app/api/drafts/caption/route").POST(new NextRequest("http://localhost/api/drafts/caption",{method:"POST",headers:{cookie:"next-auth.session-token=slot-session",origin:"http://localhost","content-type":"application/json"},body:JSON.stringify({draftPostId:unknown,version:0,captionText:"Must not change"})}));assert.equal(edit.status,409);
-    const db=require("../lib/db"),original=db.transaction,late=await draft();let accepted=false;
-    db.transaction=(run:any)=>accepted?Promise.reject(new Error("synthetic-local-confirmation-failure")):original(run);
-    try{assert.equal((await assignSlots("slot-owner",bid,[{draftPostId:late,version:0,instant:future[2]}],async()=>{accepted=true;return submit();}))[0].status,502);}finally{db.transaction=original;}
-    assert.equal((await c.query("SELECT state FROM posting_slot_claims WHERE draft_id=$1",[late])).rows[0].state,"pending");
-    assert.equal((await assignSlots("slot-owner",bid,[{draftPostId:late,version:0,instant:future[2]}],submit))[0].status,409,"accepted-but-uncommitted outcome cannot resubmit");
-    const simulated=await draft();
-    assert.equal((await assignSlots("slot-owner",bid,[{draftPostId:simulated,version:0,instant:future[3]}],async()=>({provider:"buffer",confirmed:true,status:"simulated",externalId:"must-not-confirm"})))[0].status,502);
-    assert.equal((await c.query("SELECT status FROM draft_posts WHERE id=$1",[simulated])).rows[0].status,"approved");
-    assert.equal((await c.query("SELECT state FROM posting_slot_claims WHERE draft_id=$1",[simulated])).rows[0].state,"unknown");
-    assert.equal((await c.query("SELECT count(*) FROM draft_posts WHERE status='scheduled'")).rows[0].count,"1");
+    const claims=async()=>Number((await c.query("SELECT count(*) FROM posting_slot_claims")).rows[0].count);
+    const assign=async(owner:string,id:number,instant:string,mode:"off"|"draft"|"live"="draft")=>assignSlots(owner,bid,[{draftPostId:id,version:Number((await c.query("SELECT version FROM draft_posts WHERE id=$1",[id])).rows[0].version),instant}],mode);
+    // The gate defaults to off: no claim, no change, a clear 503.
+    assert.equal((await assign("slot-owner",a,future[0],"off"))[0].status,503);
+    assert.equal(await claims(),0);
+    assert.equal((await c.query("SELECT status FROM draft_posts WHERE id=$1",[a])).rows[0].status,"approved");
+    // A channel is needed first, and it must be able to post by itself.
+    assert.equal((await assign("slot-owner",a,future[0]))[0].status,409);
+    await channel("instagram","personal");
+    assert.match(String((await assign("slot-owner",a,future[0]))[0].error),/Business or Creator/);
+    await channel("instagram","");
+    assert.equal((await assign("slot-owner",a,future[0]))[0].status,409,"a channel saved before types were recorded is refused until chosen again");
+    await c.query("UPDATE buffer_connections SET status='needs_reconnect' WHERE id=$1",[connection]);
+    await channel("instagram","business");
+    assert.match(String((await assign("slot-owner",a,future[0]))[0].error),/Reconnect Buffer/);
+    await c.query("UPDATE buffer_connections SET status='active' WHERE id=$1",[connection]);
+    assert.equal(await claims(),0);
+    // Ownership and state checks.
+    assert.equal((await assign("foreign-owner",bad,future[1]))[0].status,404);
+    assert.equal((await assign("slot-owner",bad,future[1]))[0].status,409);
+    assert.equal((await assign("slot-owner",a,new Date(Date.now()-1000).toISOString()))[0].status,400);
+    assert.equal((await assign("slot-owner",a,"2000-01-01T00:00:00.000Z"))[0].status,400);
+    assert.equal((await assign("slot-owner",a,new Date(Date.parse(future[0])+60000).toISOString()))[0].status,409,"only proposed slots can be claimed");
+    // Two owners' drafts racing for one slot: exactly one wins.
+    const raced=await Promise.all([assign("slot-owner",a,future[0]),assign("slot-owner",b,future[0])]);
+    assert.deepEqual(raced.map(r=>r[0].status).sort(),[200,409]);
+    assert.equal(await claims(),1);
+    const won=raced.find(r=>r[0].status===200)![0].draftPostId,lost=won===a?b:a;
+    // Reserving only records the decision: queued, nothing sent, no image link, draft scheduled.
+    const claim=(await c.query("SELECT state,external_id,image_token_hash,submitted_at FROM posting_slot_claims WHERE draft_id=$1",[won])).rows[0];
+    assert.deepEqual([claim.state,claim.external_id,claim.image_token_hash,claim.submitted_at],["queued",null,null,null]);
+    assert.equal((await c.query("SELECT status FROM draft_posts WHERE id=$1",[won])).rows[0].status,"scheduled");
+    assert.equal((await c.query("SELECT status FROM draft_posts WHERE id=$1",[lost])).rows[0].status,"approved");
+    assert.equal((await assign("slot-owner",won,future[1]))[0].status,409,"a scheduled draft cannot be assigned twice");
+    // Cancel: another owner cannot, a queued post can, and it returns to approved with its slot free.
+    assert.equal((await cancelScheduled("foreign-owner",won)).status,404);
+    assert.equal((await cancelScheduled("slot-owner",lost)).status,409,"an unscheduled draft is not cancellable");
+    assert.equal((await cancelScheduled("slot-owner",won)).status,200);
+    assert.equal(await claims(),0);
+    assert.deepEqual((await c.query("SELECT status,scheduled_for FROM draft_posts WHERE id=$1",[won])).rows[0],{status:"approved",scheduled_for:null});
+    assert.equal((await assign("slot-owner",won,future[0]))[0].status,200,"the freed slot can be used again");
+    // Once handed to Buffer a post cannot be cancelled here: we cannot prove it is not live.
+    for(const state of ["submitting","submitted","unknown"]){
+      await c.query("UPDATE posting_slot_claims SET state=$2 WHERE draft_id=$1",[won,state]);
+      assert.equal((await cancelScheduled("slot-owner",won)).status,409,state);
+      assert.equal(await claims(),1,`${state} stays`);
+    }
+    // A failed attempt is history that scheduling again replaces.
+    await c.query("UPDATE posting_slot_claims SET state='error',error_code='rejected' WHERE draft_id=$1",[won]);
+    await c.query("UPDATE draft_posts SET status='approved' WHERE id=$1",[won]);
+    assert.equal((await assign("slot-owner",won,future[1]))[0].status,200);
+    assert.deepEqual((await c.query("SELECT state,error_code FROM posting_slot_claims WHERE draft_id=$1",[won])).rows,[{state:"queued",error_code:null}]);
+    assert.equal(networkCalls,0,"reserving and cancelling never touch the network");
     const confirmed=(await c.query("SELECT scheduled_for FROM draft_posts WHERE status='scheduled'")).rows[0].scheduled_for;
     await c.query("UPDATE businesses SET timezone='America/New_York' WHERE id=$1",[bid]);
     assert.equal((await c.query("SELECT scheduled_for FROM draft_posts WHERE status='scheduled'")).rows[0].scheduled_for.toISOString(),confirmed.toISOString());
-  });}finally{rmSync(root,{recursive:true,force:true});}
-  console.log("posting slots DST/rollover/ownership/concurrency/ambiguous acceptance tests passed (provider fixtures only)");
+  });}finally{globalThis.fetch=realFetch;rmSync(root,{recursive:true,force:true});}
+  console.log("posting slots DST/rollover/ownership/concurrency/cancel/gate tests passed (no network)");
 }
 main().catch(err=>{console.error(err);process.exitCode=1;});

@@ -487,15 +487,16 @@ export async function selectBufferChannel(
     if (!connection) return "not_connected" as const;
     if (connection.organization_id !== organizationId || connection.status !== "active") return "changed" as const;
     await query(
-      `INSERT INTO business_buffer_channels(business_id,connection_id,channel_id,channel_name,service)
-       VALUES($1,$2,$3,$4,$5)
+      `INSERT INTO business_buffer_channels(business_id,connection_id,channel_id,channel_name,service,channel_type)
+       VALUES($1,$2,$3,$4,$5,$6)
        ON CONFLICT(business_id) DO UPDATE SET
          connection_id=EXCLUDED.connection_id,
          channel_id=EXCLUDED.channel_id,
          channel_name=EXCLUDED.channel_name,
          service=EXCLUDED.service,
+         channel_type=EXCLUDED.channel_type,
          updated_at=now()`,
-      [businessId, connection.id, channel.id, channel.name, channel.service]
+      [businessId, connection.id, channel.id, channel.name, channel.service, channel.type]
     );
     return "saved" as const;
   });

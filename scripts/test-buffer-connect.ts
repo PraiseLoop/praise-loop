@@ -469,6 +469,8 @@ async function main() {
 
       const selected = await selectBufferChannel(m.owner, m.businessId, "ig-1", { fetchImpl: selectable.fetchImpl });
       assert.deepEqual(selected, { id: "ig-1", name: "Instagram Business", service: "instagram", type: "business" });
+      // The posting worker refuses a personal Instagram channel by the type saved here (#29 part 3).
+      assert.equal((await client.query("SELECT channel_type FROM business_buffer_channels WHERE business_id=$1", [m.businessId])).rows[0].channel_type, "business");
       assert.deepEqual(await getSelectedBufferChannel(m.owner, m.businessId), {
         id: "ig-1",
         name: "Instagram Business",

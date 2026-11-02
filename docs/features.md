@@ -113,9 +113,9 @@ Run migration 010, configure owner login ([auth.md](auth.md)), and ensure the du
 
 1. Owner sets weekly posting slots (weekday + local time) on the Schedule page. Times are stored in business timezone.
 2. On confirm, the system proposes the next 5 available UTC slots (skipping occupied) using business timezone with correct DST resolution.
-3. Each selected approved draft gets a durable claim on a specific UTC instant before any provider call.
-4. Provider submission is attempted; only verified Buffer "scheduled" receipts confirm the claim and set `draft_posts.status=scheduled`.
-5. Failed/unknown provider results leave the claim in `unknown` state; draft stays `approved` for retry.
+3. Each selected approved draft gets a durable `queued` claim on a specific UTC instant and becomes `scheduled`. **Nothing is sent to Buffer at this point.** The business needs a connected Buffer and a channel that can post by itself (a Facebook Page or a Business/Creator Instagram).
+4. When the time comes the worker sends the post to Buffer ([Posting through Buffer](#posting-through-buffer-29-part-3)). Only Buffer saying `sent` makes the draft `published`.
+5. Before that time the owner can cancel (`POST /api/posting-slots/cancel`), which frees the slot and returns the draft to `approved`.
 
 ### DST handling
 
@@ -129,27 +129,75 @@ Run migration 010, configure owner login ([auth.md](auth.md)), and ensure the du
 - `proposeSlots` returns future UTC instants matching the configured weekdays/times.
 - `assignSlots` enforces ownership, draft completeness (caption + available image), version match, and slot availability.
 - Concurrent assignment to the same slot is prevented by unique claim.
-- Provider-unavailable returns 503 with no claim persisted.
-- Ambiguous provider response marks claim `unknown`; draft remains `approved`.
-- Confirmed provider receipt updates claim to `confirmed`, sets `external_id`, and moves draft to `scheduled`.
-- Local confirmation failure after provider success leaves claim `pending`; draft stays `approved` (cannot resubmit same slot).
+- With `BUFFER_POSTING_MODE=off` (the default) assigning returns 503 and nothing is persisted.
+- A missing channel, a needs-reconnect connection or a personal Instagram channel is refused with a plain reason.
+- A reserved slot makes no network call; only the worker talks to Buffer.
 
 ### Tests
 
-- Unit: `scripts/test-posting-slots.ts` - DST/rollover, ownership, concurrency, ambiguous acceptance, provider fixtures
+- Unit: `scripts/test-posting-slots.ts` - DST/rollover, ownership, concurrency, the off gate, channel rules, cancel (no network)
 - Browser: `scripts/test-slots-browser.ts` - Chromium flow: schedule edit, confirm, provider failure, browser/business timezone persistence, branding logo upload/remove
 - Run with `TEST_DATABASE_URL=... npm test` (unit) and `TEST_BROWSER=1 TEST_DATABASE_URL=... CHROMIUM_PATH=... npx ts-node scripts/test-slots-browser.ts` (browser)
 
 ### Boundaries
 
 - No automatic scheduling; owner explicitly confirms each batch.
-- Real scheduling requires verified Buffer connection (#29; see [integrations.md](integrations.md)). Without it, assign returns 503.
-- Cancel/reschedule not yet supported; requires #29 provider operations.
+- Posting requires `BUFFER_POSTING_MODE` to be `draft` or `live` (see below). Without it, assign returns 503.
+- A post can be cancelled only while it is still `queued`. Once it has been handed to Buffer, manage it in Buffer.
 - Maximum 5 slots per weekly batch (MVP limit).
 
 ### Rollback
 
 Stop writes, retain `posting_slot_claims` and `businesses.posting_slots`. Migration 010 is additive.
+
+## Posting through Buffer (#29 part 3)
+
+The worker (`lib/services/bufferPosting.ts`, called every tick from `worker/index.ts`) sends an
+approved, scheduled post to the owner's own Buffer channel when its time comes, then watches Buffer
+until it reports the result. The schedule lives in PraiseLoop; Buffer's own queue is never used.
+
+**The gate: `BUFFER_POSTING_MODE`** (web and worker). `off` is the default and what every unknown value
+means: the worker never calls Buffer, and assigning a slot answers 503. `draft` sends the post to Buffer
+as a **draft** (`saveToDraft`), so nothing is published; the post returns to `approved` and the claim
+ends as `drafted`. `live` publishes. An owner who confirms a slot is explicitly authorizing that one post
+for that time ([decisions.md](decisions.md)).
+
+Claim states (`posting_slot_claims.state`): `queued` (waiting, nothing sent) → `submitting` (committed
+before the call) → `submitted` (Buffer accepted it; we poll) → `sent` (Buffer said so; draft becomes
+`published`). Other ends: `drafted` (draft mode), `error` (Buffer said so, rejected it, or the connection
+needs reconnecting), `missed` (the worker was down more than 2 hours past the due time; never sent late),
+`unknown` (outcome unproven: a timeout after sending, a crash mid-call, or no final status after 14 checks).
+**An `unknown` post is never resubmitted**, because Buffer does not deduplicate.
+
+At submit time, under the claim's lock, everything is re-checked: the draft is still scheduled with a
+valid image, the connection is active, the business still has a channel, and it is not a personal
+Instagram. A failed check ends the claim as `error` without calling Buffer.
+
+**Public image links.** Buffer fetches the image from a public HTTPS URL, so each submission gets
+`https://<NEXTAUTH_URL host>/api/public-media/<43-character token>.png`. The token is 256 random bits,
+unrelated to the draft id or filename; only its SHA-256 is stored. The route is public but serves an image
+only while its claim is `submitting`, `submitted`, `unknown` or `drafted` and not expired (3 days live,
+1 hour draft), and every miss is the same empty 404. The token is revoked when the post is sent, fails or
+is cancelled, and removed with the draft or account. `NEXTAUTH_URL` must be `https`, or nothing is sent.
+**The `/api/public-media/` path must be reachable from the internet**; on the home dev stack the
+Cloudflare rule that limits `dev.praiseloop.ca` to the home network must also allow that prefix.
+
+**Status checks** use `post(input:{id})` with a backoff of 1, 5, 15 minutes then hourly (Buffer's free plan
+allows 1,000 requests per channel per month), and stop at `sent` or `error`.
+
+### How to test
+
+- `scripts/test-buffer-posting.ts` (gate, every state change, concurrency, lateness, revocation, the public
+  route) and `scripts/test-buffer.ts` (request shape and error mapping) use a scripted fake Buffer. No
+  test can reach Buffer.
+- **First real run:** set `BUFFER_POSTING_MODE=draft` on a test business whose channel is a Business
+  Instagram, with the account owner's agreement. Expect one draft in Buffer and nothing published. Only
+  then consider `live`.
+
+### How to roll back
+
+Set `BUFFER_POSTING_MODE=off` and redeploy; queued posts wait and are marked `missed` after 2 hours. The
+migration only adds columns and widens a check, so the previous image keeps working.
 
 ## Buffer connections screen (#29 part 2)
 

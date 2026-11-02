@@ -199,7 +199,7 @@ Detail and sources are in the comment on #29 and in [integrations.md](integratio
   `mode: shareNow`; Buffer's own queue is not used. This keeps schedule, cancel and reschedule in our
   code and keeps an image URL public for minutes, not days. The trade-off is that a worker outage delays
   or misses a post, so it needs the existing claims, bounded retries and a visible failed state.
-  **The existing `lib/integrations/buffer.ts` uses `customScheduled` and must change to match.**
+  The adapter now matches (`shareNow`; #29 part 3).
 - **Media.** Buffer has no upload; it fetches a public, direct HTTPS URL that must stay reachable until
   publication (no signed or expiring URLs). Decision: unguessable per-draft URLs, enabled only while a
   post is awaiting submission or publication, revoked afterwards, and scoped to approved drafts of the
@@ -232,7 +232,7 @@ Detail and sources are in the comment on #29 and in [integrations.md](integratio
 | Sign in with Apple | phone + server shipped; **web not built** | #92 |
 | Native Google sign-in, push notifications | shipped; **need a development build and a device** | #85, #89 |
 | Android APK release pipeline | merged; not yet run | #190 |
-| Real scheduler through Buffer | access confirmed; decisions made; **build not started** (Connect flow, media URLs, worker submit/reconcile) | #29 |
+| Real scheduler through Buffer | Connect + screen built; worker posting, image links, cancel and the off/draft/live gate built (#29 part 3); **never run live**; status display and `unknown` resolution not built | #29 |
 | Google review sync, AI review replies | blocked on access/policy | #46, #96 |
 | Store subscriptions, VPS, pilot hosting, store accounts | not started / owner tasks | #95, #98, #90, #91 |
 | Email + password | needs explicit owner approval first | #159 |
@@ -324,7 +324,7 @@ Open work and blockers are tracked in GitHub issues; this table is a snapshot.
   Photos and the Instagram/Facebook share behaviour (#85–#89, #92).
 - **Buffer (#29)** has its Connect backend built (#29 part 1): OAuth with PKCE, encrypted access and
   refresh tokens, and one selected Instagram/Facebook channel per business. The web connections
-  screen is built (#29 part 2). There is no phone UI and no posting yet. Two questions still need
+  screen is built (#29 part 2). Posting is built behind `BUFFER_POSTING_MODE` (default off, #29 part 3); there is no phone UI and no live post has been made. Two questions still need
   Buffer support: who is billed for
   channels an app connects, and whether multi-customer commercial use fits the API Terms (only partly
   readable; a person should read them). No live test post has been made.

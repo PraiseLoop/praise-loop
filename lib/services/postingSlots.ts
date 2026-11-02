@@ -2,7 +2,7 @@ import { validTimezone } from "../timezone";
 export { validTimezone } from "../timezone";
 import { transaction } from "../db";
 import { availableImage } from "./draftLifecycle";
-import { scheduleApprovedDraft, SchedulerUnavailable, type SchedulePayload, type ScheduleReceipt } from "../integrations/scheduler";
+import { postingMode, type PostingMode } from "./bufferPosting";
 export type PostingSlot={weekday:number;time:string};
 export const defaultPostingSlots:PostingSlot[]=[2,4,6].map(weekday=>({weekday,time:"10:00"}));
 export function validateSlots(value:unknown):PostingSlot[]{
@@ -32,38 +32,53 @@ export function proposeSlots(zone:string,settings:PostingSlot[],now=new Date(),c
   }
   return results;
 }
-export async function assignSlots(owner:string,businessId:number,items:{draftPostId:number;version:number;instant:string}[],submit:(p:SchedulePayload)=>Promise<ScheduleReceipt>=scheduleApprovedDraft){
-  const results=[];
+/**
+ * Reserve a slot for an approved draft. This only records the owner's decision in PraiseLoop
+ * (the claim is `queued` and the draft becomes `scheduled`); nothing is sent to Buffer here.
+ * The worker submits the post when the time comes (lib/services/bufferPosting.ts).
+ */
+export async function assignSlots(owner:string,businessId:number,items:{draftPostId:number;version:number;instant:string}[],mode:PostingMode=postingMode()):Promise<{draftPostId:number;status:number;error?:string;instant?:string}[]>{
+  const results:{draftPostId:number;status:number;error?:string;instant?:string}[]=[];
   for(const item of items){
     results.push(await transaction(async c=>{
       const fail=(error:string,status=409)=>({draftPostId:item.draftPostId,status,error});
+      if(mode==="off")return fail("Posting through Buffer is not switched on yet",503);
       const b=(await c.query("SELECT * FROM businesses WHERE id=$1 AND owner_id=$2 FOR UPDATE",[businessId,owner])).rows[0];if(!b)return fail("Business not found",404);
       const d=(await c.query("SELECT * FROM draft_posts WHERE id=$1 AND business_id=$2 FOR UPDATE",[item.draftPostId,businessId])).rows[0];if(!d)return fail("Draft not found",404);
       if(d.version!==item.version||d.status!=="approved"||!d.caption_text.trim()||!await availableImage(d.image_path))return fail("Only current complete approved drafts can be assigned");
+      const channel=(await c.query("SELECT ch.service,ch.channel_type,bc.status FROM business_buffer_channels ch JOIN buffer_connections bc ON bc.id=ch.connection_id WHERE ch.business_id=$1 AND bc.owner_id=$2",[businessId,owner])).rows[0];
+      if(!channel)return fail("Connect Buffer and choose a channel for this business first");
+      if(channel.status!=="active")return fail("Reconnect Buffer before scheduling");
+      if(channel.service==="instagram"&&channel.channel_type!=="business")return fail("Buffer can only post automatically to a Business or Creator Instagram account");
       const instant=new Date(item.instant);if(!Number.isFinite(instant.getTime())||instant.getTime()<=Date.now())return fail("Choose a future UTC slot",400);
-      const occupied=(await c.query("SELECT instant::text FROM posting_slot_claims WHERE business_id=$1 UNION SELECT scheduled_for::text FROM draft_posts WHERE business_id=$1 AND scheduled_for IS NOT NULL",[businessId])).rows.map(r=>new Date(r.instant).toISOString());
+      const occupied=(await c.query("SELECT instant::text FROM posting_slot_claims WHERE business_id=$1 AND draft_id<>$2 UNION SELECT scheduled_for::text FROM draft_posts WHERE business_id=$1 AND scheduled_for IS NOT NULL AND status IN ('scheduled','published') AND id<>$2",[businessId,item.draftPostId])).rows.map(r=>new Date(r.instant).toISOString());
       if(!proposeSlots(b.timezone,b.posting_slots,new Date(),15,occupied).includes(instant.toISOString()))return fail("Slot is occupied or no longer in the proposed schedule");
-      const claim=await c.query("INSERT INTO posting_slot_claims(business_id,instant,draft_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING RETURNING draft_id",[businessId,instant,item.draftPostId]);if(!claim.rowCount)return fail("Slot or draft is already assigned");
-      return {payload:{draftPostId:d.id,businessId,quoteText:d.quote_text,captionText:d.caption_text,imagePath:d.image_path,scheduledFor:instant.toISOString()} as SchedulePayload};
-    }).then(async reserved=>{
-      if(!("payload" in reserved))return reserved;
-      const payload=reserved.payload;
-      const fail=(error:string,status=502)=>({draftPostId:item.draftPostId,status,error});
-      // Claim is committed BEFORE the remote call. A crash/local write failure cannot erase ambiguity.
-      let receipt:ScheduleReceipt;
-      try{receipt=await submit(payload);}
-      catch(e){if(e instanceof SchedulerUnavailable){await transaction(c=>c.query("DELETE FROM posting_slot_claims WHERE draft_id=$1 AND state='pending'",[item.draftPostId]));return fail("Buffer connection not configured/verified; no post submitted",503);}
-        await transaction(c=>c.query("UPDATE posting_slot_claims SET state='unknown' WHERE draft_id=$1",[item.draftPostId])).catch(()=>{});return fail("Provider outcome unknown; resolve before retrying");}
-      if(receipt.provider!=="buffer"||!receipt.confirmed||receipt.status!=="scheduled"||!receipt.externalId){await transaction(c=>c.query("UPDATE posting_slot_claims SET state='unknown' WHERE draft_id=$1",[item.draftPostId]));return fail("No verified provider acceptance; inspect before retrying");}
-      try{return await transaction(async c=>{
-        await c.query("SELECT set_config('app.actor_id',$1,true),set_config('app.action','assign_slot',true),set_config('app.reason','provider_confirmed',true)",[owner]);
-        const claimed=await c.query("UPDATE posting_slot_claims SET state='confirmed',external_id=$2 WHERE draft_id=$1 AND state='pending'",[item.draftPostId,receipt.externalId]);
-        if(!claimed.rowCount)throw new Error("Claim changed");
-        const updated=await c.query("UPDATE draft_posts SET status='scheduled',scheduled_for=$2,updated_at=now() WHERE id=$1 AND version=$3 AND status='approved'",[item.draftPostId,payload.scheduledFor,item.version]);
-        if(!updated.rowCount)throw new Error("Draft changed");
-        return {draftPostId:item.draftPostId,status:200,instant:payload.scheduledFor,providerConfirmed:true};
-      });}catch{return fail("Provider accepted; local confirmation pending. Resolve before retrying");}
+      // A failed, missed or drafted earlier attempt stays as history until the owner schedules the post again.
+      await c.query("DELETE FROM posting_slot_claims WHERE draft_id=$1 AND state IN ('error','missed','drafted')",[item.draftPostId]);
+      const claim=await c.query("INSERT INTO posting_slot_claims(business_id,instant,draft_id,state) VALUES($1,$2,$3,'queued') ON CONFLICT DO NOTHING RETURNING draft_id",[businessId,instant,item.draftPostId]);
+      if(!claim.rowCount)return fail("Slot or draft already claimed");
+      await c.query("SELECT set_config('app.actor_id',$1,true),set_config('app.action','assign_slot',true),set_config('app.reason','owner_scheduled',true)",[owner]);
+      const updated=await c.query("UPDATE draft_posts SET status='scheduled',scheduled_for=$2,updated_at=now() WHERE id=$1 AND version=$3 AND status='approved'",[item.draftPostId,instant,item.version]);
+      if(!updated.rowCount)throw new Error("Draft changed");
+      return {draftPostId:item.draftPostId,status:200,instant:instant.toISOString()};
     }));
   }
   return results;
+}
+/**
+ * Take a post back before it is sent. Only a still-queued post can be cancelled here: once it has
+ * been handed to Buffer it must be dealt with in Buffer, because we cannot prove it is not live.
+ */
+export async function cancelScheduled(owner:string,draftPostId:number){
+  return transaction(async c=>{
+    const d=(await c.query("SELECT d.id,d.status FROM draft_posts d JOIN businesses b ON b.id=d.business_id WHERE d.id=$1 AND b.owner_id=$2 FOR UPDATE OF d",[draftPostId,owner])).rows[0];
+    if(!d)return {status:404,error:"Draft not found"};
+    const claim=(await c.query("SELECT state FROM posting_slot_claims WHERE draft_id=$1 FOR UPDATE",[draftPostId])).rows[0];
+    if(!claim||d.status!=="scheduled")return {status:409,error:"This post is not scheduled"};
+    if(claim.state!=="queued")return {status:409,error:"This post has already been sent to Buffer; manage it in Buffer"};
+    await c.query("SELECT set_config('app.actor_id',$1,true),set_config('app.action','cancel_slot',true),set_config('app.reason','owner_cancelled',true)",[owner]);
+    await c.query("DELETE FROM posting_slot_claims WHERE draft_id=$1",[draftPostId]);
+    await c.query("UPDATE draft_posts SET status='approved',scheduled_for=NULL,updated_at=now() WHERE id=$1",[draftPostId]);
+    return {status:200};
+  });
 }

@@ -81,7 +81,7 @@ async function seedOwner(client: PoolClient, owner: string, label: string, withD
     [draft, owner]
   );
   await client.query(
-    "INSERT INTO posting_slot_claims(business_id,instant,draft_id,state) VALUES($1,'2026-11-02T10:00:00Z',$2,'pending')",
+    "INSERT INTO posting_slot_claims(business_id,instant,draft_id,state) VALUES($1,'2026-11-02T10:00:00Z',$2,'queued')",
     [business, draft]
   );
   await client.query(
