@@ -66,7 +66,7 @@ workflow): it builds and keeps the APK as a downloadable workflow artifact inste
 ## Installing with Obtainium
 
 1. Install Obtainium (from its GitHub releases or F-Droid) and allow it to install apps.
-2. Add app, paste `https://github.com/iamstevedavis/praise-loop`.
+2. Add app, paste `https://github.com/PraiseLoop/praise-loop`.
 3. Because the repository also has other tags, open the app's settings in Obtainium and set a
    filter on the release title or APK name so it follows only `PraiseLoop Android` / `praiseloop-mobile-v*.apk`
    (Obtainium's "Filter APKs by regular expression": `praiseloop-mobile-v.*\.apk`).

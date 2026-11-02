@@ -256,7 +256,7 @@ skip honestly and exits 0, so CI stays green without credentials.
 ## Production deployment notes
 
 - `docker compose up --build` is the production-style path: multi-stage builds, deterministic `npm ci`, healthchecks, bounded shutdown (`stop_grace_period`), shared media volume, loopback-only database/Redis ports.
-- Prefer the published images for a server: every merge to master and every `v*` tag builds `ghcr.io/iamstevedavis/praise-loop-web` and `ghcr.io/iamstevedavis/praise-loop-worker` after CI passes. See [Published images](#published-images).
+- Prefer the published images for a server: every merge to master and every `v*` tag builds `ghcr.io/praiseloop/praise-loop-web` and `ghcr.io/praiseloop/praise-loop-worker` after CI passes. See [Published images](#published-images).
 - Restart safety: database and generated media live in named volumes (`postgres_data`, `generated_media`); container restarts preserve them.
 - Image delivery: the worker writes PNGs into the shared `generated_media` volume; the web container serves them via `GET /api/media/<filename>` (see `app/api/media/[name]/route.ts`). Browsers should always use the `/api/media/...` URL stored in `draft_posts.image_path` — never a bare `public/generated/...` path, because runtime-written files under `public/` are not guaranteed to be served by the Next production server.
 

@@ -23,7 +23,7 @@ alternatives on 2026-10-30:
 | [Cloudflare Email Service](https://developers.cloudflare.com/email-service/platform/pricing/) | Sending needs Workers Paid | 3,000/month included, then $0.35 per 1,000 | Own domain, DKIM/SPF/DMARC, API token | Sending is beta; the Tunnel does not remove the account/token work |
 | Plain SMTP to a mailbox provider | Depends on provider | Depends on provider | Provider-specific | Rejected: adds credential/connection management without removing the provider; every option above offers SMTP if needed |
 
-All options need a real domain the owner controls ([#90](https://github.com/iamstevedavis/praise-loop/issues/90)).
+All options need a real domain the owner controls ([#90](https://github.com/PraiseLoop/praise-loop/issues/90)).
 Resend will not send from its shared domain to arbitrary recipients: a verified
 domain is required, and the shared sender only reaches the account owner's own
 address. That owner address is enough for the first live test, but not for pilot
