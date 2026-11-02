@@ -50,6 +50,11 @@ services:
       - APPLE_CLIENT_ID=${APPLE_CLIENT_ID:-}
       - MICROSOFT_CLIENT_ID=${MICROSOFT_CLIENT_ID:-}
       - MICROSOFT_CLIENT_SECRET=${MICROSOFT_CLIENT_SECRET:-}
+      # Buffer OAuth connect (#29); empty leaves connect answering 503.
+      - BUFFER_CLIENT_ID=${BUFFER_CLIENT_ID:-}
+      - BUFFER_CLIENT_SECRET=${BUFFER_CLIENT_SECRET:-}
+      - BUFFER_REDIRECT_URI=${BUFFER_REDIRECT_URI:-}
+      - CREDENTIAL_ENCRYPTION_KEY=${CREDENTIAL_ENCRYPTION_KEY:-}
       # Only cloudflared reaches web here, so its client-IP headers can be trusted (rate limiting).
       - TRUST_PROXY_HEADERS=1
       - OWNER_GENERATION_DAILY_LIMIT=${OWNER_GENERATION_DAILY_LIMIT:-25}
