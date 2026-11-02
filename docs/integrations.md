@@ -184,9 +184,10 @@ and phone UI, and the owner-approved live test.
 
 ## Connecting Buffer (#29, backend part 1) — built 2026-11-01
 
-Status: the Connect backend exists and is covered by mocked-fetch tests. There is
-no web page, no phone UI, no posting, no scheduling, no media URL and no worker
-change yet. Nothing here has been run against a live Buffer account or client.
+Status: the Connect backend exists and is covered by mocked-fetch tests. The web
+connections screen exists (#29 part 2). There is no phone UI, no posting, no
+scheduling, no media URL and no worker change yet. Nothing here has been run
+against a live Buffer account or client.
 
 ### Flow
 

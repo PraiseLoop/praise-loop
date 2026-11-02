@@ -17,8 +17,9 @@ function main() {
   // The server's NAME_MAX_LENGTH is 80; the input's maxLength must match it.
   assert.equal(PROFILE_NAME_MAX, 80);
 
-  // Plan and usage under the profile, then edit name, then sign out.
-  assert.deepEqual(PROFILE_MENU_ITEMS.map(item => item.id), ["plan", "edit-name", "sign-out"]);
+  // Connections, plan and usage under the profile, then edit name, then sign out.
+  assert.deepEqual(PROFILE_MENU_ITEMS.map(item => item.id), ["connections", "plan", "edit-name", "sign-out"]);
+  assert.equal(PROFILE_MENU_ITEMS.find(item => item.id === "connections")?.href, "/connections");
   assert.equal(PROFILE_MENU_ITEMS.find(item => item.id === "plan")?.href, "/account");
   assert.equal(PROFILE_MENU_ITEMS.find(item => item.id === "sign-out")?.href, undefined);
   assert.equal(new Set(PROFILE_MENU_ITEMS.map(item => item.id)).size, PROFILE_MENU_ITEMS.length);

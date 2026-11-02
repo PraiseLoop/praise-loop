@@ -151,6 +151,51 @@ Run migration 010, configure owner login ([auth.md](auth.md)), and ensure the du
 
 Stop writes, retain `posting_slot_claims` and `businesses.posting_slots`. Migration 010 is additive.
 
+## Buffer connections screen (#29 part 2)
+
+A signed-in owner can connect their own Buffer account from `/connections`, reached
+from the profile menu, and choose one Buffer channel for each business. This screen
+does not post, schedule or read media. The Connect backend, OAuth flow and token
+storage are described in [integrations.md](integrations.md). Posting still fails
+closed until the worker submission and reconciliation work is built.
+
+- **Not connected:** the page explains what Buffer is for and offers Connect.
+  `POST /api/buffer/connect` returns the Buffer authorize URL; nothing is posted
+  without approval. With Buffer unset on the server the route answers 503 and the
+  page says so instead of navigating.
+- **Callback outcome:** `/connections?buffer=<code>` shows a fixed sentence for
+  `connected`, `denied`, `expired`, `failed` or `not_configured`, then removes the
+  parameter with `history.replaceState`. Unknown codes show nothing, and the text
+  never comes from the URL.
+- **Connected and active:** `GET /api/buffer/connection` supplies the status and
+  channel list. Each business shows its saved channel from
+  `GET /api/businesses/:id/buffer-channel`; changing it uses `PUT` and "No channel"
+  uses `DELETE`. A personal Instagram channel (`service=instagram`, `type` not
+  `business`) stays listed with a note that Buffer can only remind the owner to
+  post. Route error codes map to plain sentences, and `needs_reconnect` or
+  `connection_changed` reloads the screen.
+- **Reconnect / disconnect:** `needs_reconnect` offers Reconnect and hides the
+  channel picker. Disconnect asks "Are you sure?" inline, then deletes PraiseLoop's
+  saved tokens. Removing PraiseLoop from the Buffer account itself is done in
+  Buffer's settings, because Buffer exposes no revoke endpoint.
+- **Out-of-order guard:** each business tracks a request counter, so a late
+  response for an older channel choice cannot overwrite a newer one.
+
+Tests: `scripts/test-buffer-connections-view.ts` covers the pure wording, state and
+guard rules. `scripts/test-buffer-connections-browser.ts` starts the production
+build, signs in a synthetic owner, checks the not-connected state, the 503 connect
+message, browser removal of `?buffer=` codes including an unknown one, and the
+profile menu link. It sets an empty Buffer client id, so no Buffer call is
+possible. Run it with
+`TEST_BROWSER=1 TEST_DATABASE_URL=postgres://... TEST_REDIS_URL=redis://... npx ts-node scripts/test-buffer-connections-browser.ts`
+after `npm run build`; it needs Chromium (`CHROMIUM_PATH`). `npm test` also runs
+the pure suite.
+
+Rollback: stop using the screen and leave `buffer_connections` and
+`business_buffer_channels` in place; the backend and migrations are unchanged by
+this part. Removing the profile menu entry hides the page, and disconnecting from
+the page deletes only PraiseLoop's stored tokens.
+
 ## Quote-card rendering
 
 Quote-card rendering uses Sharp/Pango measured wrapping with Bricolage Grotesque, loaded
