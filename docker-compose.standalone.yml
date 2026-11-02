@@ -25,7 +25,7 @@ x-logging: &logging
 services:
   migrate:
     logging: *logging
-    image: ghcr.io/iamstevedavis/praise-loop-worker:${PRAISELOOP_TAG:-latest}
+    image: ghcr.io/praiseloop/praise-loop-worker:${PRAISELOOP_TAG:-latest}
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-effective_memory}
@@ -37,7 +37,7 @@ services:
 
   web:
     logging: *logging
-    image: ghcr.io/iamstevedavis/praise-loop-web:${PRAISELOOP_TAG:-latest}
+    image: ghcr.io/praiseloop/praise-loop-web:${PRAISELOOP_TAG:-latest}
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-effective_memory}
@@ -87,7 +87,7 @@ services:
 
   worker:
     logging: *logging
-    image: ghcr.io/iamstevedavis/praise-loop-worker:${PRAISELOOP_TAG:-latest}
+    image: ghcr.io/praiseloop/praise-loop-worker:${PRAISELOOP_TAG:-latest}
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-effective_memory}

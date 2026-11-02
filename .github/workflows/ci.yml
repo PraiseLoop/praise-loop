@@ -82,10 +82,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Docker image names must be lowercase, and the owner (PraiseLoop) is not.
+      - id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}-${{ matrix.name }}" >> "$GITHUB_OUTPUT"
+
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}-${{ matrix.name }}
+          images: ${{ steps.image.outputs.name }}
           tags: |
             type=sha,format=short,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
