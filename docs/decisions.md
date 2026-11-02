@@ -184,3 +184,7 @@ Decision log to capture architecture/product calls and why they were made.
 - Date: 2026-10-27
   Decision: Build Google review sync against a stubbed client interface while API access is pending (#46)
   Why: Approval can take weeks, and the storage, encryption, checkpoint, retry and revoke logic is provider-independent. `liveClient()` throws until access exists, so nothing can call Google or be mistaken for a live integration. Uses Node crypto (AES-256-GCM) and no new dependency; #46 stays open until the live acceptance test in integrations.md passes.
+
+- Date: 2026-11-01
+  Decision: Build the Buffer Connect backend first, with owner-wide connections and one selected channel per business (#29, part 1)
+  Why: OAuth, encrypted token storage and channel selection are provider-independent of posting and media policy, so they can land and be tested with mocked `fetch` while live acceptance waits on owner access. Connections belong to the owner, not a business, because one Buffer account can serve several businesses. Refresh tokens are single use, so refreshing holds a row lock and stores the replacement token in the same transaction; a lost or rejected refresh marks the connection `needs_reconnect` instead of reusing the old token. The callback is public and authenticated by the single-use state, not a cookie, and always redirects with a fixed outcome code. No UI, posting, scheduling, media URL or worker change is included, and the dev seeder stays without a fake connection because it would need real encrypted tokens.

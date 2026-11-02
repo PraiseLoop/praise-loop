@@ -32,7 +32,9 @@ Owner setup (no accounts, credentials, or production config created by this PR):
    data to a registrant, and refuses reassignment. New businesses belong to the caller.
 
 Every API route except NextAuth and the public sign-in routes in the email section below
-is wrapped in the same owner guard. Business lists
+is wrapped in the same owner guard. The Buffer OAuth callback (#29) is also public:
+the browser arrives from Buffer without a session cookie, so the single-use state
+row authenticates the completion (see [integrations.md](integrations.md)). Business lists
 are filtered server-side; guessed foreign business/draft/media IDs return 404. A
 composite FK rejects new cross-business review references without deleting legacy
 data; existing violations require operator reconciliation before validating that FK.
