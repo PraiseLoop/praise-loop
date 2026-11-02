@@ -307,6 +307,11 @@ runs as its own stack and reaches the app over a shared Docker network.
         - TUNNEL_TOKEN=${PRAISELOOP_TUNNEL_TOKEN}
       networks: [edge]
       restart: unless-stopped
+      logging:
+        driver: json-file
+        options:
+          max-size: "10m"
+          max-file: "3"
   networks:
     edge:
       name: edge
@@ -327,8 +332,9 @@ runs as its own stack and reaches the app over a shared Docker network.
 ### Log rotation
 
 Docker keeps each container's output in a log file that grows without limit by default.
-Every service in `docker-compose.yml`, `docker-compose.standalone.yml` and the pilot
-overlay's `cloudflared` uses the `json-file` driver with `max-size: 10m` and
+Every service in `docker-compose.yml`, `docker-compose.standalone.yml`, the pilot
+overlay's `cloudflared` and the sample tunnel stack in the one-file section above uses
+the `json-file` driver with `max-size: 10m` and
 `max-file: 3`: at most about 30 MB of logs per service, with the oldest lines deleted
 automatically, so logs hold the most recent activity (usually a few days) and cannot
 fill the disk. The public privacy policy says logs are rotated automatically, so keep
