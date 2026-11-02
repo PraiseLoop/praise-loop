@@ -214,26 +214,36 @@ export async function completeBufferConnect(
   if (!organizationId) throw new BufferConnectionError("no_organization", 400);
 
   const now = (deps.now ?? Date.now)();
-  await query(
-    `INSERT INTO buffer_connections(owner_id,organization_id,encrypted_access_token,encrypted_refresh_token,access_expires_at,scope,status)
-     VALUES($1,$2,$3,$4,$5,$6,'active')
-     ON CONFLICT(owner_id) DO UPDATE SET
-       organization_id=EXCLUDED.organization_id,
-       encrypted_access_token=EXCLUDED.encrypted_access_token,
-       encrypted_refresh_token=EXCLUDED.encrypted_refresh_token,
-       access_expires_at=EXCLUDED.access_expires_at,
-       scope=EXCLUDED.scope,
-       status='active',
-       updated_at=now()`,
-    [
-      row.owner_id,
-      organizationId,
-      encryptCredential(tokens.accessToken, accessAad(row.owner_id)),
-      encryptCredential(tokens.refreshToken, refreshAad(row.owner_id)),
-      new Date(now + tokens.expiresIn * 1000),
-      tokens.scope
-    ]
-  );
+  await transaction(async () => {
+    // Reconnecting a different Buffer account (another organization) must not leave
+    // channel selections pointing at channels the new account does not have.
+    // Reconnecting the same organization keeps them.
+    await query(
+      `DELETE FROM business_buffer_channels
+       WHERE connection_id IN (SELECT id FROM buffer_connections WHERE owner_id=$1 AND organization_id<>$2)`,
+      [row.owner_id, organizationId]
+    );
+    await query(
+      `INSERT INTO buffer_connections(owner_id,organization_id,encrypted_access_token,encrypted_refresh_token,access_expires_at,scope,status)
+       VALUES($1,$2,$3,$4,$5,$6,'active')
+       ON CONFLICT(owner_id) DO UPDATE SET
+         organization_id=EXCLUDED.organization_id,
+         encrypted_access_token=EXCLUDED.encrypted_access_token,
+         encrypted_refresh_token=EXCLUDED.encrypted_refresh_token,
+         access_expires_at=EXCLUDED.access_expires_at,
+         scope=EXCLUDED.scope,
+         status='active',
+         updated_at=now()`,
+      [
+        row.owner_id,
+        organizationId,
+        encryptCredential(tokens.accessToken, accessAad(row.owner_id)),
+        encryptCredential(tokens.refreshToken, refreshAad(row.owner_id)),
+        new Date(now + tokens.expiresIn * 1000),
+        tokens.scope
+      ]
+    );
+  });
   return { ownerId: row.owner_id, outcome: "connected" };
 }
 

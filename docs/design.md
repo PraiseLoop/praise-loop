@@ -208,8 +208,10 @@ Detail and sources are in the comment on #29 and in [integrations.md](integratio
   `sending`, `sent`, `error`). `deletePost` and `editPost` exist. Any timeout after submission is
   ambiguous and must not be retried blindly.
 - **Callback.** `https://dev.praiseloop.ca/api/buffer/callback` (dev, through the `praiseloop-dev`
-  tunnel) and a production URL; Buffer rejects `http://localhost`. The browser arrives there without the
-  owner's session cookie, so the callback must find the owner from a server-stored, short-lived `state`.
+  tunnel) and a production URL; Buffer rejects `http://localhost`. The callback needs both a server-stored,
+  single-use, 10-minute `state` and the browser's own session, and the two must name the same owner
+  (otherwise a victim could be tricked into attaching their Buffer account to an attacker's account).
+  The web app and the callback share one host, so the session cookie is present.
 - **Risks.** A brand-new Instagram account was suspended soon after creation and connection to a
   scheduler, so test with an established Business account and the owner's agreement, never a throwaway.
   Owners need a second (free) account and a one-time connect step. Free Buffer allows 10 scheduled posts
