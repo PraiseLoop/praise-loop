@@ -25,7 +25,8 @@ export type BufferErrorCode =
   | "not_connected"
   | "needs_reconnect"
   | "not_found"
-  | "invalid_channel";
+  | "invalid_channel"
+  | "connection_changed";
 
 // Short, fixed codes only: messages never carry a token, code, state, verifier,
 // client secret or Buffer's error_description.
@@ -341,6 +342,16 @@ export async function getBufferAccessToken(ownerId: string, deps: Deps = {}): Pr
 
 /** Instagram and Facebook channels that are neither disconnected nor locked. */
 export async function listBufferChannels(ownerId: string, deps: Deps = {}): Promise<BufferChannel[]> {
+  return (await fetchBufferChannels(ownerId, deps)).channels;
+}
+
+// Also returns the organization the list was fetched for, so a caller that writes
+// based on the list can prove the owner has not reconnected a different Buffer
+// account in the meantime.
+async function fetchBufferChannels(
+  ownerId: string,
+  deps: Deps = {}
+): Promise<{ organizationId: string; channels: BufferChannel[] }> {
   const accessToken = await getBufferAccessToken(ownerId, deps);
   const connection = await query<{ organization_id: string }>(
     "SELECT organization_id FROM buffer_connections WHERE owner_id=$1",
@@ -389,7 +400,7 @@ export async function listBufferChannels(ownerId: string, deps: Deps = {}): Prom
       type: typeof channel.type === "string" ? channel.type : ""
     });
   }
-  return channels;
+  return { organizationId, channels };
 }
 
 /** Drop the stored tokens; Buffer has no revoke endpoint. */
@@ -427,28 +438,37 @@ export async function selectBufferChannel(
   const owned = await query("SELECT 1 FROM businesses WHERE id=$1 AND owner_id=$2", [businessId, ownerId]);
   if (!owned.rowCount) throw new BufferConnectionError("not_found", 404);
 
-  const connection = await query<{ id: string }>(
-    "SELECT id FROM buffer_connections WHERE owner_id=$1",
-    [ownerId]
-  );
-  const connectionId = connection.rows[0]?.id;
-  if (!connectionId) throw new BufferConnectionError("not_connected", 404);
-
-  const channels = await listBufferChannels(ownerId, deps);
+  const { organizationId, channels } = await fetchBufferChannels(ownerId, deps);
   const channel = channels.find((candidate) => candidate.id === channelId);
   if (!channel) throw new BufferConnectionError("invalid_channel", 400);
 
-  await query(
-    `INSERT INTO business_buffer_channels(business_id,connection_id,channel_id,channel_name,service)
-     VALUES($1,$2,$3,$4,$5)
-     ON CONFLICT(business_id) DO UPDATE SET
-       connection_id=EXCLUDED.connection_id,
-       channel_id=EXCLUDED.channel_id,
-       channel_name=EXCLUDED.channel_name,
-       service=EXCLUDED.service,
-       updated_at=now()`,
-    [businessId, connectionId, channel.id, channel.name, channel.service]
-  );
+  // The channel list was fetched over the network, so the owner may have reconnected
+  // a different Buffer account while it was in flight. Lock the connection row (a
+  // reconnect updates it) and write only if it is still the organization the list
+  // came from; otherwise the saved channel could belong to an account that is gone.
+  const outcome = await transaction(async () => {
+    const locked = await query<{ id: string; organization_id: string; status: string }>(
+      "SELECT id,organization_id,status FROM buffer_connections WHERE owner_id=$1 FOR UPDATE",
+      [ownerId]
+    );
+    const connection = locked.rows[0];
+    if (!connection) return "not_connected" as const;
+    if (connection.organization_id !== organizationId || connection.status !== "active") return "changed" as const;
+    await query(
+      `INSERT INTO business_buffer_channels(business_id,connection_id,channel_id,channel_name,service)
+       VALUES($1,$2,$3,$4,$5)
+       ON CONFLICT(business_id) DO UPDATE SET
+         connection_id=EXCLUDED.connection_id,
+         channel_id=EXCLUDED.channel_id,
+         channel_name=EXCLUDED.channel_name,
+         service=EXCLUDED.service,
+         updated_at=now()`,
+      [businessId, connection.id, channel.id, channel.name, channel.service]
+    );
+    return "saved" as const;
+  });
+  if (outcome === "not_connected") throw new BufferConnectionError("not_connected", 404);
+  if (outcome === "changed") throw new BufferConnectionError("connection_changed", 409);
   return channel;
 }
 
