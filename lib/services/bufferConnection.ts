@@ -227,12 +227,18 @@ export async function completeBufferConnect(
   await transaction(async () => {
     // Reconnecting a different Buffer account (another organization) must not leave
     // channel selections pointing at channels the new account does not have.
-    // Reconnecting the same organization keeps them.
-    await query(
-      `DELETE FROM business_buffer_channels
-       WHERE connection_id IN (SELECT id FROM buffer_connections WHERE owner_id=$1 AND organization_id<>$2)`,
-      [row.owner_id, organizationId]
+    // Reconnecting the same organization keeps them. Take the connection's row lock
+    // FIRST and hold it through the cleanup and the upsert: a channel selection that
+    // is mid-save holds the same lock, so this waits for it to commit and then sees
+    // (and removes) its row instead of racing past it.
+    const existing = await query<{ id: string; organization_id: string }>(
+      "SELECT id,organization_id FROM buffer_connections WHERE owner_id=$1 FOR UPDATE",
+      [row.owner_id]
     );
+    const previous = existing.rows[0];
+    if (previous && previous.organization_id !== organizationId) {
+      await query("DELETE FROM business_buffer_channels WHERE connection_id=$1", [previous.id]);
+    }
     await query(
       `INSERT INTO buffer_connections(owner_id,organization_id,encrypted_access_token,encrypted_refresh_token,access_expires_at,scope,status)
        VALUES($1,$2,$3,$4,$5,$6,'active')

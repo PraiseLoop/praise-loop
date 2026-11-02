@@ -506,6 +506,35 @@ async function main() {
         "a channel fetched for the old organization is never saved"
       );
 
+      // Reconnect takes the connection lock BEFORE clearing selections (review finding on #196): a
+      // channel selection that is mid-save holds that lock, and the reconnect must wait for it and then
+      // remove the committed row, not race past it and leave an old-organization channel attached.
+      const locked = await seedOwner(client, "buffer-lock");
+      await seedConnection(client, locked.owner);
+      const lockedConnectionId = (await client.query("SELECT id FROM buffer_connections WHERE owner_id=$1", [locked.owner])).rows[0].id;
+      const lockedState = authorizeParams(await startBufferConnect(locked.owner)).get("state")!;
+      await client.query("BEGIN");
+      await client.query("SELECT id FROM buffer_connections WHERE owner_id=$1 FOR UPDATE", [locked.owner]);
+      await client.query(
+        `INSERT INTO business_buffer_channels(business_id,connection_id,channel_id,channel_name,service)
+         VALUES($1,$2,'channel-mid-save','Mid-save channel','instagram')`,
+        [locked.businessId, lockedConnectionId]
+      );
+      let reconnectDone = false;
+      const reconnecting = completeBufferConnect(
+        { state: lockedState, code: "synthetic-code" },
+        { fetchImpl: otherOrg.fetchImpl }
+      ).then(() => { reconnectDone = true; });
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      assert.equal(reconnectDone, false, "the reconnect waits for the selection's lock");
+      await client.query("COMMIT");
+      await reconnecting;
+      assert.equal(
+        Number((await client.query("SELECT count(*) FROM business_buffer_channels WHERE business_id=$1", [locked.businessId])).rows[0].count),
+        0,
+        "the selection saved just before the reconnect is removed, not left on the new organization"
+      );
+
       // A 401 for an OLD token must not disable a connection the owner has since re-authorized
       // (review finding on #196): the owner reconnects while the channel list is in flight.
       const stale = await seedOwner(client, "buffer-stale");
