@@ -486,6 +486,26 @@ async function main() {
         "another owner's business writes nothing"
       );
 
+      // The owner reconnects a different Buffer account while the channel list is in flight:
+      // the selection must not be saved against the new connection (review finding on #196).
+      const racer = await seedOwner(client, "buffer-race");
+      await seedConnection(client, racer.owner);
+      const reconnectsMidFlight = bufferFetch({
+        api: async () => {
+          await client.query("UPDATE buffer_connections SET organization_id='org-2' WHERE owner_id=$1", [racer.owner]);
+          return channelsResponse(channels);
+        }
+      });
+      await assert.rejects(
+        selectBufferChannel(racer.owner, racer.businessId, "ig-1", { fetchImpl: reconnectsMidFlight.fetchImpl }),
+        (error: unknown) => error instanceof BufferConnectionError && error.code === "connection_changed" && error.status === 409
+      );
+      assert.equal(
+        Number((await client.query("SELECT count(*) FROM business_buffer_channels WHERE business_id=$1", [racer.businessId])).rows[0].count),
+        0,
+        "a channel fetched for the old organization is never saved"
+      );
+
       // Connection summary: no connection, active with channels, and a failed list.
       assert.deepEqual(await getBufferConnection(foreignBusiness.owner), { connected: false, status: null, channels: [] });
       assert.deepEqual(await getBufferConnection(m.owner, { fetchImpl: selectable.fetchImpl }), {
