@@ -1,0 +1,475 @@
+import assert from "node:assert/strict";
+import { createHash, randomBytes } from "node:crypto";
+import { NextRequest } from "next/server";
+import type { PoolClient } from "pg";
+import { databaseFixture } from "./db-fixture";
+import { decryptCredential, encryptCredential } from "../lib/integrations/credentials";
+import {
+  BufferConnectionError,
+  clearBufferChannel,
+  completeBufferConnect,
+  disconnectBuffer,
+  getBufferAccessToken,
+  getBufferConnection,
+  getSelectedBufferChannel,
+  listBufferChannels,
+  selectBufferChannel,
+  startBufferConnect
+} from "../lib/services/bufferConnection";
+
+const AUTHORIZE = "https://auth.buffer.com/auth";
+const TOKEN = "https://auth.buffer.com/token";
+const API = "https://api.buffer.com";
+const SCOPES = "posts:read posts:write account:read offline_access";
+
+type Call = { url: string; method: string; headers: Record<string, string>; body: string };
+
+function fakeFetch(handler: (call: Call) => Response | Promise<Response>) {
+  const calls: Call[] = [];
+  const fetchImpl = (async (input: string | URL | Request, init: RequestInit = {}) => {
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(init.headers ?? {})) headers[key.toLowerCase()] = String(value);
+    const call = {
+      url: String(input),
+      method: String(init.method ?? "GET"),
+      headers,
+      body: typeof init.body === "string" ? init.body : ""
+    };
+    calls.push(call);
+    return handler(call);
+  }) as unknown as typeof fetch;
+  return { calls, fetchImpl };
+}
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+const tokenResponse = (overrides: Record<string, unknown> = {}) =>
+  json({
+    access_token: "synthetic-access",
+    refresh_token: "synthetic-refresh",
+    token_type: "Bearer",
+    expires_in: 3600,
+    scope: SCOPES,
+    ...overrides
+  });
+
+const organizationsResponse = () =>
+  json({ data: { account: { organizations: [{ id: "org-1", name: "Synthetic Org" }] } } });
+
+const channelsResponse = (channels: unknown[]) => json({ data: { channels } });
+
+function bufferFetch(options: {
+  token?: (call: Call) => Response | Promise<Response>;
+  api?: (call: Call) => Response | Promise<Response>;
+} = {}) {
+  return fakeFetch((call) => {
+    if (call.url === TOKEN) return options.token?.(call) ?? tokenResponse();
+    if (call.url === API) {
+      if (call.body.includes("organizations")) return options.api?.(call) ?? organizationsResponse();
+      return options.api?.(call) ?? channelsResponse([]);
+    }
+    throw new Error(`unexpected URL ${call.url}`);
+  });
+}
+
+function authorizeParams(url: string) {
+  assert.equal(new URL(url).origin + new URL(url).pathname, AUTHORIZE);
+  return new URL(url).searchParams;
+}
+
+async function seedOwner(client: PoolClient, id: string) {
+  await client.query("INSERT INTO auth_users(id,name,email) VALUES($1,$2,$3)", [id, id, `${id}@example.invalid`]);
+  const business = Number((await client.query(
+    "INSERT INTO businesses(name,timezone,owner_id) VALUES($1,'UTC',$2) RETURNING id",
+    [id, id]
+  )).rows[0].id);
+  return { owner: id, businessId: business };
+}
+
+async function connectionCount(client: PoolClient, owner: string) {
+  return Number((await client.query("SELECT count(*) FROM buffer_connections WHERE owner_id=$1", [owner])).rows[0].count);
+}
+
+async function seedConnection(
+  client: PoolClient,
+  owner: string,
+  options: { accessToken?: string; refreshToken?: string; expiresInMs?: number; status?: "active" | "needs_reconnect" } = {}
+) {
+  const accessToken = options.accessToken ?? "seeded-access";
+  const refreshToken = options.refreshToken ?? "seeded-refresh";
+  const expiresInMs = options.expiresInMs ?? 60 * 60 * 1000;
+  const status = options.status ?? "active";
+  await client.query(
+    `INSERT INTO buffer_connections(owner_id,organization_id,encrypted_access_token,encrypted_refresh_token,access_expires_at,scope,status)
+     VALUES($1,'org-1',$2,$3,$4,$5,$6)
+     ON CONFLICT(owner_id) DO UPDATE SET
+       encrypted_access_token=EXCLUDED.encrypted_access_token,
+       encrypted_refresh_token=EXCLUDED.encrypted_refresh_token,
+       access_expires_at=EXCLUDED.access_expires_at,
+       scope=EXCLUDED.scope,
+       status=EXCLUDED.status,
+       updated_at=now()`,
+    [
+      owner,
+      encryptCredential(accessToken, `buffer:access:${owner}`),
+      encryptCredential(refreshToken, `buffer:refresh:${owner}`),
+      new Date(Date.now() + expiresInMs),
+      SCOPES,
+      status
+    ]
+  );
+}
+
+async function connectionStatus(client: PoolClient, owner: string) {
+  return (await client.query("SELECT status FROM buffer_connections WHERE owner_id=$1", [owner])).rows[0]?.status as string | undefined;
+}
+
+function callbackRequest(params: Record<string, string>) {
+  return new NextRequest(`http://localhost/api/buffer/callback?${new URLSearchParams(params)}`);
+}
+
+async function main() {
+  process.env.NEXTAUTH_URL = "http://localhost";
+  process.env.BUFFER_CLIENT_ID = "synthetic-client-id";
+  process.env.BUFFER_CLIENT_SECRET = "synthetic-client-secret";
+  process.env.CREDENTIAL_ENCRYPTION_KEY = randomBytes(32).toString("base64");
+  delete process.env.BUFFER_REDIRECT_URI;
+
+  // Capture every log line so the test can prove no secret reaches the logs.
+  const logLines: string[] = [];
+  const levels = ["log", "error", "warn"] as const;
+  const original = { log: console.log, error: console.error, warn: console.warn };
+  for (const level of levels) {
+    console[level] = (...args: unknown[]) => { logLines.push(args.map(String).join(" ")); };
+  }
+
+  try {
+    await databaseFixture(async (client) => {
+      // --- authorize URL -------------------------------------------------
+      const a = await seedOwner(client, "buffer-a");
+      const authorize = await startBufferConnect(a.owner);
+      const params = authorizeParams(authorize);
+      assert.equal(params.get("client_id"), "synthetic-client-id");
+      assert.equal(params.get("redirect_uri"), "http://localhost/api/buffer/callback");
+      assert.equal(params.get("response_type"), "code");
+      assert.equal(params.get("scope"), SCOPES);
+      assert.equal(params.get("code_challenge_method"), "S256");
+      assert.match(params.get("code_challenge") ?? "", /^[A-Za-z0-9_-]{43}$/);
+      assert.match(params.get("state") ?? "", /^[A-Za-z0-9_-]{43}$/);
+      assert.equal(params.get("prompt"), null, "prompt is undocumented and must not be sent");
+
+      const state = params.get("state")!;
+      const stateRow = (await client.query(
+        "SELECT state_hash, encrypted_code_verifier, expires_at FROM buffer_oauth_states WHERE owner_id=$1",
+        [a.owner]
+      )).rows[0];
+      assert.equal(stateRow.state_hash, createHash("sha256").update(state).digest("hex"));
+      assert.notEqual(stateRow.state_hash, state, "the raw state is never stored");
+      assert.match(stateRow.encrypted_code_verifier, /^v1\./);
+      const verifier = decryptCredential(stateRow.encrypted_code_verifier, `buffer:verifier:${a.owner}`);
+      assert.match(verifier, /^[A-Za-z0-9_-]{43}$/);
+      assert.ok(!stateRow.encrypted_code_verifier.includes(verifier), "the verifier is encrypted at rest");
+      const ttl = new Date(stateRow.expires_at).getTime() - Date.now();
+      assert.ok(ttl > 9 * 60 * 1000 && ttl <= 10 * 60 * 1000, "states live ten minutes");
+
+      process.env.BUFFER_REDIRECT_URI = "https://dev.praiseloop.invalid/api/buffer/callback";
+      assert.equal(authorizeParams(await startBufferConnect(a.owner)).get("redirect_uri"), "https://dev.praiseloop.invalid/api/buffer/callback");
+      delete process.env.BUFFER_REDIRECT_URI;
+
+      // --- complete, token request and encryption at rest ----------------
+      const exchange = bufferFetch();
+      const completed = await completeBufferConnect({ state, code: "synthetic-code" }, { fetchImpl: exchange.fetchImpl });
+      assert.deepEqual(completed, { ownerId: a.owner, outcome: "connected" });
+
+      const tokenCall = exchange.calls.find((call) => call.url === TOKEN)!;
+      assert.equal(tokenCall.method, "POST");
+      assert.match(tokenCall.headers["content-type"], /^application\/x-www-form-urlencoded/);
+      assert.ok(!tokenCall.body.trim().startsWith("{"), "the token request is form encoded");
+      const form = new URLSearchParams(tokenCall.body);
+      assert.equal(form.get("client_id"), "synthetic-client-id");
+      assert.equal(form.get("client_secret"), "synthetic-client-secret");
+      assert.equal(form.get("grant_type"), "authorization_code");
+      assert.equal(form.get("code"), "synthetic-code");
+      assert.equal(form.get("redirect_uri"), "http://localhost/api/buffer/callback");
+      assert.equal(form.get("code_verifier"), verifier);
+
+      const stored = (await client.query(
+        "SELECT encrypted_access_token, encrypted_refresh_token, organization_id, scope, status FROM buffer_connections WHERE owner_id=$1",
+        [a.owner]
+      )).rows[0];
+      assert.equal(stored.organization_id, "org-1");
+      assert.equal(stored.scope, SCOPES);
+      assert.equal(stored.status, "active");
+      assert.notEqual(stored.encrypted_access_token, "synthetic-access");
+      assert.notEqual(stored.encrypted_refresh_token, "synthetic-refresh");
+      assert.ok(!stored.encrypted_access_token.includes("synthetic-access"));
+      assert.ok(!stored.encrypted_refresh_token.includes("synthetic-refresh"));
+      assert.equal(decryptCredential(stored.encrypted_access_token, `buffer:access:${a.owner}`), "synthetic-access");
+      assert.equal(decryptCredential(stored.encrypted_refresh_token, `buffer:refresh:${a.owner}`), "synthetic-refresh");
+
+      // --- state is single use and owner bound ---------------------------
+      const replay = bufferFetch();
+      await assert.rejects(
+        completeBufferConnect({ state, code: "synthetic-code" }, { fetchImpl: replay.fetchImpl }),
+        (error: unknown) => error instanceof BufferConnectionError && error.code === "expired"
+      );
+      assert.equal(replay.calls.length, 0, "a consumed state never reaches the token endpoint");
+
+      const b = await seedOwner(client, "buffer-b");
+      const bUrl = await startBufferConnect(b.owner);
+      const bState = authorizeParams(bUrl).get("state")!;
+      await client.query("UPDATE buffer_oauth_states SET expires_at=now()-interval '1 minute' WHERE owner_id=$1", [b.owner]);
+      const expired = bufferFetch();
+      await assert.rejects(
+        completeBufferConnect({ state: bState, code: "synthetic-code" }, { fetchImpl: expired.fetchImpl }),
+        (error: unknown) => error instanceof BufferConnectionError && error.code === "expired"
+      );
+      assert.equal(expired.calls.length, 0);
+      assert.equal(await connectionCount(client, b.owner), 0);
+
+      const unknown = bufferFetch();
+      await assert.rejects(
+        completeBufferConnect({ state: "unknown-state", code: "synthetic-code" }, { fetchImpl: unknown.fetchImpl }),
+        (error: unknown) => error instanceof BufferConnectionError && error.code === "expired"
+      );
+      assert.equal(unknown.calls.length, 0);
+
+      const c = await seedOwner(client, "buffer-c");
+      const cState = authorizeParams(await startBufferConnect(c.owner)).get("state")!;
+      const foreign = bufferFetch();
+      await assert.rejects(
+        completeBufferConnect({ state: cState, code: "synthetic-code", ownerId: "buffer-elsewhere" }, { fetchImpl: foreign.fetchImpl }),
+        (error: unknown) => error instanceof BufferConnectionError && error.code === "expired"
+      );
+      assert.equal(foreign.calls.length, 0);
+      assert.equal(await connectionCount(client, c.owner), 0, "another owner's state writes nothing");
+
+      // A missing refresh token is a failed exchange, not a stored connection.
+      const d = await seedOwner(client, "buffer-d");
+      const dState = authorizeParams(await startBufferConnect(d.owner)).get("state")!;
+      const noRefresh = bufferFetch({ token: () => tokenResponse({ refresh_token: undefined }) });
+      await assert.rejects(
+        completeBufferConnect({ state: dState, code: "synthetic-code" }, { fetchImpl: noRefresh.fetchImpl }),
+        (error: unknown) => error instanceof BufferConnectionError && error.code === "failed"
+      );
+      assert.equal(await connectionCount(client, d.owner), 0);
+
+      // No organization fails without storing anything.
+      const e = await seedOwner(client, "buffer-e");
+      const eState = authorizeParams(await startBufferConnect(e.owner)).get("state")!;
+      const noOrg = bufferFetch({ api: () => json({ data: { account: { organizations: [] } } }) });
+      await assert.rejects(
+        completeBufferConnect({ state: eState, code: "synthetic-code" }, { fetchImpl: noOrg.fetchImpl }),
+        (error: unknown) => error instanceof BufferConnectionError && error.code === "no_organization"
+      );
+      assert.equal(await connectionCount(client, e.owner), 0);
+
+      // --- callback outcomes --------------------------------------------
+      const callback = require("../app/api/buffer/callback/route").GET;
+
+      const denied = await callback(callbackRequest({ error: "access_denied", state: "whatever" }));
+      assert.equal(denied.status, 302);
+      assert.equal(denied.headers.get("location"), "http://localhost/connections?buffer=denied");
+
+      const f = await seedOwner(client, "buffer-f");
+      const fState = authorizeParams(await startBufferConnect(f.owner)).get("state")!;
+      const failedToken = bufferFetch({
+        token: () => json({ error: "invalid_grant", error_description: "synthetic-provider-error-text" }, 400)
+      });
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = failedToken.fetchImpl;
+      try {
+        const failed = await callback(callbackRequest({ state: fState, code: "synthetic-code" }));
+        assert.equal(failed.status, 302);
+        assert.equal(failed.headers.get("location"), "http://localhost/connections?buffer=failed");
+        assert.equal(await failed.text(), "");
+        assert.equal(await connectionCount(client, f.owner), 0, "a failed exchange stores nothing");
+        const location = failed.headers.get("location") ?? "";
+        for (const secret of ["synthetic-code", fState, "synthetic-provider-error-text", "synthetic-access", "synthetic-refresh"]) {
+          assert.ok(!location.includes(secret), "the redirect never carries a secret");
+        }
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+
+      delete process.env.BUFFER_CLIENT_ID;
+      const notConfigured = await callback(callbackRequest({ state: "anything", code: "anything" }));
+      assert.equal(notConfigured.status, 302);
+      assert.equal(notConfigured.headers.get("location"), "http://localhost/connections?buffer=not_configured");
+      process.env.BUFFER_CLIENT_ID = "synthetic-client-id";
+
+      // --- refresh: single use, serialized, needs_reconnect --------------
+      const g = await seedOwner(client, "buffer-g");
+      await seedConnection(client, g.owner, { accessToken: "old-access", refreshToken: "old-refresh", expiresInMs: 30_000 });
+      let refreshCalls = 0;
+      const refresh = bufferFetch({
+        token: (call) => {
+          refreshCalls += 1;
+          assert.match(call.body, /grant_type=refresh_token/);
+          const body = new URLSearchParams(call.body);
+          assert.equal(body.get("refresh_token"), "old-refresh");
+          assert.equal(body.get("client_secret"), "synthetic-client-secret");
+          return tokenResponse({ access_token: "new-access", refresh_token: "new-refresh", expires_in: 3600 });
+        }
+      });
+      assert.equal(await getBufferAccessToken(g.owner, { fetchImpl: refresh.fetchImpl }), "new-access");
+      assert.equal(refreshCalls, 1);
+      const refreshed = (await client.query(
+        "SELECT encrypted_access_token, encrypted_refresh_token FROM buffer_connections WHERE owner_id=$1",
+        [g.owner]
+      )).rows[0];
+      assert.equal(decryptCredential(refreshed.encrypted_access_token, `buffer:access:${g.owner}`), "new-access");
+      assert.equal(decryptCredential(refreshed.encrypted_refresh_token, `buffer:refresh:${g.owner}`), "new-refresh");
+
+      // Two concurrent calls on an expired token send exactly one refresh.
+      const h = await seedOwner(client, "buffer-h");
+      await seedConnection(client, h.owner, { accessToken: "concurrent-old", refreshToken: "concurrent-refresh-old", expiresInMs: 0 });
+      let concurrentRefreshes = 0;
+      const concurrent = bufferFetch({
+        token: async () => {
+          concurrentRefreshes += 1;
+          await new Promise((resolve) => setTimeout(resolve, 25));
+          return tokenResponse({ access_token: "concurrent-new", refresh_token: "concurrent-refresh-new" });
+        }
+      });
+      const tokens = await Promise.all([
+        getBufferAccessToken(h.owner, { fetchImpl: concurrent.fetchImpl }),
+        getBufferAccessToken(h.owner, { fetchImpl: concurrent.fetchImpl })
+      ]);
+      assert.deepEqual(tokens, ["concurrent-new", "concurrent-new"]);
+      assert.equal(concurrentRefreshes, 1, "concurrent refreshes are serialized by the row lock");
+
+      // invalid_grant and a lost response both mark needs_reconnect.
+      const i = await seedOwner(client, "buffer-i");
+      await seedConnection(client, i.owner, { expiresInMs: 0 });
+      const invalid = bufferFetch({ token: () => json({ error: "invalid_grant", error_description: "synthetic-provider-error-text" }, 400) });
+      await assert.rejects(
+        getBufferAccessToken(i.owner, { fetchImpl: invalid.fetchImpl }),
+        (error: unknown) => error instanceof BufferConnectionError && error.code === "needs_reconnect"
+      );
+      assert.equal(await connectionStatus(client, i.owner), "needs_reconnect");
+
+      const j = await seedOwner(client, "buffer-j");
+      await seedConnection(client, j.owner, { expiresInMs: 0 });
+      const lost = fakeFetch(() => { throw new Error("synthetic network failure"); });
+      await assert.rejects(
+        getBufferAccessToken(j.owner, { fetchImpl: lost.fetchImpl }),
+        (error: unknown) => error instanceof BufferConnectionError && error.code === "needs_reconnect"
+      );
+      assert.equal(await connectionStatus(client, j.owner), "needs_reconnect");
+      assert.equal(lost.calls.length, 1, "the old refresh token is never retried");
+
+      const k = await seedOwner(client, "buffer-k");
+      await seedConnection(client, k.owner, { expiresInMs: 0, status: "needs_reconnect" });
+      const noRetry = bufferFetch();
+      await assert.rejects(
+        getBufferAccessToken(k.owner, { fetchImpl: noRetry.fetchImpl }),
+        (error: unknown) => error instanceof BufferConnectionError && error.code === "needs_reconnect"
+      );
+      assert.equal(noRetry.calls.length, 0, "a needs_reconnect connection never refreshes again");
+
+      // --- channel listing and selection --------------------------------
+      const l = await seedOwner(client, "buffer-l");
+      await seedConnection(client, l.owner);
+      const channels = [
+        { id: "ig-1", name: "Instagram handle", displayName: "Instagram Business", service: "instagram", type: "business", isDisconnected: false, isLocked: false },
+        { id: "fb-1", name: "Facebook page", displayName: null, service: "facebook", type: "page", isDisconnected: false, isLocked: false },
+        { id: "tw-1", name: "Twitter", displayName: "Twitter", service: "twitter", type: "profile", isDisconnected: false, isLocked: false },
+        { id: "ig-2", name: "Disconnected", displayName: "Disconnected", service: "instagram", type: "business", isDisconnected: true, isLocked: false },
+        { id: "fb-2", name: "Locked", displayName: "Locked", service: "facebook", type: "page", isDisconnected: false, isLocked: true }
+      ];
+      const listing = bufferFetch({ api: () => channelsResponse(channels) });
+      assert.deepEqual(await listBufferChannels(l.owner, { fetchImpl: listing.fetchImpl }), [
+        { id: "ig-1", name: "Instagram Business", service: "instagram", type: "business" },
+        { id: "fb-1", name: "Facebook page", service: "facebook", type: "page" }
+      ]);
+
+      const unauthorized = bufferFetch({ api: () => json({ errors: [{ message: "unauthorized" }] }, 401) });
+      await assert.rejects(
+        listBufferChannels(l.owner, { fetchImpl: unauthorized.fetchImpl }),
+        (error: unknown) => error instanceof BufferConnectionError && error.code === "needs_reconnect"
+      );
+      assert.equal(await connectionStatus(client, l.owner), "needs_reconnect");
+
+      const m = await seedOwner(client, "buffer-m");
+      await seedConnection(client, m.owner);
+      const selectable = bufferFetch({ api: () => channelsResponse(channels) });
+      await assert.rejects(
+        selectBufferChannel(m.owner, m.businessId, "not-a-channel", { fetchImpl: selectable.fetchImpl }),
+        (error: unknown) => error instanceof BufferConnectionError && error.code === "invalid_channel"
+      );
+      assert.equal(
+        Number((await client.query("SELECT count(*) FROM business_buffer_channels WHERE business_id=$1", [m.businessId])).rows[0].count),
+        0
+      );
+
+      const selected = await selectBufferChannel(m.owner, m.businessId, "ig-1", { fetchImpl: selectable.fetchImpl });
+      assert.deepEqual(selected, { id: "ig-1", name: "Instagram Business", service: "instagram", type: "business" });
+      assert.deepEqual(await getSelectedBufferChannel(m.owner, m.businessId), {
+        id: "ig-1",
+        name: "Instagram Business",
+        service: "instagram"
+      });
+
+      const foreignBusiness = await seedOwner(client, "buffer-n");
+      await assert.rejects(
+        selectBufferChannel(m.owner, foreignBusiness.businessId, "ig-1", { fetchImpl: selectable.fetchImpl }),
+        (error: unknown) => error instanceof BufferConnectionError && error.code === "not_found"
+      );
+      assert.equal(
+        Number((await client.query("SELECT count(*) FROM business_buffer_channels WHERE business_id=$1", [foreignBusiness.businessId])).rows[0].count),
+        0,
+        "another owner's business writes nothing"
+      );
+
+      // Connection summary: no connection, active with channels, and a failed list.
+      assert.deepEqual(await getBufferConnection(foreignBusiness.owner), { connected: false, status: null, channels: [] });
+      assert.deepEqual(await getBufferConnection(m.owner, { fetchImpl: selectable.fetchImpl }), {
+        connected: true,
+        status: "active",
+        channels: [
+          { id: "ig-1", name: "Instagram Business", service: "instagram", type: "business" },
+          { id: "fb-1", name: "Facebook page", service: "facebook", type: "page" }
+        ]
+      });
+      const failingList = bufferFetch({ api: () => json({ errors: [{ message: "unauthorized" }] }, 401) });
+      assert.deepEqual(await getBufferConnection(m.owner, { fetchImpl: failingList.fetchImpl }), {
+        connected: true,
+        status: "needs_reconnect",
+        channels: []
+      });
+
+      // Disconnect removes the connection and its channel selections.
+      assert.equal(await disconnectBuffer(m.owner), true);
+      assert.equal(await connectionCount(client, m.owner), 0);
+      assert.equal(
+        Number((await client.query("SELECT count(*) FROM business_buffer_channels WHERE business_id=$1", [m.businessId])).rows[0].count),
+        0
+      );
+      assert.equal(await clearBufferChannel(m.owner, m.businessId), false);
+    });
+
+    // No log line captured during the test may contain a credential, code, state
+    // or provider error text.
+    const captured = logLines.join("\n");
+    for (const secret of [
+      "synthetic-access",
+      "synthetic-refresh",
+      "new-access",
+      "new-refresh",
+      "concurrent-new",
+      "synthetic-code",
+      "synthetic-provider-error-text",
+      "synthetic-client-secret"
+    ]) {
+      assert.ok(!captured.includes(secret), `logs must not contain ${secret}`);
+    }
+  } finally {
+    for (const level of levels) console[level] = original[level];
+  }
+
+  console.log("buffer connect, refresh, channel and callback tests passed");
+}
+
+main().catch((error) => { console.error(error); process.exitCode = 1; });

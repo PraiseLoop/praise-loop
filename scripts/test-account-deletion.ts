@@ -88,6 +88,20 @@ async function seedOwner(client: PoolClient, owner: string, label: string, withD
     "INSERT INTO google_connections(business_id,owner_id,location_name) VALUES($1,$2,'accounts/1/locations/2')",
     [business, owner]
   );
+  // Buffer connect (#29): the owner connection, a pending state and a channel
+  // selection. All three cascade from auth_users/businesses.
+  await client.query(
+    "INSERT INTO buffer_connections(owner_id,organization_id,encrypted_access_token,encrypted_refresh_token,access_expires_at,scope) VALUES($1,$2,'v1.synthetic','v1.synthetic',now()+interval '1 hour','posts:read')",
+    [owner, `org-${owner}`]
+  );
+  await client.query(
+    "INSERT INTO buffer_oauth_states(state_hash,owner_id,encrypted_code_verifier,expires_at) VALUES($1,$2,'v1.synthetic',now()+interval '10 minutes')",
+    [`state-${owner}`, owner]
+  );
+  await client.query(
+    "INSERT INTO business_buffer_channels(business_id,connection_id,channel_id,channel_name,service) SELECT $1,id,$2,'Synthetic channel','instagram' FROM buffer_connections WHERE owner_id=$3",
+    [business, `channel-${owner}`, owner]
+  );
   await client.query(
     "INSERT INTO push_deliveries(business_id,period_start,token,count) VALUES($1,$2,$3,1)",
     [business, PERIOD, `ExponentPushToken[delivery-${owner}]`]
@@ -201,6 +215,7 @@ async function main() {
       for (const table of [
         "auth_accounts", "auth_sessions", "owner_usage", "owner_plans",
         "owner_plan_events", "device_push_tokens", "businesses", "google_connections",
+        "buffer_connections", "buffer_oauth_states", "business_buffer_channels",
         "reviews", "draft_posts", "generation_periods", "generation_jobs",
         "posting_slot_claims", "push_deliveries"
       ]) {
