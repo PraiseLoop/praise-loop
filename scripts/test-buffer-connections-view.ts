@@ -4,6 +4,7 @@ import {
   channelOptionLabel,
   connectionView,
   createRequestGuard,
+  isBufferAuthorizeUrl,
   isPersonalInstagram,
   outcomeMessage,
   shouldReloadConnection,
@@ -70,6 +71,25 @@ function main() {
   const other = createRequestGuard();
   const otherToken = other.begin();
   assert.equal(other.isLatest(otherToken), true, "each business has its own guard");
+
+  // Only Buffer's own sign-in page is a valid place to send the browser.
+  assert.equal(isBufferAuthorizeUrl("https://auth.buffer.com/auth?client_id=x&state=y"), true);
+  for (const bad of [
+    "http://auth.buffer.com/auth",
+    "https://auth.buffer.com.evil.example/auth",
+    "https://evil.example/auth?next=https://auth.buffer.com/auth",
+    "https://user:pass@auth.buffer.com/auth",
+    "https://auth.buffer.com:8443/auth",
+    "https://auth.buffer.com/other",
+    "javascript:alert(1)",
+    "//auth.buffer.com/auth",
+    "",
+    null,
+    undefined,
+    42
+  ]) {
+    assert.equal(isBufferAuthorizeUrl(bad), false, `refuses ${String(bad)}`);
+  }
 
   console.log("buffer connections view pure tests passed");
 }
