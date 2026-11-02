@@ -18,11 +18,12 @@ export function profileLabel(name: string | null): string {
   return displayName(name) ?? ADD_NAME_PROMPT;
 }
 
-export type ProfileMenuItem = { id: "plan" | "edit-name" | "sign-out"; label: string; href?: string };
+export type ProfileMenuItem = { id: "connections" | "plan" | "edit-name" | "sign-out"; label: string; href?: string };
 
-// Everything about the owner and their plan lives under the profile, so the main
-// nav keeps only the work screens (#150).
+// Everything about the owner, their connections and their plan lives under the
+// profile, so the main nav keeps only the work screens (#150, #29).
 export const PROFILE_MENU_ITEMS: readonly ProfileMenuItem[] = [
+  { id: "connections", label: "Connections", href: "/connections" },
   { id: "plan", label: "Plan and usage", href: "/account" },
   { id: "edit-name", label: "Edit name" },
   { id: "sign-out", label: "Sign out" }
