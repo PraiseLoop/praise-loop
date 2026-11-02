@@ -303,6 +303,17 @@ server), and `cloudflared` included with the tunnel pointing at `http://web:3000
   file and the stack's project name: set `COMPOSE="docker compose -p <stack name> -f docker-compose.standalone.yml"`
   (with the variables exported) when running them from a checkout on the server.
 
+### Log rotation
+
+Docker keeps each container's output in a log file that grows without limit by default.
+Every service in `docker-compose.yml`, `docker-compose.standalone.yml` and the pilot
+overlay's `cloudflared` uses the `json-file` driver with `max-size: 10m` and
+`max-file: 3`: at most about 30 MB of logs per service, with the oldest lines deleted
+automatically, so logs hold the most recent activity (usually a few days) and cannot
+fill the disk. The public privacy policy says logs are rotated automatically, so keep
+this in every stack that runs production, and update the policy if the limits change.
+Cloudflare and GitHub keep their own logs under their own policies.
+
 ### Backups and restore
 
 `ops/backup.sh` writes a gzipped `pg_dump` and a tarball of the `generated_media`
