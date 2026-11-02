@@ -127,8 +127,17 @@ async function firstOrganization(fetchImpl: typeof fetch, accessToken: string): 
   return typeof id === "string" ? id : null;
 }
 
-async function markNeedsReconnect(ownerId: string) {
-  await query("UPDATE buffer_connections SET status='needs_reconnect', updated_at=now() WHERE owner_id=$1", [ownerId]);
+// Only the access token that actually failed may flag the connection: if the owner
+// reconnected (or another request refreshed) while a request using an older token was
+// in flight, that stale failure says nothing about the stored credentials.
+// Returns whether the connection still held the failing token and was updated.
+async function markNeedsReconnect(ownerId: string, failedAccessToken: string): Promise<boolean> {
+  const result = await query(
+    `UPDATE buffer_connections SET status='needs_reconnect', updated_at=now()
+     WHERE owner_id=$1 AND encrypted_access_token=$2`,
+    [ownerId, failedAccessToken]
+  );
+  return !!result.rowCount;
 }
 
 /**
@@ -255,6 +264,16 @@ export async function completeBufferConnect(
  * the connection `needs_reconnect` and is never retried with the old token.
  */
 export async function getBufferAccessToken(ownerId: string, deps: Deps = {}): Promise<string> {
+  return (await accessTokenWithVersion(ownerId, deps)).accessToken;
+}
+
+// `version` is the stored (encrypted) access token. Its random IV makes it unique per
+// stored token, so a caller that later learns the token was rejected can mark the
+// connection `needs_reconnect` only if it still holds this same token.
+async function accessTokenWithVersion(
+  ownerId: string,
+  deps: Deps = {}
+): Promise<{ accessToken: string; version: string }> {
   const fetchImpl = deps.fetchImpl ?? fetch;
   const now = deps.now ?? Date.now;
   const current = await query<ConnectionRow>(
@@ -266,7 +285,10 @@ export async function getBufferAccessToken(ownerId: string, deps: Deps = {}): Pr
   if (!row) throw new BufferConnectionError("not_connected", 404);
   if (row.status === "needs_reconnect") throw new BufferConnectionError("needs_reconnect", 409);
   if (new Date(row.access_expires_at).getTime() > now() + REFRESH_SKEW_MS) {
-    return decryptCredential(row.encrypted_access_token, accessAad(ownerId));
+    return {
+      accessToken: decryptCredential(row.encrypted_access_token, accessAad(ownerId)),
+      version: row.encrypted_access_token
+    };
   }
 
   const result = await transaction(async () => {
@@ -282,7 +304,8 @@ export async function getBufferAccessToken(ownerId: string, deps: Deps = {}): Pr
     if (new Date(connection.access_expires_at).getTime() > now() + REFRESH_SKEW_MS) {
       return {
         kind: "ok" as const,
-        accessToken: decryptCredential(connection.encrypted_access_token, accessAad(ownerId))
+        accessToken: decryptCredential(connection.encrypted_access_token, accessAad(ownerId)),
+        version: connection.encrypted_access_token
       };
     }
 
@@ -312,6 +335,7 @@ export async function getBufferAccessToken(ownerId: string, deps: Deps = {}): Pr
       return { kind: "needs_reconnect" as const };
     }
 
+    const storedAccessToken = encryptCredential(tokens.accessToken, accessAad(ownerId));
     await query(
       `UPDATE buffer_connections
        SET encrypted_access_token=$2, encrypted_refresh_token=$3, access_expires_at=$4,
@@ -319,18 +343,18 @@ export async function getBufferAccessToken(ownerId: string, deps: Deps = {}): Pr
        WHERE owner_id=$1`,
       [
         ownerId,
-        encryptCredential(tokens.accessToken, accessAad(ownerId)),
+        storedAccessToken,
         encryptCredential(tokens.refreshToken, refreshAad(ownerId)),
         new Date(now() + tokens.expiresIn * 1000),
         tokens.scope
       ]
     );
-    return { kind: "ok" as const, accessToken: tokens.accessToken };
+    return { kind: "ok" as const, accessToken: tokens.accessToken, version: storedAccessToken };
   });
 
   switch (result.kind) {
     case "ok":
-      return result.accessToken;
+      return { accessToken: result.accessToken, version: result.version };
     case "not_connected":
       throw new BufferConnectionError("not_connected", 404);
     case "not_configured":
@@ -352,7 +376,7 @@ async function fetchBufferChannels(
   ownerId: string,
   deps: Deps = {}
 ): Promise<{ organizationId: string; channels: BufferChannel[] }> {
-  const accessToken = await getBufferAccessToken(ownerId, deps);
+  const { accessToken, version } = await accessTokenWithVersion(ownerId, deps);
   const connection = await query<{ organization_id: string }>(
     "SELECT organization_id FROM buffer_connections WHERE owner_id=$1",
     [ownerId]
@@ -369,8 +393,10 @@ async function fetchBufferChannels(
     throw new BufferConnectionError("failed", 502);
   }
   if (response.status === 401) {
-    await markNeedsReconnect(ownerId);
-    throw new BufferConnectionError("needs_reconnect", 409);
+    // If the owner reconnected while this request was in flight, the rejected token is
+    // no longer the stored one: report the change and leave the new connection alone.
+    if (await markNeedsReconnect(ownerId, version)) throw new BufferConnectionError("needs_reconnect", 409);
+    throw new BufferConnectionError("connection_changed", 409);
   }
   if (!response.ok) throw new BufferConnectionError("failed", 502);
   const body = await response.json().catch(() => null) as
