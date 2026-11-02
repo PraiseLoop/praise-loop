@@ -64,10 +64,16 @@ const serviceBlock = (text: string, name: string): string => {
 const envNames = (block: string): string[] => [...block.matchAll(/^ {6}- ([A-Z0-9_]+)=/gm)].map((m) => m[1]);
 assert.doesNotMatch(standalone, /^\s+build:/m, "the standalone stack must use published images, not build from a checkout");
 assert.doesNotMatch(standalone, /^\s+ports:/m, "the standalone stack must not publish host ports");
-assert.match(standalone, /TUNNEL_TOKEN=\$\{CLOUDFLARE_TUNNEL_TOKEN:\?/, "tunnel token must be required and come from the environment");
+// The tunnel is infrastructure, not part of the app stack: it runs as its own stack and reaches web over the
+// shared external `edge` network under a fixed alias.
+assert.doesNotMatch(standalone, /^ {2}cloudflared:/m, "the standalone stack must not run cloudflared; the tunnel is a separate stack");
+assert.doesNotMatch(standalone, /TUNNEL_TOKEN/, "the standalone stack takes no tunnel token");
+assert.match(standalone, /^networks:\n {2}# [^\n]*\n {2}edge:\n {4}name: \$\{EDGE_NETWORK:-edge\}\n {4}external: true/m, "web must be reachable over the shared external edge network");
+assert.match(serviceBlock(standalone, "web"), /networks:\n {6}default: \{\}\n {6}edge:\n {8}aliases: \["praiseloop-web"\]/, "web joins the stack network and the edge network as praiseloop-web");
+assert.doesNotMatch(serviceBlock(standalone, "postgres") + serviceBlock(standalone, "redis") + serviceBlock(standalone, "worker"), /edge/, "only web is exposed on the edge network");
 assert.match(standalone, /POSTGRES_PASSWORD:\?/, "the database password must be required, not defaulted");
 assert.match(standalone, /NEXTAUTH_SECRET:\?/, "the session secret must be required, not defaulted");
-assert.match(standalone, /TRUST_PROXY_HEADERS=1/, "only cloudflared reaches web, so proxy headers are trusted");
+assert.match(standalone, /TRUST_PROXY_HEADERS=1/, "only the tunnel's cloudflared is on the edge network, so proxy headers are trusted");
 assert.doesNotMatch(standalone, /eyJ[A-Za-z0-9]{20,}/, "no tunnel token in the repo");
 const baseCompose = read("docker-compose.yml");
 for (const service of ["migrate", "web", "worker", "postgres"]) {
@@ -80,8 +86,8 @@ for (const service of ["migrate", "web", "worker", "postgres"]) {
 // automatically; the published privacy policy states this. Every service in the production-style stacks needs it.
 const servicesIn = (text: string): string[] => {
   const start = text.indexOf("\nservices:");
-  const end = text.indexOf("\nvolumes:");
-  const body = text.slice(start, end === -1 ? undefined : end);
+  const ends = ["\nnetworks:", "\nvolumes:"].map((marker) => text.indexOf(marker, start)).filter((index) => index > start);
+  const body = text.slice(start, ends.length ? Math.min(...ends) : undefined);
   return [...body.matchAll(/^ {2}([a-z_-]+):$/gm)].map((m) => m[1]);
 };
 for (const file of ["docker-compose.yml", "docker-compose.standalone.yml"]) {

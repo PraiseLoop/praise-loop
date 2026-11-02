@@ -287,18 +287,39 @@ owner runs them.
 
 Tools that take a single compose file can't merge `docker-compose.yml` with the pilot
 overlay, and have no repo checkout to build from. `docker-compose.standalone.yml` is the
-same stack in one file: published `ghcr.io` images only, no host ports (Postgres and
+same stack in one file: published `ghcr.io` images only and no host ports (Postgres and
 Redis are reachable inside the stack only, so they can't clash with other stacks on the
-server), and `cloudflared` included with the tunnel pointing at `http://web:3000`.
+server). **It does not include the Cloudflare Tunnel.** The tunnel is infrastructure, so it
+runs as its own stack and reaches the app over a shared Docker network.
 
-- Paste or point the tool at `docker-compose.standalone.yml` and set the variables in the
-  tool's stack environment, not in the file. Required: `POSTGRES_PASSWORD`,
-  `NEXTAUTH_SECRET`, `NEXTAUTH_URL` and `CLOUDFLARE_TUNNEL_TOKEN`; the stack won't start
+- **One-time network:** create it on the server with `docker network create edge` (or set
+  `EDGE_NETWORK` to another name). `web` joins it under the alias `praiseloop-web`.
+  Attach only cloudflared to it: `web` trusts the client-IP headers that arrive over it.
+- **The tunnel stack** (its own stack in the tool, with its own token) looks like this, and
+  the tunnel's public hostname then points at `http://praiseloop-web:3000`:
+
+  ```yaml
+  services:
+    cloudflared-praiseloop:
+      image: cloudflare/cloudflared:2025.9.1
+      command: tunnel --no-autoupdate run
+      environment:
+        - TUNNEL_TOKEN=${PRAISELOOP_TUNNEL_TOKEN}
+      networks: [edge]
+      restart: unless-stopped
+  networks:
+    edge:
+      name: edge
+      external: true
+  ```
+- Point the tool at `docker-compose.standalone.yml` (in Dockhand: deploy from Git, branch
+  `master`) and set the variables in the tool's stack environment, not in the file.
+  Required: `POSTGRES_PASSWORD`, `NEXTAUTH_SECRET` and `NEXTAUTH_URL`; the stack won't start
   without them. The rest match `.env.example`. If the images are private, add `ghcr.io`
   registry credentials to the tool first.
 - Pin `PRAISELOOP_TAG` to a release tag, or leave it at `latest` to follow master.
-- Keep it in step with the two real files. `scripts/test-tooling.ts` fails when a
-  variable they pass to a service is missing from it.
+- Keep it in step with `docker-compose.yml`. `scripts/test-tooling.ts` fails when a
+  variable it passes to a service is missing from the standalone file.
 - `ops/backup.sh` and `ops/restore.sh` use `docker compose ... exec`, which needs the
   file and the stack's project name: set `COMPOSE="docker compose -p <stack name> -f docker-compose.standalone.yml"`
   (with the variables exported) when running them from a checkout on the server.
