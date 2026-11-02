@@ -163,24 +163,27 @@ Fixtures must cover auth/429/timeout-after-acceptance/media failure/concurrent w
 future times, cancel/reschedule, reconciliation and ownership. Live test above remains
 mandatory. A fake adapter alone does not complete #29.
 
-Until then, scheduling fails closed. The legacy CLI no longer queries content,
-logs captions/reviews, or marks local rows scheduled. A test-only fake returns
-provider=fake/status=simulated/confirmed=false and cannot represent real publication.
-No credentials, new dependencies, schema changes or production changes in this PR.
+Scheduling fails closed unless `BUFFER_POSTING_MODE` is `draft` or `live` (see
+[features.md](features.md#posting-through-buffer-29-part-3)). The legacy CLI no longer queries content,
+logs captions/reviews, or marks local rows scheduled. A test-only fake cannot represent real publication.
 
 ### Partial implementation (adapter + credential encryption, unverified live)
 
 `lib/integrations/buffer.ts` is a Buffer GraphQL adapter tested only against mocked
-`fetch` (`scripts/test-buffer.ts`). It refuses incomplete drafts and past times before
-any network call, retries only 429 (bounded, a Retry-After over 60s is surfaced instead of retried), maps 401/403
-to an auth error, media/GraphQL errors to a rejection, and treats timeout/5xx/unreadable
-responses as `SchedulerAmbiguous` (never auto-resubmitted). Only a returned post id with
-status `scheduled` yields `confirmed: true`. `lib/integrations/credentials.ts` provides
-AES-256-GCM encryption with owner/business-bound AAD, keyed by `CREDENTIAL_ENCRYPTION_KEY`
-(32 bytes base64). Neither is wired into `getSchedulerAdapter()`, which still fails closed.
-Still open for #29 after the Connect backend below: the expiring media capability
-route, worker submit/reconcile/cancel jobs, persisted external IDs/audit, the web
-and phone UI, and the owner-approved live test.
+`fetch` (`scripts/test-buffer.ts`). `submitPost` sends `mode: shareNow` with `schedulingType: automatic`
+and the required `needsApproval: false` (found by introspecting Buffer's schema on 2026-11-02; the earlier
+adapter omitted it and would have been rejected), plus `saveToDraft: true` in draft mode. It never uses
+`customScheduled` or Buffer's queue. It refuses incomplete drafts before any network call, retries only 429
+(bounded, a Retry-After over 60s is surfaced instead of retried), maps 401/403, `UnauthorizedError` and
+`ChannelRefreshRequired` to an auth error, maps only Buffer's refusal types (`InvalidInputError`,
+`NotFoundError`, `LimitReachedError`, `DuplicateError` and their `Post*` forms) to a rejection, and treats
+timeout/5xx/unreadable responses and `UnexpectedError`/`RestProxyError` as `SchedulerAmbiguous` (never
+auto-resubmitted). `getPostStatus` reads `post(input:{id})` (status, externalLink, sentAt, error message).
+`lib/integrations/credentials.ts` provides AES-256-GCM encryption with owner-bound AAD, keyed by
+`CREDENTIAL_ENCRYPTION_KEY` (32 bytes base64).
+Built in #29 part 3: the worker submit/reconcile, unguessable per-draft image links, cancel, and the
+off/draft/live gate. Still open: the phone and web status display, resolving `unknown` posts, and the
+owner-approved live test.
 
 ## Connecting Buffer (#29, backend part 1) — built 2026-11-01
 

@@ -1,21 +1,22 @@
 export type SchedulePayload = {
-  draftPostId: number; businessId: number; quoteText: string;
-  captionText: string; imagePath: string | null; scheduledFor: string;
-  /** Expiring, narrowly scoped URL the provider can fetch; never the private /api/media path. */
-  mediaUrl?: string;
+  draftPostId: number; businessId: number;
+  captionText: string;
+  /** Unguessable, time-limited URL the provider fetches; never the private /api/media path. */
+  mediaUrl: string;
 };
-export type ScheduleReceipt = { provider: "buffer" | "fake"; confirmed: boolean; externalId?: string; status: "scheduled" | "simulated" };
-export interface SchedulerAdapter { schedulePost(payload: SchedulePayload): Promise<ScheduleReceipt>; }
-export class SchedulerUnavailable extends Error {
-  constructor() { super("Buffer integration is not configured/verified; see docs/integrations.md. No post was submitted."); }
+/** Buffer accepted the request. `status` is Buffer's own word for the post (draft, sending, sent, ...). */
+export type ScheduleReceipt = { provider: "buffer" | "fake"; externalId: string; status: string };
+export type PostStatusReceipt = { status: string; externalLink: string | null; sentAt: string | null; errorMessage: string | null };
+export interface SchedulerAdapter {
+  submitPost(payload: SchedulePayload): Promise<ScheduleReceipt>;
+  getPostStatus(externalId: string): Promise<PostStatusReceipt>;
 }
-// Explicit local/test fake. Never returns a real scheduled/published receipt or logs content.
+// Explicit local/test fake. Never reports a real post and never logs content.
 export class StubSchedulerAdapter implements SchedulerAdapter {
-  async schedulePost(payload: SchedulePayload): Promise<ScheduleReceipt> {
-    return { provider:"fake",confirmed:false,status:"simulated",externalId:`fake-${payload.draftPostId}` };
+  async submitPost(payload: SchedulePayload): Promise<ScheduleReceipt> {
+    return { provider: "fake", status: "draft", externalId: `fake-${payload.draftPostId}` };
   }
-}
-export function getSchedulerAdapter(): SchedulerAdapter { throw new SchedulerUnavailable(); }
-export async function scheduleApprovedDraft(payload: SchedulePayload): Promise<ScheduleReceipt> {
-  return getSchedulerAdapter().schedulePost(payload);
+  async getPostStatus(): Promise<PostStatusReceipt> {
+    return { status: "draft", externalLink: null, sentAt: null, errorMessage: null };
+  }
 }

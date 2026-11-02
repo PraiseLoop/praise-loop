@@ -61,6 +61,7 @@ services:
       - BUFFER_CLIENT_SECRET=${BUFFER_CLIENT_SECRET:-}
       - BUFFER_REDIRECT_URI=${BUFFER_REDIRECT_URI:-}
       - CREDENTIAL_ENCRYPTION_KEY=${CREDENTIAL_ENCRYPTION_KEY:-}
+      - BUFFER_POSTING_MODE=${BUFFER_POSTING_MODE:-off}
       # Only the tunnel's cloudflared is on the shared `edge` network, so the client-IP headers
       # it forwards can be trusted (rate limiting). Do not attach anything else to that network.
       - TRUST_PROXY_HEADERS=1
@@ -101,6 +102,12 @@ services:
       - EMAIL_TRANSPORT=${EMAIL_TRANSPORT:-}
       - EMAIL_FROM=${EMAIL_FROM:-}
       - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:?set NEXTAUTH_URL to the public https address}
+      - BUFFER_CLIENT_ID=${BUFFER_CLIENT_ID:-}
+      - BUFFER_CLIENT_SECRET=${BUFFER_CLIENT_SECRET:-}
+      - BUFFER_REDIRECT_URI=${BUFFER_REDIRECT_URI:-}
+      - CREDENTIAL_ENCRYPTION_KEY=${CREDENTIAL_ENCRYPTION_KEY:-}
+      - BUFFER_POSTING_MODE=${BUFFER_POSTING_MODE:-off}
     volumes: ["generated_media:/app/private-media"]
     depends_on:
       migrate:
