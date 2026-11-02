@@ -33,8 +33,11 @@ Owner setup (no accounts, credentials, or production config created by this PR):
 
 Every API route except NextAuth and the public sign-in routes in the email section below
 is wrapped in the same owner guard. The Buffer OAuth callback (#29) is also public:
-the browser arrives from Buffer without a session cookie, so the single-use state
-row authenticates the completion (see [integrations.md](integrations.md)). Business lists
+Buffer's redirect carries no bearer token or CSRF header, so the route guard cannot
+wrap it, but it is not anonymous: the browser must be signed in as the same owner who
+started the flow, and the single-use state row must match that owner. Without that
+session check an attacker could attach a victim's Buffer account to the attacker's
+own PraiseLoop account (see [integrations.md](integrations.md)). Business lists
 are filtered server-side; guessed foreign business/draft/media IDs return 404. A
 composite FK rejects new cross-business review references without deleting legacy
 data; existing violations require operator reconciliation before validating that FK.

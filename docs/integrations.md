@@ -199,8 +199,12 @@ change yet. Nothing here has been run against a live Buffer account or client.
    `code_challenge` and `code_challenge_method=S256`. No `prompt` is sent.
    The scope is `posts:read posts:write account:read offline_access`;
    `offline_access` is what makes Buffer return a refresh token.
-3. Buffer redirects to `GET /api/buffer/callback` (public: the browser has no
-   session cookie here). The route consumes the state row atomically, exchanges
+3. Buffer redirects to `GET /api/buffer/callback` (allow-listed as a public route
+   because the redirect has no bearer token or CSRF header, but it requires the
+   browser's own session: it must belong to the owner who started the flow, or
+   nothing is consumed, contacted or stored. This blocks login CSRF, where a victim
+   is tricked into finishing an attacker's flow. The web app and the callback share
+   one host, so the cookie is present). The route consumes the state row atomically, exchanges
    the code at `https://auth.buffer.com/token` (form encoded, with
    `client_secret` and `code_verifier`), reads the owner's organization and stores
    the encrypted access and refresh tokens. It always answers with a `302` to

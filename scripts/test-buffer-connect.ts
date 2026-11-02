@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { NextRequest } from "next/server";
 import type { PoolClient } from "pg";
 import { databaseFixture } from "./db-fixture";
+import { authAdapter } from "../lib/auth-adapter";
 import { decryptCredential, encryptCredential } from "../lib/integrations/credentials";
 import {
   BufferConnectionError,
@@ -125,8 +126,21 @@ async function connectionStatus(client: PoolClient, owner: string) {
   return (await client.query("SELECT status FROM buffer_connections WHERE owner_id=$1", [owner])).rows[0]?.status as string | undefined;
 }
 
-function callbackRequest(params: Record<string, string>) {
-  return new NextRequest(`http://localhost/api/buffer/callback?${new URLSearchParams(params)}`);
+// The callback needs the browser's own session cookie: it must belong to the owner who started the flow.
+function callbackRequest(params: Record<string, string>, sessionToken?: string) {
+  return new NextRequest(`http://localhost/api/buffer/callback?${new URLSearchParams(params)}`, {
+    headers: sessionToken ? { cookie: `next-auth.session-token=${sessionToken}` } : {}
+  });
+}
+
+const sessions = new Map<string, string>();
+async function signIn(owner: string) {
+  const existing = sessions.get(owner);
+  if (existing) return existing;
+  const sessionToken = `synthetic-session-${owner}`;
+  await authAdapter.createSession!({ userId: owner, sessionToken, expires: new Date(Date.now() + 60 * 60 * 1000) });
+  sessions.set(owner, sessionToken);
+  return sessionToken;
 }
 
 async function main() {
@@ -280,7 +294,7 @@ async function main() {
       const originalFetch = globalThis.fetch;
       globalThis.fetch = failedToken.fetchImpl;
       try {
-        const failed = await callback(callbackRequest({ state: fState, code: "synthetic-code" }));
+        const failed = await callback(callbackRequest({ state: fState, code: "synthetic-code" }, await signIn(f.owner)));
         assert.equal(failed.status, 302);
         assert.equal(failed.headers.get("location"), "http://localhost/connections?buffer=failed");
         assert.equal(await failed.text(), "");
@@ -293,8 +307,57 @@ async function main() {
         globalThis.fetch = originalFetch;
       }
 
+      // --- the callback is bound to the browser's session (login CSRF) ---
+      // An attacker starts a connect on their own account and sends the Buffer link to a
+      // victim. The victim's browser (no session, or a different owner) must not complete it.
+      const attacker = await seedOwner(client, "buffer-attacker");
+      const victim = await seedOwner(client, "buffer-victim");
+      const attackerToken = await signIn(attacker.owner);
+      const victimToken = await signIn(victim.owner);
+      const attackState = authorizeParams(await startBufferConnect(attacker.owner)).get("state")!;
+      const attackFetch = bufferFetch();
+      globalThis.fetch = attackFetch.fetchImpl;
+      try {
+        const anonymous = await callback(callbackRequest({ state: attackState, code: "synthetic-code" }));
+        assert.equal(anonymous.headers.get("location"), "http://localhost/connections?buffer=failed", "no session is refused");
+        const asVictim = await callback(callbackRequest({ state: attackState, code: "synthetic-code" }, victimToken));
+        assert.equal(asVictim.headers.get("location"), "http://localhost/connections?buffer=expired", "another owner's session is refused");
+        assert.equal(attackFetch.calls.length, 0, "Buffer is never contacted for a refused completion");
+        assert.equal(await connectionCount(client, attacker.owner), 0);
+        assert.equal(await connectionCount(client, victim.owner), 0, "nothing is stored for either owner");
+
+        // The refused attempts did not burn the state: the owner who started the flow can still finish it.
+        const asOwner = await callback(callbackRequest({ state: attackState, code: "synthetic-code" }, attackerToken));
+        assert.equal(asOwner.headers.get("location"), "http://localhost/connections?buffer=connected");
+        assert.equal(await connectionCount(client, attacker.owner), 1);
+        assert.equal(await connectionCount(client, victim.owner), 0);
+        const replay = await callback(callbackRequest({ state: attackState, code: "synthetic-code" }, attackerToken));
+        assert.equal(replay.headers.get("location"), "http://localhost/connections?buffer=expired", "the state is single use");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+
+      // --- reconnecting a different Buffer account drops stale channel selections ---
+      const moved = await seedOwner(client, "buffer-moved");
+      await seedConnection(client, moved.owner);
+      const connectionId = (await client.query("SELECT id FROM buffer_connections WHERE owner_id=$1", [moved.owner])).rows[0].id;
+      const keepSelection = () => client.query(
+        `INSERT INTO business_buffer_channels(business_id,connection_id,channel_id,channel_name,service)
+         VALUES($1,$2,'channel-old','Old channel','instagram')
+         ON CONFLICT(business_id) DO NOTHING`,
+        [moved.businessId, connectionId]
+      );
+      const selections = async () => Number((await client.query("SELECT count(*) FROM business_buffer_channels WHERE business_id=$1", [moved.businessId])).rows[0].count);
+      await keepSelection();
+      const sameOrg = bufferFetch();
+      await completeBufferConnect({ state: authorizeParams(await startBufferConnect(moved.owner)).get("state")!, code: "synthetic-code" }, { fetchImpl: sameOrg.fetchImpl });
+      assert.equal(await selections(), 1, "reconnecting the same organization keeps the selection");
+      const otherOrg = bufferFetch({ api: (call) => call.body.includes("organizations") ? json({ data: { account: { organizations: [{ id: "org-2", name: "Another Org" }] } } }) : channelsResponse([]) });
+      await completeBufferConnect({ state: authorizeParams(await startBufferConnect(moved.owner)).get("state")!, code: "synthetic-code" }, { fetchImpl: otherOrg.fetchImpl });
+      assert.equal(await selections(), 0, "reconnecting a different organization clears the selection");
+
       delete process.env.BUFFER_CLIENT_ID;
-      const notConfigured = await callback(callbackRequest({ state: "anything", code: "anything" }));
+      const notConfigured = await callback(callbackRequest({ state: "anything", code: "anything" }, await signIn(f.owner)));
       assert.equal(notConfigured.status, 302);
       assert.equal(notConfigured.headers.get("location"), "http://localhost/connections?buffer=not_configured");
       process.env.BUFFER_CLIENT_ID = "synthetic-client-id";

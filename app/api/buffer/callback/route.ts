@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ownerId } from "../../../../lib/authorization";
 import { recordFailure, tooManyFailures } from "../../../../lib/mobileSignIn";
 import { clientIp } from "../../../../lib/requestIp";
 import {
@@ -7,9 +8,13 @@ import {
   type BufferOutcome
 } from "../../../../lib/services/bufferConnection";
 
-// Public by design: Buffer sends the owner's browser here without the session
-// cookie. The single-use state row is what authenticates the completion, so the
-// route never trusts a cookie and never answers 5xx to a browser redirect flow.
+// Public to the route guard (Buffer's redirect carries no bearer token and no CSRF
+// header), but NOT anonymous: the browser must be signed in as the same owner who
+// started the flow. The single-use state row alone is not enough. Without the
+// session check, an attacker could start a connect on their own account and send
+// the Buffer link to a victim, attaching the victim's Buffer account to the
+// attacker's PraiseLoop account (login CSRF). The route never answers 5xx to a
+// browser redirect flow.
 export const dynamic = "force-dynamic";
 
 function destination(req: NextRequest, outcome: BufferOutcome) {
@@ -34,10 +39,19 @@ export async function GET(req: NextRequest) {
   const ip = clientIp(req);
   if (tooManyFailures(ip)) return destination(req, "failed");
 
+  // The signed-in owner of this browser. A missing session, or a different owner
+  // than the one who started the flow, consumes nothing and stores nothing.
+  const owner = await ownerId(req);
+  if (!owner) {
+    recordFailure(ip);
+    return destination(req, "failed");
+  }
+
   try {
     const result = await completeBufferConnect({
       state: req.nextUrl.searchParams.get("state"),
-      code: req.nextUrl.searchParams.get("code")
+      code: req.nextUrl.searchParams.get("code"),
+      ownerId: owner
     });
     return destination(req, result.outcome);
   } catch (failure) {
