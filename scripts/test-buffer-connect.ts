@@ -506,6 +506,23 @@ async function main() {
         "a channel fetched for the old organization is never saved"
       );
 
+      // A 401 for an OLD token must not disable a connection the owner has since re-authorized
+      // (review finding on #196): the owner reconnects while the channel list is in flight.
+      const stale = await seedOwner(client, "buffer-stale");
+      await seedConnection(client, stale.owner);
+      const reconnectsThenRejects = bufferFetch({
+        api: async () => {
+          await seedConnection(client, stale.owner, { accessToken: "reconnected-access", refreshToken: "reconnected-refresh" });
+          return json({ errors: [{ message: "unauthorized" }] }, 401);
+        }
+      });
+      await assert.rejects(
+        listBufferChannels(stale.owner, { fetchImpl: reconnectsThenRejects.fetchImpl }),
+        (error: unknown) => error instanceof BufferConnectionError && error.code === "connection_changed" && error.status === 409
+      );
+      assert.equal(await connectionStatus(client, stale.owner), "active", "a stale 401 leaves the new connection active");
+      assert.equal(await getBufferAccessToken(stale.owner), "reconnected-access", "and the new token is still the stored one");
+
       // Connection summary: no connection, active with channels, and a failed list.
       assert.deepEqual(await getBufferConnection(foreignBusiness.owner), { connected: false, status: null, channels: [] });
       assert.deepEqual(await getBufferConnection(m.owner, { fetchImpl: selectable.fetchImpl }), {
