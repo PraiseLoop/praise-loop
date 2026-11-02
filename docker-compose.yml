@@ -1,8 +1,16 @@
 # Production-style stack: multi-stage builds, npm ci, healthchecks,
 # bounded shutdown. For local development with hot reload, use
 # docker-compose.dev.yml as an override (see docs/development.md).
+# Container logs are rotated so they cannot fill the disk, and old log lines are deleted
+# automatically: at most 3 files of 10 MB per service. The privacy policy relies on this.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 services:
   migrate:
+    logging: *logging
     image: ghcr.io/iamstevedavis/praise-loop-worker:${PRAISELOOP_TAG:-latest}
     build:
       context: .
@@ -18,6 +26,7 @@ services:
     restart: "no"
 
   web:
+    logging: *logging
     image: ghcr.io/iamstevedavis/praise-loop-web:${PRAISELOOP_TAG:-latest}
     build:
       context: .
@@ -63,6 +72,7 @@ services:
     restart: unless-stopped
 
   worker:
+    logging: *logging
     image: ghcr.io/iamstevedavis/praise-loop-worker:${PRAISELOOP_TAG:-latest}
     build:
       context: .
@@ -88,6 +98,7 @@ services:
     restart: unless-stopped
 
   postgres:
+    logging: *logging
     image: postgres:16-alpine
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
@@ -104,6 +115,7 @@ services:
       retries: 20
 
   redis:
+    logging: *logging
     image: redis:7-alpine
     ports: ["127.0.0.1:6379:6379"]
     volumes: ["redis_data:/data"]

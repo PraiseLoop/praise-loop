@@ -9,8 +9,16 @@
 # Everything else is optional and mirrors .env.example. Keep this file in step with
 # docker-compose.yml and docker-compose.pilot.yml; scripts/test-tooling.ts fails
 # when a variable they pass is missing here.
+# Container logs are rotated so they cannot fill the disk, and old log lines are deleted
+# automatically: at most 3 files of 10 MB per service. The privacy policy relies on this.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 services:
   migrate:
+    logging: *logging
     image: ghcr.io/iamstevedavis/praise-loop-worker:${PRAISELOOP_TAG:-latest}
     environment:
       - NODE_ENV=production
@@ -22,6 +30,7 @@ services:
     restart: "no"
 
   web:
+    logging: *logging
     image: ghcr.io/iamstevedavis/praise-loop-web:${PRAISELOOP_TAG:-latest}
     environment:
       - NODE_ENV=production
@@ -61,6 +70,7 @@ services:
     restart: unless-stopped
 
   worker:
+    logging: *logging
     image: ghcr.io/iamstevedavis/praise-loop-worker:${PRAISELOOP_TAG:-latest}
     environment:
       - NODE_ENV=production
@@ -83,6 +93,7 @@ services:
     restart: unless-stopped
 
   postgres:
+    logging: *logging
     image: postgres:16-alpine
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
@@ -97,11 +108,13 @@ services:
     restart: unless-stopped
 
   redis:
+    logging: *logging
     image: redis:7-alpine
     volumes: ["redis_data:/data"]
     restart: unless-stopped
 
   cloudflared:
+    logging: *logging
     image: cloudflare/cloudflared:2025.9.1
     command: ["tunnel", "--no-autoupdate", "run"]
     environment:

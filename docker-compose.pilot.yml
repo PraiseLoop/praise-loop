@@ -13,6 +13,11 @@ services:
       - TRUST_PROXY_HEADERS=1
 
   cloudflared:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     image: cloudflare/cloudflared:2025.9.1
     command: ["tunnel", "--no-autoupdate", "run"]
     environment:

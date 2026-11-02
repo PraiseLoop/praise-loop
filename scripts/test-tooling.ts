@@ -76,6 +76,22 @@ for (const service of ["migrate", "web", "worker", "postgres"]) {
     assert.ok(have.has(name), `docker-compose.standalone.yml ${service} is missing ${name}, which docker-compose.yml passes`);
   }
 }
+// Container logs rotate (3 files of 10 MB per service) so they cannot fill the disk and old lines are deleted
+// automatically; the published privacy policy states this. Every service in the production-style stacks needs it.
+const servicesIn = (text: string): string[] => {
+  const start = text.indexOf("\nservices:");
+  const end = text.indexOf("\nvolumes:");
+  const body = text.slice(start, end === -1 ? undefined : end);
+  return [...body.matchAll(/^ {2}([a-z_-]+):$/gm)].map((m) => m[1]);
+};
+for (const file of ["docker-compose.yml", "docker-compose.standalone.yml"]) {
+  const text = read(file);
+  assert.match(text, /x-logging: &logging\n {2}driver: json-file\n {2}options:\n {4}max-size: "10m"\n {4}max-file: "3"/, `${file} must define bounded log rotation`);
+  for (const name of servicesIn(text)) {
+    assert.match(serviceBlock(text, name), /^ {4}logging: \*logging$/m, `${file}: service ${name} must use the rotated log settings`);
+  }
+}
+assert.match(serviceBlock(read("docker-compose.pilot.yml"), "cloudflared"), /max-size: "10m"[\s\S]*max-file: "3"/, "the pilot overlay's cloudflared must rotate logs too");
 for (const f of ["backup.sh", "restore.sh", "healthcheck.sh"]) {
   assert.match(read(`ops/${f}`), /^#!\/usr\/bin\/env bash\nset -euo pipefail|^#!\/usr\/bin\/env bash\n(#.*\n)+set -euo pipefail/, `${f} must fail fast`);
 }
