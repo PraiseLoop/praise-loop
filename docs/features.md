@@ -196,8 +196,20 @@ allows 1,000 requests per channel per month), and stop at `sent` or `error`.
 
 ### How to roll back
 
-Set `BUFFER_POSTING_MODE=off` and redeploy; queued posts wait and are marked `missed` after 2 hours. The
-migration only adds columns and widens a check, so the previous image keeps working.
+Set `BUFFER_POSTING_MODE=off` and redeploy; queued posts wait and are marked `missed` after 2 hours.
+**Roll back with the gate, not the image.** The migration only adds columns and widens a check, but the
+previous image predates the new claim states: its slot assignment would leave claims it cannot clean up,
+and a claim blocks editing its draft. If an older image must run, delete the `queued` claims and set
+those drafts back to `approved` first.
+
+### Not built yet
+
+- No status display on the Approval, Schedule or phone screens (the claim and `external_link` are stored).
+- An `unknown` post has no way out for the owner yet: it stays `scheduled`, cannot be cancelled here and
+  blocks editing. Until that exists, keep `draft` mode to one supervised test.
+- Instagram **Creator** accounts: Buffer's channel `type` has no "creator" value, so a Creator account is
+  allowed only if Buffer reports it as `business`. Unverified; check on the first real channel.
+- Channels saved before migration 021 have no recorded type and are refused until chosen again.
 
 ## Buffer connections screen (#29 part 2)
 

@@ -36,7 +36,7 @@ async function main(){
     // A channel is needed first, and it must be able to post by itself.
     assert.equal((await assign("slot-owner",a,future[0]))[0].status,409);
     await channel("instagram","personal");
-    assert.match(String((await assign("slot-owner",a,future[0]))[0].error),/Business or Creator/);
+    assert.match(String((await assign("slot-owner",a,future[0]))[0].error),/reports as a Business account/);
     await channel("instagram","");
     assert.equal((await assign("slot-owner",a,future[0]))[0].status,409,"a channel saved before types were recorded is refused until chosen again");
     await c.query("UPDATE buffer_connections SET status='needs_reconnect' WHERE id=$1",[connection]);

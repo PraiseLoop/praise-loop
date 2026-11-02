@@ -208,11 +208,21 @@ async function submitNextDue(mode: "draft" | "live", now: () => number, deps: Po
       await finish((c) => c.query("UPDATE posting_slot_claims SET state='queued',image_token_hash=NULL,updated_at=now() WHERE draft_id=$1 AND state='submitting'", [reserved.draftId]));
       return "requeued";
     }
-    if (error instanceof SchedulerAuthError || (error instanceof BufferConnectionError && error.code === "needs_reconnect")) {
+    if (error instanceof BufferConnectionError) {
+      // Getting a token failed, so nothing was sent. A passing failure (a network blip during refresh) is
+      // retried on a later tick within the lateness window; a state the owner must fix is a visible failure.
+      if (error.code === "failed" || error.code === "expired") {
+        await finish((c) => c.query("UPDATE posting_slot_claims SET state='queued',image_token_hash=NULL,updated_at=now() WHERE draft_id=$1 AND state='submitting'", [reserved.draftId]));
+        return "requeued";
+      }
+      await finish((c) => settle(c, reserved.draftId, ["submitting"], "error", "failed", { errorCode: error.code, revoke: true }));
+      return "failed";
+    }
+    if (error instanceof SchedulerAuthError) {
       await finish((c) => settle(c, reserved.draftId, ["submitting"], "error", "failed", { errorCode: "needs_reconnect", revoke: true }));
       return "failed";
     }
-    if (error instanceof SchedulerRejected || (error instanceof BufferConnectionError)) {
+    if (error instanceof SchedulerRejected) {
       await finish((c) => settle(c, reserved.draftId, ["submitting"], "error", "failed", { errorCode: "rejected", revoke: true }));
       return "failed";
     }

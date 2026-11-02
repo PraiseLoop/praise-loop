@@ -26,8 +26,6 @@ export function draftMutation(action: string, work: (req: NextRequest, context: 
     if(["scheduled","published"].includes(row.status))return error("Use explicit provider cancel/reschedule before editing");
     if(row.status==="shared")return error("This post was shared from your phone and is read-only");
     if((await c.query("SELECT 1 FROM posting_slot_claims WHERE draft_id=$1 AND state IN ('queued','submitting','submitted','unknown')",[row.id])).rowCount)return error("Resolve provider scheduling/cancellation before editing");
-    // A failed, missed or drafted earlier attempt is history; editing the post starts over.
-    await c.query("DELETE FROM posting_slot_claims WHERE draft_id=$1 AND state IN ('error','missed','drafted')",[row.id]);
     if(action==="schedule")return error("Scheduling requires the verified scheduler integration");
     if(row.status==="archived" && !(action==="status" && body.status==="draft"))return error("Restore archived content before editing");
     if(action==="status" && !["draft","approved","archived","shared"].includes(body.status))return error("Invalid transition",400);
@@ -39,6 +37,8 @@ export function draftMutation(action: string, work: (req: NextRequest, context: 
     await c.query("SELECT set_config('app.actor_id',$1,true),set_config('app.action',$2,true),set_config('app.reason',$3,true)",[owner,action,action === "status" && body.status === "shared" ? "owner_shared" : action === "status" && typeof body.auditNote === "string" && body.auditNote.trim() ? body.auditNote.trim() : `${action}:${action==='status'?body.status:'explicit_owner_action'}`]);
     const response=await work(req,context);
     if(!response.ok)return response;
+    // A failed, missed or drafted earlier attempt is history; an edit that went through starts over. A refused edit leaves it.
+    await c.query("DELETE FROM posting_slot_claims WHERE draft_id=$1 AND state IN ('error','missed','drafted')",[row.id]);
     if(archiving)await c.query("UPDATE generation_jobs SET state='failed',lease=NULL,error_code='archived' WHERE draft_id=$1 AND state IN ('pending','running','retry')",[row.id]);
     if(!["status","retry","captions"].includes(action))await c.query("UPDATE draft_posts SET status='draft',updated_at=now() WHERE id=$1",[row.id]);
     const draft=(await c.query("SELECT * FROM draft_posts WHERE id=$1",[row.id])).rows[0];
