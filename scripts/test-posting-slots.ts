@@ -3,8 +3,10 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
+import { NextRequest } from "next/server";
+import { sessionHash } from "../lib/auth-adapter";
 import { databaseFixture } from "./db-fixture";
-import { proposeSlots,defaultPostingSlots,localSlotInstant,validateSlots,assignSlots,cancelScheduled } from "../lib/services/postingSlots";
+import { proposeSlots,defaultPostingSlots,localSlotInstant,validateSlots,assignSlots,cancelScheduled,resolveUnknown } from "../lib/services/postingSlots";
 async function main(){
   assert.equal(localSlotInstant("2026-03-08","02:30","America/New_York"),"2026-03-08T07:00:00.000Z");
   assert.equal(localSlotInstant("2026-11-01","01:30","America/New_York"),"2026-11-01T05:30:00.000Z");
@@ -22,6 +24,7 @@ async function main(){
   const realFetch=globalThis.fetch;let networkCalls=0;globalThis.fetch=(async()=>{networkCalls++;throw new Error("no network in the slot tests");}) as typeof fetch;
   try{await databaseFixture(async c=>{
     await c.query("INSERT INTO auth_users(id,email) VALUES('slot-owner','slots@example.invalid'),('foreign-owner','foreign@example.invalid')");
+    await c.query("INSERT INTO auth_sessions VALUES($1,'slot-owner',now()+interval '1 hour')",[sessionHash("slot-session")]);
     const bid=(await c.query("INSERT INTO businesses(name,timezone,owner_id) VALUES('Synthetic slots','UTC','slot-owner') RETURNING id")).rows[0].id;
     const connection=Number((await c.query("INSERT INTO buffer_connections(owner_id,organization_id,encrypted_access_token,encrypted_refresh_token,access_expires_at,scope) VALUES('slot-owner','org','a','r',now()+interval '1 hour','s') RETURNING id")).rows[0].id);
     const channel=(service:string,type:string)=>c.query("INSERT INTO business_buffer_channels(business_id,connection_id,channel_id,channel_name,service,channel_type) VALUES($1,$2,'ch1','Synthetic channel',$3,$4) ON CONFLICT(business_id) DO UPDATE SET service=EXCLUDED.service,channel_type=EXCLUDED.channel_type",[bid,connection,service,type]);
@@ -80,6 +83,20 @@ async function main(){
     assert.equal((await assign("slot-owner",won,future[1]))[0].status,200);
     assert.deepEqual((await c.query("SELECT state,error_code FROM posting_slot_claims WHERE draft_id=$1",[won])).rows,[{state:"queued",error_code:null}]);
     assert.equal(networkCalls,0,"reserving and cancelling never touch the network");
+    // An unknown post: only its owner can resolve it, only while it is unknown, and either answer revokes the link.
+    for(const [outcome,slotIndex,draftStatus,claimState] of [["posted",2,"shared","sent"],["not_posted",3,"failed","error"]] as const){
+      const u=await draft();
+      assert.equal((await assign("slot-owner",u,future[slotIndex]))[0].status,200);
+      assert.equal((await resolveUnknown("slot-owner",u,outcome)).status,409,"a queued post does not need checking");
+      await c.query("UPDATE posting_slot_claims SET state='unknown',error_code='ambiguous',image_token_hash='abc',image_expires_at=now()+interval '1 day' WHERE draft_id=$1",[u]);
+      assert.equal((await resolveUnknown("foreign-owner",u,outcome)).status,404);
+      assert.equal((await resolveUnknown("slot-owner",u,outcome)).status,200);
+      const after=(await c.query("SELECT c.state,c.image_token_hash,d.status FROM posting_slot_claims c JOIN draft_posts d ON d.id=c.draft_id WHERE c.draft_id=$1",[u])).rows[0];
+      assert.deepEqual([after.state,after.image_token_hash,after.status],[claimState,null,draftStatus]);
+      assert.equal((await resolveUnknown("slot-owner",u,outcome)).status,409,"resolving twice does nothing");
+    }
+    const listed=await (await require("../app/api/drafts/route").GET(new NextRequest(`http://localhost/api/drafts?businessId=${bid}`,{headers:{cookie:"next-auth.session-token=slot-session"}}))).json();
+    assert.ok(listed.drafts.every((x:Record<string,unknown>)=>"posting_mode" in x&&"posting_link" in x&&!("image_token_hash" in x)),"the list shows posting details and never the token hash");
     const confirmed=(await c.query("SELECT scheduled_for FROM draft_posts WHERE status='scheduled'")).rows[0].scheduled_for;
     await c.query("UPDATE businesses SET timezone='America/New_York' WHERE id=$1",[bid]);
     assert.equal((await c.query("SELECT scheduled_for FROM draft_posts WHERE status='scheduled'")).rows[0].scheduled_for.toISOString(),confirmed.toISOString());

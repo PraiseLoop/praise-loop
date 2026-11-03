@@ -22,6 +22,7 @@ async function handleGET(req: NextRequest) {
     `SELECT d.id, d.version, d.review_id, d.quote_text, d.caption_text, d.image_path, d.status, d.audit_note,
       d.scheduled_for::text, d.created_at::text,r.rating,r.author_name,r.reviewed_at::text,r.source,r.source_url,
       j.state AS job_state,j.error_code,j.manual_retries,s.state AS provider_state,
+      s.mode AS posting_mode,s.error_code AS posting_error_code,s.external_link AS posting_link,s.sent_at::text AS posting_sent_at,
       (SELECT json_agg(e ORDER BY e.id) FROM (SELECT id,action,reason,actor_id,from_status,to_status,at FROM draft_events WHERE draft_id=d.id ORDER BY id DESC LIMIT 20) e) AS history
      FROM draft_posts d LEFT JOIN reviews r ON r.id=d.review_id AND r.business_id=d.business_id
      LEFT JOIN generation_jobs j ON j.draft_id=d.id
