@@ -204,8 +204,10 @@ those drafts back to `approved` first.
 
 ### Not built yet
 
-- The web approval cards show the posting status and let the owner cancel a queued post; the phone app still shows nothing.
-- The owner resolves an `unknown` post from its web approval card by saying whether it was posted; the phone app still shows nothing.
+- The phone app shows nothing about posting yet. On the web the approval cards show the status, let the
+  owner cancel a queued post, and let them say whether an `unknown` post went out (recorded as
+  owner-reported, never as verified). Still, keep `draft` mode to one supervised test until a real
+  Buffer round trip has been seen.
 - Instagram **Creator** accounts: Buffer's channel `type` has no "creator" value, so a Creator account is
   allowed only if Buffer reports it as `business`. Unverified; check on the first real channel.
 - Channels saved before migration 021 have no recorded type and are refused until chosen again.
