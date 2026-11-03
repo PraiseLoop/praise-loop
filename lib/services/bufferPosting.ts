@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { query, transaction } from "../db";
+import { errorFields, log } from "../log";
 import { BufferSchedulerAdapter, SchedulerAmbiguous, SchedulerAuthError, SchedulerRateLimited, SchedulerRejected } from "../integrations/buffer";
 import type { SchedulerAdapter } from "../integrations/scheduler";
 import { availableImage } from "./draftLifecycle";
@@ -83,6 +84,7 @@ async function settle(c: Tx, draftId: number, from: string[], state: string, dra
     [draftId, state, fields.errorCode ?? null, fields.bufferStatus ?? null, fields.revoke ?? false, from]
   );
   if (!moved.rowCount) return false;
+  (state === "error" || state === "missed" || state === "unknown" ? log.warn : log.info)("posting_claim_settled", { draftId, to: state, draftStatus, errorCode: fields.errorCode, bufferStatus: fields.bufferStatus ?? undefined });
   await audit(c, "posting", `${state}${fields.errorCode ? `:${fields.errorCode}` : ""}`);
   await c.query("UPDATE draft_posts SET status=$2,updated_at=now() WHERE id=$1 AND status='scheduled'", [draftId, draftStatus]);
   return true;
@@ -115,6 +117,8 @@ export async function postingTick(deps: PostingDeps = {}): Promise<PostingTickRe
     [new Date(now() - STALE_SUBMITTING_MS).toISOString()]
   );
   result.unknown += stale.rowCount ?? 0;
+  if (stale.rowCount) log.warn("posting_interrupted_submissions", { count: stale.rowCount });
+  log.debug("posting_tick_start", { mode });
 
   // A post that waited past the lateness window is shown as failed rather than going out at a surprising time.
   const late = await query<{ draft_id: string }>(
@@ -126,7 +130,7 @@ export async function postingTick(deps: PostingDeps = {}): Promise<PostingTickRe
     if (done) result.missed += 1;
   }
 
-  if (mode === "off") return result;
+  if (mode === "off") { log.debug("posting_gate_off", { note: "BUFFER_POSTING_MODE is not draft or live, so nothing is sent to Buffer" }); return result; }
   for (let i = 0; i < BATCH; i++) {
     const outcome = await submitNextDue(mode, now, deps);
     if (!outcome) break;
@@ -178,12 +182,14 @@ async function submitNextDue(mode: "draft" | "live", now: () => number, deps: Po
   if (reserved === "failed") return "failed";
 
   // "submitting" is committed. From here on nothing may submit this post a second time.
+  log.info("posting_submit_started", { draftId: reserved.draftId, mode });
   const finish = async (fn: (c: Tx) => Promise<unknown>): Promise<boolean> => {
     try { await transaction(async (c) => { await fn(c); }); return true; } catch { return false; }
   };
   try {
     const adapter = await (deps.adapterFor ?? defaultAdapterFor)({ ownerId: reserved.ownerId, channelId: reserved.channelId, mode });
     const receipt = await adapter.submitPost({ draftPostId: reserved.draftId, businessId: reserved.businessId, captionText: reserved.caption, mediaUrl: publicImageUrl(reserved.token, deps.env)! });
+    log.info("posting_submit_accepted", { draftId: reserved.draftId, mode, bufferStatus: receipt.status });
     if (mode === "draft") {
       // Saved as a Buffer draft: nothing was published, so the post returns to "approved".
       await finish(async (c) => {
@@ -203,6 +209,7 @@ async function submitNextDue(mode: "draft" | "live", now: () => number, deps: Po
     // Accepted by Buffer but not recorded here: it stays "submitting" and the sweep marks it unknown.
     return saved ? "submitted" : "unknown";
   } catch (error) {
+    log.warn("posting_submit_failed", { draftId: reserved.draftId, mode, kind: error instanceof Error ? error.constructor.name : "unknown", ...errorFields(error) });
     if (error instanceof SchedulerRateLimited) {
       // Rejected before processing: safe to try again on a later tick, within the lateness window.
       await finish((c) => c.query("UPDATE posting_slot_claims SET state='queued',image_token_hash=NULL,updated_at=now() WHERE draft_id=$1 AND state='submitting'", [reserved.draftId]));
@@ -255,6 +262,7 @@ async function reconcileSubmitted(now: () => number, deps: PostingDeps, result: 
     try {
       const adapter = await (deps.adapterFor ?? defaultAdapterFor)({ ownerId: claim.owner_id, channelId: claim.channel_id ?? "", mode: claim.mode });
       const status = await adapter.getPostStatus(claim.external_id);
+      log.debug("posting_status_checked", { draftId, check: checks, bufferStatus: status.status });
       if (status.status === "sent") {
         await transaction(async (c) => {
           if (await settle(c, draftId, ["submitted"], "sent", "published", { bufferStatus: status.status, revoke: true })) {
@@ -270,8 +278,9 @@ async function reconcileSubmitted(now: () => number, deps: PostingDeps, result: 
         continue;
       }
       await recheckLater(draftId, checks, status.status, now, result);
-    } catch {
+    } catch (error) {
       // A failed status read changes nothing about the post. Try again later, within the budget.
+      log.warn("posting_status_check_failed", { draftId, check: checks, ...errorFields(error) });
       await recheckLater(draftId, checks, null, now, result);
     }
   }

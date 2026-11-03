@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { query, transaction } from "../db";
 import { decryptCredential, encryptCredential, loadKey } from "../integrations/credentials";
+import { log } from "../log";
 
 // Buffer OAuth connect (#29): authorization-code flow with PKCE (S256) and a
 // confidential client. Refresh tokens are single use, so refreshing is serialized
@@ -91,6 +92,23 @@ function tokensFrom(value: unknown): TokenSet | null {
   };
 }
 
+function tokenProblems(value: unknown): string[] {
+  if (!value || typeof value !== "object") return ["response_not_an_object"];
+  const body = value as Record<string, unknown>;
+  const problems: string[] = [];
+  if (typeof body.access_token !== "string" || !body.access_token) problems.push("access_token");
+  if (typeof body.refresh_token !== "string" || !body.refresh_token) problems.push("refresh_token");
+  if (typeof body.expires_in !== "number" || !Number.isFinite(body.expires_in) || body.expires_in <= 0) problems.push("expires_in");
+  if (typeof body.scope !== "string") problems.push("scope");
+  return problems;
+}
+
+// A failed step is logged with what is safe and useful: the step, an HTTP status, Buffer's short
+// error name, and which response fields were missing. Never a code, state, verifier, secret or token.
+function connectFailed(step: string, fields: Record<string, unknown> = {}) {
+  log.warn("buffer_connect_failed", { step, ...fields });
+}
+
 async function tokenRequest(fetchImpl: typeof fetch, form: Record<string, string>) {
   return fetchImpl(TOKEN_URL, {
     method: "POST",
@@ -114,15 +132,20 @@ async function firstOrganization(fetchImpl: typeof fetch, accessToken: string): 
   try {
     response = await graphql(fetchImpl, accessToken, ORGANIZATIONS_QUERY);
   } catch {
+    connectFailed("organization_lookup_network");
     throw new BufferConnectionError("failed", 502);
   }
-  if (!response.ok) throw new BufferConnectionError("failed", 502);
+  if (!response.ok) { connectFailed("organization_lookup_rejected", { httpStatus: response.status }); throw new BufferConnectionError("failed", 502); }
   const body = await response.json().catch(() => null) as
-    | { data?: { account?: { organizations?: { id?: unknown }[] } }; errors?: unknown[] }
+    | { data?: { account?: { organizations?: { id?: unknown }[] } }; errors?: { message?: unknown; extensions?: { code?: unknown } }[] }
     | null;
-  if (!body || body.errors?.length) throw new BufferConnectionError("failed", 502);
+  if (!body || body.errors?.length) {
+    const code = body?.errors?.[0]?.extensions?.code;
+    connectFailed("organization_lookup_errors", { errorCount: body?.errors?.length ?? 0, graphqlCode: typeof code === "string" && /^[A-Z_]{1,40}$/.test(code) ? code : undefined });
+    throw new BufferConnectionError("failed", 502);
+  }
   const organizations = body.data?.account?.organizations;
-  if (!Array.isArray(organizations)) throw new BufferConnectionError("failed", 502);
+  if (!Array.isArray(organizations)) { connectFailed("organization_lookup_unexpected_shape"); throw new BufferConnectionError("failed", 502); }
   const id = organizations.find((organization) => typeof organization?.id === "string" && organization.id)?.id;
   return typeof id === "string" ? id : null;
 }
@@ -185,7 +208,7 @@ export async function completeBufferConnect(
   if (!cfg) throw new BufferConnectionError("not_configured", 503);
   const state = typeof input.state === "string" ? input.state : "";
   const code = typeof input.code === "string" ? input.code : "";
-  if (!state || !code) throw new BufferConnectionError("failed", 400);
+  if (!state || !code) { connectFailed("missing_state_or_code", { hasState: !!state, hasCode: !!code }); throw new BufferConnectionError("failed", 400); }
 
   const consumed = await query<{ owner_id: string; encrypted_code_verifier: string }>(
     `DELETE FROM buffer_oauth_states
@@ -194,12 +217,14 @@ export async function completeBufferConnect(
     [sha256(state), input.ownerId ?? null]
   );
   const row = consumed.rows[0];
-  if (!row) throw new BufferConnectionError("expired", 400);
+  if (!row) { connectFailed("state_unknown_expired_or_other_owner"); throw new BufferConnectionError("expired", 400); }
 
   let verifier: string;
   try {
     verifier = decryptCredential(row.encrypted_code_verifier, verifierAad(row.owner_id));
   } catch {
+    // Usually CREDENTIAL_ENCRYPTION_KEY changed between starting and finishing the connection.
+    connectFailed("verifier_cannot_be_decrypted");
     throw new BufferConnectionError("failed", 400);
   }
 
@@ -215,13 +240,26 @@ export async function completeBufferConnect(
       code_verifier: verifier
     });
   } catch {
+    connectFailed("token_request_network");
     throw new BufferConnectionError("failed", 502);
   }
-  const tokens = response.ok ? tokensFrom(await response.json().catch(() => null)) : null;
-  if (!tokens) throw new BufferConnectionError("failed", 400);
+  const tokenBody = await response.json().catch(() => null);
+  const tokens = response.ok ? tokensFrom(tokenBody) : null;
+  if (!tokens) {
+    const named = tokenBody && typeof tokenBody === "object" ? (tokenBody as Record<string, unknown>).error : undefined;
+    const description = tokenBody && typeof tokenBody === "object" ? (tokenBody as Record<string, unknown>).error_description : undefined;
+    connectFailed(response.ok ? "token_response_unusable" : "token_request_rejected", {
+      httpStatus: response.status,
+      bufferError: typeof named === "string" && /^[a-z_]{1,40}$/.test(named) ? named : undefined,
+      missingFields: response.ok ? tokenProblems(tokenBody) : undefined
+    });
+    if (typeof description === "string") log.debug("buffer_token_error_detail", { description });
+    throw new BufferConnectionError("failed", 400);
+  }
 
   const organizationId = await firstOrganization(fetchImpl, tokens.accessToken);
-  if (!organizationId) throw new BufferConnectionError("no_organization", 400);
+  if (!organizationId) { connectFailed("account_has_no_organization"); throw new BufferConnectionError("no_organization", 400); }
+  log.debug("buffer_connect_exchange_ok", { grantedScopes: tokens.scope.split(/\s+/).slice(0, 10) });
 
   const now = (deps.now ?? Date.now)();
   await transaction(async () => {

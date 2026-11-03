@@ -329,6 +329,36 @@ runs as its own stack and reaches the app over a shared Docker network.
   file and the stack's project name: set `COMPOSE="docker compose -p <stack name> -f docker-compose.standalone.yml"`
   (with the variables exported) when running them from a checkout on the server.
 
+### Logging
+
+Both containers (web and worker) write one JSON object per line to stdout/stderr (`docker logs`,
+or the logs view in Dockhand). There are two modes, chosen with `APP_ENV`:
+
+| | `APP_ENV=prod` (the default) | `APP_ENV=dev` |
+| --- | --- | --- |
+| Level | `info` | `debug` |
+| Shown | startup line, warnings, errors, ticks that did something | everything in prod, plus **every API request** (method, path without the query, status, milliseconds, why it was refused), every worker tick, every posting decision, each failed step with its cause, and error messages |
+
+`LOG_LEVEL` (`debug`, `info`, `warn`, `error`) overrides the mode. Set `APP_ENV=dev` in the Dockhand
+stack for the dev site and leave it unset (or `prod`) for production.
+
+What is logged in **both** modes, and so is safe to keep: ids, states, HTTP statuses, short error
+names and codes, counts, durations, and whether a setting is present. **Never** logged: tokens, client
+secrets, OAuth `code`/`state`/verifier, cookies or Authorization headers, request bodies or query strings,
+captions, quotes, review text, email addresses. `lib/log.ts` enforces this by field name and replaces any
+long token-like string, so a careless call site still cannot leak; `scripts/test-log.ts` proves it.
+
+Where to look:
+
+- On start, `web_started` and `worker_started` list how the process was configured (presence only), so
+  a missing `BUFFER_CLIENT_SECRET`, an `http://` `NEXTAUTH_URL` or `postingMode: "off"` is visible at once.
+- A server error in any API route is always logged as `request_failed` (it used to be swallowed).
+- Connecting Buffer: a failed step logs `buffer_connect_failed` with the `step`
+  (`token_request_rejected`, `token_response_unusable` with `missingFields`, `organization_lookup_*`,
+  `verifier_cannot_be_decrypted`, ...), the HTTP status and Buffer's short error name.
+- Posting: `posting_submit_started`, `posting_submit_accepted`, `posting_claim_settled`,
+  `posting_status_checked`, and `posting_gate_off` when `BUFFER_POSTING_MODE` stops everything.
+
 ### Log rotation
 
 Docker keeps each container's output in a log file that grows without limit by default.
