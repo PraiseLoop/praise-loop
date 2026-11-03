@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
 import Icon from "../ui/Icon";
+import { postingView } from "../../lib/posting/postingView";
 
 export type Draft = {
   id: number; version: number;
   rating?: number | null; author_name?: string | null; reviewed_at?: string | null; source?: string | null; source_url?: string | null;
   provider_state?: string | null; job_state?: string | null; error_code?: string | null;
+  posting_mode?: string | null; posting_error_code?: string | null; posting_link?: string | null; posting_sent_at?: string | null;
   review_id: number | null;
   quote_text: string;
   caption_text: string;
@@ -69,6 +71,7 @@ export default function PostCard({ draft, run, busy }: { draft: Draft; run: Acti
   const changed = caption !== draft.caption_text;
   const editable = stage === "ready" || (stage === "approved" && editing);
   const [badgeClass, badgeText] = badges[stage];
+  const posting = postingView(draft);
 
   async function saveCaption() {
     if (await run("/api/drafts/caption", draft, { captionText: caption })) setEditing(false);
@@ -92,7 +95,7 @@ export default function PostCard({ draft, run, busy }: { draft: Draft; run: Acti
         </div>
 
         {stage === "making" ? <p className="pl-caption-text pl-muted">{making[draft.job_state ?? ""] ?? "Getting this post ready…"}</p> : null}
-        {stage === "failed" ? (
+        {stage === "failed" && !posting ? (
           <p className="pl-caption-text">
             {failures[draft.error_code ?? ""] ?? "Something went wrong making this post."} Your quote is saved — try again.
             {draft.error_code ? <span className="pl-small pl-muted" style={{ display: "block", marginTop: 4 }}>Error code: {draft.error_code}</span> : null}
@@ -114,7 +117,27 @@ export default function PostCard({ draft, run, busy }: { draft: Draft; run: Acti
           </details>
         ) : null}
 
+        {posting ? (
+          <div role="status">
+            <p className="pl-caption-text"><strong>{posting.headline}</strong></p>
+            {posting.detail ? <p className="pl-small pl-muted">{posting.detail}</p> : null}
+            {posting.link ? <p className="pl-small"><a href={posting.link} target="_blank" rel="noreferrer">See the post</a></p> : null}
+          </div>
+        ) : null}
+
         <div className="pl-card-actions">
+          {posting?.actions.includes("cancel") ? (
+            <button type="button" className="pl-btn pl-grow" disabled={busy} onClick={() => void run("/api/posting-slots/cancel", draft)}>Cancel scheduling</button>
+          ) : null}
+          {posting?.actions.includes("posted") ? (
+            <button type="button" className="pl-btn pl-grow" disabled={busy} onClick={() => void run("/api/posting-slots/resolve", draft, { outcome: "posted" })}>It was posted</button>
+          ) : null}
+          {posting?.actions.includes("not_posted") ? (
+            <button type="button" className="pl-btn pl-grow" disabled={busy} onClick={() => void run("/api/posting-slots/resolve", draft, { outcome: "not_posted" })}>It wasn’t posted</button>
+          ) : null}
+          {posting?.actions.includes("approve_again") ? (
+            <button type="button" className="pl-btn pl-btn-primary pl-grow" disabled={busy} onClick={() => void run("/api/drafts/status", draft, { status: "approved" })}>Approve again</button>
+          ) : null}
           {editable && changed ? (
             <>
               <button type="button" className="pl-btn pl-btn-primary pl-grow" disabled={busy || !caption.trim()} onClick={() => void saveCaption()}>Save caption</button>

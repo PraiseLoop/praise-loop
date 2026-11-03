@@ -57,7 +57,9 @@ export default function ThisWeekPage() {
         const done: Record<string, string> = {
           "/api/drafts/caption": "Caption saved",
           "/api/generation/regenerate": "Making a new version — it’ll appear here shortly",
-          "/api/generation/retry": "Trying again — it’ll appear here shortly"
+          "/api/generation/retry": "Trying again — it’ll appear here shortly",
+          "/api/posting-slots/cancel": "Cancelled. It’s back in Approved.",
+          "/api/posting-slots/resolve": "Thanks — noted."
         };
         setMessage(path === "/api/drafts/status"
           ? { approved: "Approved", archived: "Skipped. You can bring it back below.", draft: "Moved back to review" }[String(extra.status)] ?? "Saved"
