@@ -204,9 +204,8 @@ those drafts back to `approved` first.
 
 ### Not built yet
 
-- No status display on the Approval, Schedule or phone screens (the claim and `external_link` are stored).
-- An `unknown` post has no way out for the owner yet: it stays `scheduled`, cannot be cancelled here and
-  blocks editing. Until that exists, keep `draft` mode to one supervised test.
+- The web approval cards show the posting status and let the owner cancel a queued post; the phone app still shows nothing.
+- The owner resolves an `unknown` post from its web approval card by saying whether it was posted; the phone app still shows nothing.
 - Instagram **Creator** accounts: Buffer's channel `type` has no "creator" value, so a Creator account is
   allowed only if Buffer reports it as `business`. Unverified; check on the first real channel.
 - Channels saved before migration 021 have no recorded type and are refused until chosen again.
