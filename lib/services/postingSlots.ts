@@ -82,3 +82,22 @@ export async function cancelScheduled(owner:string,draftPostId:number){
     return {status:200};
   });
 }
+/**
+ * The owner's way out of an `unknown` post (we could not prove whether Buffer published it). They check
+ * Buffer or Instagram and tell us. Either answer ends the claim and revokes the image link; neither
+ * answer is a verified publication, so "posted" is recorded like a share-sheet share: owner-reported.
+ */
+export async function resolveUnknown(owner:string,draftPostId:number,outcome:"posted"|"not_posted"){
+  return transaction(async c=>{
+    const d=(await c.query("SELECT d.id,d.status FROM draft_posts d JOIN businesses b ON b.id=d.business_id WHERE d.id=$1 AND b.owner_id=$2 FOR UPDATE OF d",[draftPostId,owner])).rows[0];
+    if(!d)return {status:404,error:"Draft not found"};
+    const claim=(await c.query("SELECT state FROM posting_slot_claims WHERE draft_id=$1 FOR UPDATE",[draftPostId])).rows[0];
+    if(!claim||claim.state!=="unknown"||d.status!=="scheduled")return {status:409,error:"This post does not need checking"};
+    await c.query("SELECT set_config('app.actor_id',$1,true),set_config('app.action','resolve_unknown',true),set_config('app.reason',$2,true)",[owner,outcome==="posted"?"owner_reported_posted":"owner_reported_not_posted"]);
+    // Revoke the link either way: the owner has looked, so Buffer no longer needs the image.
+    await c.query("UPDATE posting_slot_claims SET state=$2,error_code=$3,image_token_hash=NULL,updated_at=now() WHERE draft_id=$1",[draftPostId,outcome==="posted"?"sent":"error",outcome==="posted"?"owner_reported":"owner_reported_not_posted"]);
+    if(outcome==="posted")await c.query("UPDATE draft_posts SET status='shared',shared_at=now(),updated_at=now() WHERE id=$1",[draftPostId]);
+    else await c.query("UPDATE draft_posts SET status='failed',updated_at=now() WHERE id=$1",[draftPostId]);
+    return {status:200};
+  });
+}
