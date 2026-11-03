@@ -200,9 +200,11 @@ against a live Buffer account or client.
    Buffer authorize URL. States live ten minutes and are single use.
 2. The browser goes to `https://auth.buffer.com/auth` with `client_id`,
    `redirect_uri`, `response_type=code`, `scope`, `state`,
-   `code_challenge` and `code_challenge_method=S256`. No `prompt` is sent.
+   `code_challenge`, `code_challenge_method=S256` and `prompt=consent`.
    The scope is `posts:read posts:write account:read offline_access`;
-   `offline_access` is what makes Buffer return a refresh token.
+   `offline_access` is what makes Buffer return a refresh token, but on the first real connect
+   (2026-11-03) it was not granted and the token response had no `refresh_token` until `prompt=consent`
+   was added, as in Buffer's own example URL. Buffer's docs do not explain the dependency.
 3. Buffer redirects to `GET /api/buffer/callback` (allow-listed as a public route
    because the redirect has no bearer token or CSRF header, but it requires the
    browser's own session: it must belong to the owner who started the flow, or

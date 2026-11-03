@@ -169,9 +169,9 @@ async function main() {
       assert.equal(params.get("response_type"), "code");
       assert.equal(params.get("scope"), SCOPES);
       assert.equal(params.get("code_challenge_method"), "S256");
+      assert.equal(params.get("prompt"), "consent", "needed for Buffer to grant offline_access and return a refresh token");
       assert.match(params.get("code_challenge") ?? "", /^[A-Za-z0-9_-]{43}$/);
       assert.match(params.get("state") ?? "", /^[A-Za-z0-9_-]{43}$/);
-      assert.equal(params.get("prompt"), null, "prompt is undocumented and must not be sent");
 
       const state = params.get("state")!;
       const stateRow = (await client.query(
