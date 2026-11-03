@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ownerId } from "../../../../lib/authorization";
 import { recordFailure, tooManyFailures } from "../../../../lib/mobileSignIn";
+import { errorFields, log } from "../../../../lib/log";
 import { clientIp } from "../../../../lib/requestIp";
 import {
   BufferConnectionError,
@@ -34,15 +35,19 @@ export async function GET(req: NextRequest) {
   const error = req.nextUrl.searchParams.get("error");
   // Buffer reports a refused or cancelled authorization as `error`; there is no
   // error_description to read or pass on.
-  if (error) return destination(req, error === "access_denied" ? "denied" : "failed");
+  if (error) {
+    log.warn("buffer_callback_refused", { bufferError: /^[a-z_]{1,40}$/.test(error) ? error : "other" });
+    return destination(req, error === "access_denied" ? "denied" : "failed");
+  }
 
   const ip = clientIp(req);
-  if (tooManyFailures(ip)) return destination(req, "failed");
+  if (tooManyFailures(ip)) { log.warn("buffer_callback_rate_limited"); return destination(req, "failed"); }
 
   // The signed-in owner of this browser. A missing session, or a different owner
   // than the one who started the flow, consumes nothing and stores nothing.
   const owner = await ownerId(req);
   if (!owner) {
+    log.warn("buffer_callback_no_session", { reason: "no signed-in PraiseLoop session on the callback request" });
     recordFailure(ip);
     return destination(req, "failed");
   }
@@ -53,9 +58,11 @@ export async function GET(req: NextRequest) {
       code: req.nextUrl.searchParams.get("code"),
       ownerId: owner
     });
+    log.info("buffer_connected");
     return destination(req, result.outcome);
   } catch (failure) {
     const outcome = outcomeFor(failure);
+    log.warn("buffer_callback_failed", { outcome, ...errorFields(failure) });
     if (outcome !== "not_configured") recordFailure(ip);
     return destination(req, outcome);
   }

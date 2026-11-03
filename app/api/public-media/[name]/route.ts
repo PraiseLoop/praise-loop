@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { log } from "../../../../lib/log";
 import { resolvePublicImage } from "../../../../lib/services/bufferPosting";
 import { mediaRoot } from "../../../../lib/services/media";
 
@@ -17,6 +18,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ nam
   const token = name.endsWith(".png") ? name.slice(0, -4) : "";
   let file: string | null = null;
   try { file = await resolvePublicImage(token); } catch { return NOT_FOUND(); }
+  // Served or not, never which token or why: a miss must look the same to the caller and in the log.
+  log.debug("public_media_request", { served: !!file });
   if (!file) return NOT_FOUND();
   let data: Buffer;
   try { data = await readFile(join(mediaRoot(), file)); } catch { return NOT_FOUND(); }

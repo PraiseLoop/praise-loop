@@ -269,6 +269,33 @@ async function main() {
       );
       assert.equal(await connectionCount(client, d.owner), 0);
 
+      // A failed step says which step and what is safe to say, and never a code, state, verifier or token.
+      const logged: string[] = [];
+      const realError = console.error;
+      console.error = (line?: unknown) => { logged.push(String(line)); };
+      try {
+        const g = await seedOwner(client, "buffer-diag-g");
+        const gState = authorizeParams(await startBufferConnect(g.owner)).get("state")!;
+        const rejected = bufferFetch({ token: () => json({ error: "invalid_client", error_description: "SUPERSECRET-description-should-not-reach-info-logs" }, 401) });
+        await assert.rejects(completeBufferConnect({ state: gState, code: "synthetic-code-GGG" }, { fetchImpl: rejected.fetchImpl }), BufferConnectionError);
+        const h = await seedOwner(client, "buffer-diag-h");
+        const hState = authorizeParams(await startBufferConnect(h.owner)).get("state")!;
+        const shape = bufferFetch({ token: () => tokenResponse({ refresh_token: undefined, access_token: "synthetic-access-HHH" }) });
+        await assert.rejects(completeBufferConnect({ state: hState, code: "synthetic-code-HHH" }, { fetchImpl: shape.fetchImpl }), BufferConnectionError);
+        const lines = logged.map((l) => JSON.parse(l));
+        const rejectedLine = lines.find((l) => l.event === "buffer_connect_failed" && l.step === "token_request_rejected");
+        assert.ok(rejectedLine, "the rejected token request is logged with its step");
+        assert.deepEqual([rejectedLine.level, rejectedLine.httpStatus, rejectedLine.bufferError], ["warn", 401, "invalid_client"]);
+        const shapeLine = lines.find((l) => l.event === "buffer_connect_failed" && l.step === "token_response_unusable");
+        assert.deepEqual(shapeLine.missingFields, ["refresh_token"], "names the missing field, not its value");
+        const everything = logged.join("\n");
+        for (const secret of [gState, hState, "synthetic-code-GGG", "synthetic-code-HHH", "synthetic-access-HHH", "SUPERSECRET", "synthetic-refresh"]) {
+          assert.ok(!everything.includes(secret), `the log never contains ${secret.slice(0, 12)}...`);
+        }
+      } finally {
+        console.error = realError;
+      }
+
       // No organization fails without storing anything.
       const e = await seedOwner(client, "buffer-e");
       const eState = authorizeParams(await startBufferConnect(e.owner)).get("state")!;

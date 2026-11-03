@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "./db";
 import { authAdapter } from "./auth-adapter";
 import { resolveMobileSession } from "./mobileSessions";
+import { errorFields, log } from "./log";
 type Session = { owner: string; kind: "web" | "mobile"; token: string };
 const sessions = new AsyncLocalStorage<Session>();
 export function currentOwner() { const session = sessions.getStore(); if (!session) throw new Error("Owner context missing"); return session.owner; }
@@ -34,10 +35,16 @@ export async function chargeGeneration(owner: string, amount = 1, kind = "genera
 const OWNER_WIDE_PATHS = ["/api/businesses", "/api/branding/preview", "/api/drafts/bulk", "/api/onboarding", "/api/mobile/session/revoke", "/api/entitlements", "/api/mobile/push-tokens", "/api/profile", "/api/account", "/api/account/methods", "/api/buffer/connect", "/api/buffer/connection"];
 export function ownerRoute(handler: (req: NextRequest, context: any) => Promise<Response>) {
   return async (req: NextRequest, context?: any) => {
-    const deny = (status: number, error: string) => NextResponse.json({ error }, { status, headers: { "Cache-Control": "no-store" } });
+    const started = Date.now();
+    // One debug line per request (method, path without the query, status, time, why it was refused);
+    // never headers, cookies, bodies or the query string.
+    const line = (status: number, auth: string, refused?: string) => log.debug("request", { method: req.method, path: req.nextUrl.pathname, status, ms: Date.now() - started, auth, refused });
+    let kind = "none";
+    const deny = (status: number, error: string) => { line(status, kind, error); return NextResponse.json({ error }, { status, headers: { "Cache-Control": "no-store" } }); };
     try {
       const session = await readSession(req);
       if (!session) return deny(401, "Sign in to access your business");
+      kind = session.kind;
       const owner = session.owner;
       const path = req.nextUrl.pathname, mutation = !["GET", "HEAD"].includes(req.method);
       let input: Record<string, unknown> = {};
@@ -80,7 +87,12 @@ export function ownerRoute(handler: (req: NextRequest, context: any) => Promise<
       if (path === "/api/branding/preview" && !await chargeGeneration(owner, 1, "preview")) return deny(429, "Preview limit reached");
       const response = await sessions.run(session, () => handler(req, context));
       response.headers.set("Cache-Control", "private, no-store");
+      line(response.status, kind);
       return response;
-    } catch { return deny(500, "Request failed; check configuration or retry"); }
+    } catch (error) {
+      // Always logged: this used to swallow every server error, leaving nothing to read.
+      log.error("request_failed", { method: req.method, path: req.nextUrl.pathname, ms: Date.now() - started, ...errorFields(error) });
+      return deny(500, "Request failed; check configuration or retry");
+    }
   };
 }

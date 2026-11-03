@@ -13,6 +13,7 @@ import { GET as publicMedia } from "../app/api/public-media/[name]/route";
 
 // The posting worker (#29 part 3), against a scripted fake Buffer. No real Buffer call is possible here:
 // the adapter is injected and global fetch is replaced with one that fails the test.
+process.env.LOG_LEVEL = "error"; // keep the suite output readable; the log lines themselves are covered in test-log.ts
 const ENV = { NEXTAUTH_URL: "https://app.example.invalid" };
 type Script = { submit?: () => Promise<{ externalId: string; status: string }>; status?: () => Promise<PostStatusReceipt> };
 async function main() {
