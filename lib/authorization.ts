@@ -65,7 +65,7 @@ export function ownerRoute(handler: (req: NextRequest, context: any) => Promise<
       else if (businessPath) businessId = businessPath[1];
       else if (["/api/reviews", "/api/drafts", "/api/generation", "/api/posting-slots"].includes(path)) businessId = mutation ? input.businessId : req.nextUrl.searchParams.get("businessId");
       else if (["/api/reviews/import", "/api/quotes/select", "/api/posting-slots", "/api/posting-slots/assign"].includes(path)) businessId = input.businessId;
-      else if (/^\/api\/(drafts\/(caption|status|schedule)|generation\/(retry|regenerate)|captions\/generate|images\/render)$/.test(path)) draftId = input.draftPostId;
+      else if (/^\/api\/(drafts\/(caption|status|schedule)|generation\/(retry|regenerate)|captions\/generate|images\/render|posting-slots\/(cancel|resolve))$/.test(path)) draftId = input.draftPostId;
       else if (path.startsWith("/api/media/")) {
         const exists = await query("SELECT 1 FROM draft_posts d JOIN businesses b ON b.id=d.business_id WHERE b.owner_id=$1 AND d.image_path=$2", [owner,path]);
         if (!exists.rowCount) return deny(404, "Image not found");

@@ -95,6 +95,18 @@ async function main(){
       assert.deepEqual([after.state,after.image_token_hash,after.status],[claimState,null,draftStatus]);
       assert.equal((await resolveUnknown("slot-owner",u,outcome)).status,409,"resolving twice does nothing");
     }
+    // Through the real route guard: a route the guard does not know answers 403 and would never work in the app.
+    await c.query("INSERT INTO auth_sessions VALUES($1,'foreign-owner',now()+interval '1 hour')",[sessionHash("foreign-session")]);
+    const viaRoute=(path:string,session:string,body:unknown)=>require(`../app/api/posting-slots/${path}/route`).POST(new NextRequest(`https://app.example.invalid/api/posting-slots/${path}`,{method:"POST",headers:{origin:"https://app.example.invalid",cookie:`next-auth.session-token=${session}`,"content-type":"application/json"},body:JSON.stringify(body)}));
+    const routed=await draft();
+    assert.equal((await assign("slot-owner",routed,future[4]))[0].status,200);
+    assert.equal((await viaRoute("cancel","foreign-session",{draftPostId:routed})).status,404,"another owner's draft is not found");
+    assert.equal((await viaRoute("cancel","slot-session",{draftPostId:"x"})).status,400);
+    assert.equal((await viaRoute("cancel","slot-session",{draftPostId:routed})).status,200,"the owner can cancel through the real guard");
+    assert.equal((await c.query("SELECT status FROM draft_posts WHERE id=$1",[routed])).rows[0].status,"approved");
+    assert.equal((await viaRoute("resolve","slot-session",{draftPostId:routed,outcome:"posted"})).status,409,"a post that is not unknown does not need checking");
+    assert.equal((await viaRoute("resolve","foreign-session",{draftPostId:routed,outcome:"posted"})).status,404);
+    assert.equal((await viaRoute("resolve","slot-session",{draftPostId:routed,outcome:"maybe"})).status,400);
     const listed=await (await require("../app/api/drafts/route").GET(new NextRequest(`http://localhost/api/drafts?businessId=${bid}`,{headers:{cookie:"next-auth.session-token=slot-session"}}))).json();
     assert.ok(listed.drafts.every((x:Record<string,unknown>)=>"posting_mode" in x&&"posting_link" in x&&!("image_token_hash" in x)),"the list shows posting details and never the token hash");
     const confirmed=(await c.query("SELECT scheduled_for FROM draft_posts WHERE status='scheduled'")).rows[0].scheduled_for;

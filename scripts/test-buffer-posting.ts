@@ -40,7 +40,7 @@ async function main() {
         getPostStatus: async (id) => { calls.push({ id, mode, owner: ownerId }); return (script.status ?? (async () => ({ status: "sending", externalLink: null, sentAt: null, errorMessage: null })))(); }
       });
       const submits = () => calls.filter((x) => x.payload).length, checks = () => calls.filter((x) => x.id).length;
-      const NOW = Date.parse("2026-11-03T15:00:00Z"); let clock = NOW;
+      const NOW = Math.floor(Date.now() / 1000) * 1000; let clock = NOW; // real time: expiry is compared against the database clock
       const tick = (mode: "off" | "draft" | "live") => postingTick({ mode, env: ENV, now: () => clock, adapterFor });
       // One owner, business, connection, channel, scheduled draft and queued claim per case.
       async function seed(o: { state?: string; due?: number; service?: string; type?: string; connection?: string; draft?: string; channel?: boolean } = {}) {
