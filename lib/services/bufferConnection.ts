@@ -190,7 +190,10 @@ export async function startBufferConnect(ownerId: string, deps: Deps = {}): Prom
     scope: SCOPES,
     state,
     code_challenge: challenge,
-    code_challenge_method: "S256"
+    code_challenge_method: "S256",
+    // Without this the consent screen leaves out offline_access and the token response has no
+    // refresh_token (seen on the first real connect, 2026-11-03). Buffer's own example URL has it.
+    prompt: "consent"
   }).toString();
   return url.toString();
 }
