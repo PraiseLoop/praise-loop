@@ -29,12 +29,13 @@ export default function PlanUpgrade({ plan, onUpgraded }: { plan: Plan; onUpgrad
       if (!response.ok) {
         const body = await response.json().catch(() => null) as { error?: string } | null;
         setError(body?.error ?? "We couldn’t upgrade your account. Try again.");
-        setBusy(false);
         return;
       }
       onUpgraded();
     } catch {
       setError("We couldn’t upgrade your account. Check your connection and try again.");
+    } finally {
+      // The button can't stay stuck on "Upgrading…" if the plan reload fails; a repeat is a no-op.
       setBusy(false);
     }
   }
