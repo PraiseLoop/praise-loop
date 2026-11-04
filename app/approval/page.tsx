@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../apiFetch";
 import { useBusiness } from "../AppShell";
 import Icon from "../ui/Icon";
+import PostingBanner from "../ui/PostingBanner";
 import { usePlan } from "../ui/usePlan";
 import { weekLimitNotice } from "../../lib/planDisplay";
 import PostCard, { stageOf, type Draft, type Stage } from "./PostCard";
@@ -135,11 +136,7 @@ export default function ThisWeekPage() {
 
       {limitNote && active.length ? <p className="pl-small pl-muted" style={{ margin: 0 }}>{limitNote} <Link href="/account">See your plan</Link></p> : null}
 
-      <div className="pl-banner">
-        <Icon name="plug" size={22} />
-        <p><strong>Posting isn’t connected yet.</strong> Approved posts are lined up in your schedule, but nothing goes live until you connect where you post.</p>
-        <Link href="/schedule" className="pl-btn pl-btn-dark">View schedule</Link>
-      </div>
+      <PostingBanner key={business.id} businessId={business.id} />
 
       {active.length ? (
         <section aria-label="Posts for this week" className="pl-grid">

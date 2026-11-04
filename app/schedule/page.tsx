@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../apiFetch";
 import { useBusiness } from "../AppShell";
-import Icon from "../ui/Icon";
+import PostingBanner from "../ui/PostingBanner";
 import PostingSlots from "./PostingSlots";
 
 type Approved = { id: number; version: number; quote_text: string; author_name?: string | null; status: string };
@@ -38,11 +38,7 @@ export default function SchedulePage() {
         </div>
       </header>
 
-      <div className="pl-banner">
-        <Icon name="plug" size={22} />
-        <p><strong>Connect where you post.</strong> Until an account is connected, lined-up posts are held here and nothing goes live.</p>
-        <button type="button" className="pl-btn pl-btn-dark" disabled title="Coming soon">Connect accounts — coming soon</button>
-      </div>
+      <PostingBanner key={business.id} businessId={business.id} />
 
       <PostingSlots key={business.id} businessId={business.id} approved={approved} onAssigned={() => void load(business.id)} />
     </>
