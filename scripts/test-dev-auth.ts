@@ -15,7 +15,7 @@ async function main() {
 
   // The web picker offers exactly the known demo owner keys, in order.
   assert.deepEqual(DEV_OWNER_OPTIONS.map(owner => owner.key), Object.keys(DEV_OWNERS));
-  assert.deepEqual(DEV_OWNER_OPTIONS.map(owner => owner.label), ["Pro demo owner", "Free demo owner", "Email demo owner"]);
+  assert.deepEqual(DEV_OWNER_OPTIONS.map(owner => owner.label), ["Pro demo owner", "Business demo owner", "Free demo owner", "Email demo owner"]);
 
   // Disabled: both routes must look like unknown ones before they touch the database.
   delete process.env.MOBILE_DEV_AUTH;
@@ -69,7 +69,7 @@ async function main() {
 
       // Every seeded owner is selectable by name; anything else is rejected.
       const asFree = (owner: unknown) => POST(new Request("http://localhost/api/mobile/session/dev", { method: "POST", body: JSON.stringify({ owner }) }));
-      for (const [key, id] of [["free", "dev-owner-free"], ["email", "dev-owner-email"]] as const) {
+      for (const [key, id] of [["business", "dev-owner-business"], ["free", "dev-owner-free"], ["email", "dev-owner-email"]] as const) {
         const selected = await asFree(key);
         assert.equal(selected.status, 200, key);
         const selectedBody = await selected.json() as { token: string; owner: string };

@@ -13,7 +13,7 @@ async function main(){
   const root=mkdtempSync(join(tmpdir(),"onboarding-browser-"));process.env.MEDIA_ROOT=root;
   try{await databaseFixture(async c=>{
     await c.query("INSERT INTO auth_users(id,email) VALUES('onboarding-browser','onboarding-browser@example.invalid')");
-    await c.query("INSERT INTO owner_plans(owner_id,plan,source) VALUES('onboarding-browser','pro','manual')");
+    await c.query("INSERT INTO owner_plans(owner_id,plan,source) VALUES('onboarding-browser','business','manual')");
     await c.query("INSERT INTO auth_sessions VALUES($1,'onboarding-browser',now()+interval '1 hour')",[sessionHash("onboarding-browser-session")]);
     let clock=new Date(),calls=0,fail=true;
     const deps:GenerationDeps={clock:()=>clock,render:renderDraftImage,captions:async()=>{calls++;if(fail){fail=false;throw new Error("synthetic-provider-outage");}return {friendly:"Synthetic welcoming service, ready for your review.",premium:"Synthetic premium service.",playful:"Synthetic cheerful service."};}};

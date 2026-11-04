@@ -73,9 +73,10 @@ async function main() {
       const first = await runSeed();
       const one = await snapshot(client, media);
 
-      assert.deepEqual(first.owners, { "dev-owner": "pro", "dev-owner-free": "free", "dev-owner-email": "free" });
+      assert.deepEqual(first.owners, { "dev-owner": "pro", "dev-owner-business": "business", "dev-owner-free": "free", "dev-owner-email": "free" });
       assert.deepEqual(one.methods.map(m => [m.owner_id, m.provider, m.email]), [
         ["dev-owner", "google", "demo@praiseloop.invalid"],
+        ["dev-owner-business", "google", "demo-business@praiseloop.invalid"],
         ["dev-owner-email", "email", "demo-email@praiseloop.invalid"],
         ["dev-owner-free", "google", "demo-free@praiseloop.invalid"]
       ], "each demo owner has a synthetic method to walk the account screen");
@@ -84,7 +85,10 @@ async function main() {
       assert.deepEqual(seeded.map(b => b.name).sort(), SEED_BUSINESSES.map(b => b.name).sort());
       assert.equal(seeded.every(b => b.name.startsWith("Demo — ")), true);
       assert.deepEqual(first.businesses.map(b => b.reviews), [21, 24, 17], "every CSV row is imported");
+      assert.deepEqual(one.businesses.filter(b => b.owner_id === "dev-owner").map(b => b.name), ["Demo — Copper Kettle Café"], "the Pro demo keeps one business under its new limit");
+      assert.deepEqual(one.businesses.filter(b => b.owner_id === "dev-owner-business").map(b => b.name), ["Demo — Hespeler Powder Coating"], "the extra Pro business moved to the Business demo");
       assert.equal((await entitlementsFor("dev-owner")).plan, "pro");
+      assert.equal((await entitlementsFor("dev-owner-business")).plan, "business");
       assert.equal((await entitlementsFor("dev-owner-free")).plan, "free");
       assert.equal((await entitlementsFor("dev-owner-email")).plan, "free");
       assert.equal((await client.query("SELECT count(*)::int n FROM auth_accounts WHERE provider='email' AND owner_id='dev-owner-email'")).rows[0].n, 1);

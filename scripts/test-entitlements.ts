@@ -19,14 +19,31 @@ async function main() {
   process.env.MEDIA_ROOT = root;
 
   try {
-    // Pure plan resolution: default free, configured pro, and expired pro.
-    assert.deepEqual(entitlementsForPlan("free", "default", null), { plan: "free", source: "default", expiresAt: null, expired: false, limits: PLAN_LIMITS.free });
+    // Pure plan resolution: default free, the paid plans, and expired paid plans.
+    assert.deepEqual(entitlementsForPlan("free", "default", null), { plan: "free", source: "default", expiresAt: null, expired: false, expiredPlan: null, limits: PLAN_LIMITS.free });
     assert.equal(entitlementsForPlan("pro", "manual", null).limits.postsPerWeek, 5);
+    assert.equal(entitlementsForPlan("pro", "manual", null).limits.businesses, 1);
     assert.equal(PLAN_LIMITS.free.brandVoice, false);
     assert.equal(PLAN_LIMITS.pro.brandVoice, true);
+    const businessPlan = entitlementsForPlan("business", "manual", null);
+    assert.equal(businessPlan.plan, "business");
+    assert.equal(businessPlan.limits.postsPerWeek, 5);
+    assert.equal(businessPlan.limits.businesses, 5);
+    assert.equal(businessPlan.limits.watermark, false);
+    assert.equal(businessPlan.limits.brandVoice, true);
     const expiredPlan = entitlementsForPlan("pro", "manual", "2020-01-01T00:00:00Z", new Date("2026-01-01T00:00:00Z"));
     assert.equal(expiredPlan.plan, "free");
+    assert.equal(expiredPlan.expired, true);
+    assert.equal(expiredPlan.expiredPlan, "pro");
     assert.equal(expiredPlan.limits.watermark, true);
+    const expiredBusiness = entitlementsForPlan("business", "manual", "2020-01-01T00:00:00Z", new Date("2026-01-01T00:00:00Z"));
+    assert.equal(expiredBusiness.plan, "free");
+    assert.equal(expiredBusiness.expired, true);
+    assert.equal(expiredBusiness.expiredPlan, "business");
+    assert.equal(expiredBusiness.limits.businesses, 1);
+    const unknownPlan = entitlementsForPlan("team", "manual", "2020-01-01T00:00:00Z", new Date("2026-01-01T00:00:00Z"));
+    assert.equal(unknownPlan.plan, "free");
+    assert.equal(unknownPlan.expired, false, "an unknown stored plan is not reported as an expired paid plan");
 
     // The self-service allowlist tolerates spaces, newlines and mixed case, and
     // an empty list allows nobody.
@@ -49,13 +66,15 @@ async function main() {
     await databaseFixture(async (c) => {
       await c.query(`INSERT INTO auth_users(id,email) VALUES
         ('free-owner','free@example.invalid'),('pro-owner','pro@example.invalid'),
+        ('business-owner','business@example.invalid'),('expired-business-owner','expired-business@example.invalid'),
         ('expired-owner','expired@example.invalid'),('api-owner','api@example.invalid'),
-        ('upgrade-owner','upgrade@example.invalid'),('blocked-owner','blocked@example.invalid')`);
+        ('upgrade-owner','upgrade@example.invalid'),('upgrade-business-owner','upgrade-business@example.invalid'),('blocked-owner','blocked@example.invalid')`);
       await c.query(`INSERT INTO auth_sessions VALUES
         ($1,'api-owner',now()+interval '1 hour'),
         ($2,'upgrade-owner',now()+interval '1 hour'),
-        ($3,'blocked-owner',now()+interval '1 hour')`,
-        [sessionHash("entitlements-api-session"), sessionHash("entitlements-upgrade-session"), sessionHash("entitlements-blocked-session")]);
+        ($3,'blocked-owner',now()+interval '1 hour'),
+        ($4,'upgrade-business-owner',now()+interval '1 hour')`,
+        [sessionHash("entitlements-api-session"), sessionHash("entitlements-upgrade-session"), sessionHash("entitlements-blocked-session"), sessionHash("entitlements-upgrade-business-session")]);
 
       // No row means the default free plan; nothing needs to be seeded.
       assert.equal((await entitlementsFor("free-owner")).plan, "free");
@@ -68,11 +87,26 @@ async function main() {
       const audit = (await c.query("SELECT plan,source,actor,reason FROM owner_plan_events WHERE owner_id='pro-owner'")).rows;
       assert.deepEqual(audit, [{ plan: "pro", source: "manual", actor: "operators@example.invalid", reason: "Synthetic pilot upgrade" }]);
 
+      const businessEntitlements = await setOwnerPlan("business-owner", "business", { reason: "Synthetic Business plan" });
+      assert.equal(businessEntitlements.plan, "business");
+      assert.equal(businessEntitlements.limits.postsPerWeek, 5);
+      assert.equal(businessEntitlements.limits.businesses, 5);
+      assert.equal(businessEntitlements.limits.watermark, false);
+      await setOwnerPlan("upgrade-business-owner", "business", { reason: "Synthetic Business allowlist" });
+
       await setOwnerPlan("expired-owner", "pro", { expiresAt: "2020-01-01T00:00:00Z", reason: "Expired synthetic subscription" });
       const expired = await entitlementsFor("expired-owner");
       assert.equal(expired.plan, "free");
       assert.equal(expired.limits.postsPerWeek, 1);
       assert.equal((await c.query("SELECT plan FROM owner_plans WHERE owner_id='expired-owner'")).rows[0].plan, "pro", "expiry keeps the stored plan for renewal");
+
+      await setOwnerPlan("expired-business-owner", "business", { expiresAt: "2020-01-01T00:00:00Z", reason: "Expired synthetic Business subscription" });
+      const expiredBusiness = await entitlementsFor("expired-business-owner");
+      assert.equal(expiredBusiness.plan, "free");
+      assert.equal(expiredBusiness.limits.postsPerWeek, 1);
+      assert.equal(expiredBusiness.limits.businesses, 1);
+      assert.equal(expiredBusiness.expiredPlan, "business");
+      assert.equal((await c.query("SELECT plan FROM owner_plans WHERE owner_id='expired-business-owner'")).rows[0].plan, "business", "expiry keeps the stored Business plan for renewal");
 
       const business = async (owner: string, name: string) =>
         (await c.query("INSERT INTO businesses(name,timezone,owner_id) VALUES($1,'UTC',$2) RETURNING id", [name, owner])).rows[0].id;
@@ -95,6 +129,13 @@ async function main() {
       const proRequest = await requestGeneration(proBusiness, 5, now);
       assert.equal(proRequest.inserted, 5, "pro plans reserve the configured weekly target");
       assert.equal(proRequest.target, 5);
+
+      const businessOwnerBusiness = await business("business-owner", "Business synthetic");
+      await c.query("UPDATE businesses SET weekly_target=5 WHERE id=$1", [businessOwnerBusiness]);
+      await reviews(businessOwnerBusiness);
+      const businessRequest = await requestGeneration(businessOwnerBusiness, 5, now);
+      assert.equal(businessRequest.inserted, 5, "Business plans reserve the configured weekly target");
+      assert.equal(businessRequest.target, 5);
 
       // Upgrading mid-week raises the existing period's cap without losing its allocation.
       await setOwnerPlan("free-owner", "pro", { reason: "Synthetic mid-week upgrade" });
@@ -120,6 +161,10 @@ async function main() {
       const proJob = (await c.query("SELECT id FROM generation_jobs WHERE business_id=$1 ORDER BY id LIMIT 1", [proBusiness])).rows[0].id;
       assert.equal(await processGeneration(Number(proJob), generationDeps), true);
       assert.equal(renderedWatermark, false, "pro renders have no watermark");
+      renderedWatermark = undefined;
+      const businessJob = (await c.query("SELECT id FROM generation_jobs WHERE business_id=$1 ORDER BY id LIMIT 1", [businessOwnerBusiness])).rows[0].id;
+      assert.equal(await processGeneration(Number(businessJob), generationDeps), true);
+      assert.equal(renderedWatermark, false, "Business renders have no watermark");
 
       const apiBusiness = await business("api-owner", "API synthetic");
       const onboardingKey = "11111111-2222-3333-4444-555555555555";
@@ -182,6 +227,18 @@ async function main() {
       assert.equal(expiryNote(expiredView), "Your Pro plan expired on 2020-01-01, so you are on the Free plan.");
       assert.equal(expiryNote(await entitlementsWithUsage("pro-owner", now)), null, "an open-ended Pro plan has no expiry note");
 
+      // Expired Business also reads as Free, keeps its row, and names Business in the note.
+      const expiredBusinessBusiness = await business("expired-business-owner", "Expired Business synthetic");
+      const expiredBusinessView = await entitlementsWithUsage("expired-business-owner", now);
+      assert.equal(expiredBusinessView.plan, "free");
+      assert.equal(expiredBusinessView.expired, true);
+      assert.equal(expiredBusinessView.expiredPlan, "business");
+      assert.equal(expiredBusinessView.usage[0].target, 1);
+      assert.equal(expiredBusinessView.usage[0].allocated, 0);
+      assert.equal(expiryNote(expiredBusinessView), "Your Business plan expired on 2020-01-01, so you are on the Free plan.");
+      assert.equal((await c.query("SELECT count(*) n FROM businesses WHERE id=$1", [expiredBusinessBusiness])).rows[0].n, "1", "expiry keeps the Business data");
+      assert.equal((await c.query("SELECT plan FROM owner_plans WHERE owner_id='expired-business-owner'")).rows[0].plan, "business", "expiry keeps the stored Business plan for renewal");
+
       // The This Week notice depends only on usage, not on which posts are still listed, so a
       // Free owner who skipped their one allocated post still sees the plan limit and reset day.
       assert.equal(
@@ -191,8 +248,11 @@ async function main() {
       assert.equal(weekLimitNotice(body, { ...usageOf(body), quotaMet: false }), null, "no notice while there is room");
       assert.match(weekLimitNotice(expiredView, { ...expiredView.usage[0], allocated: 1, quotaMet: true })!, /Free plan includes 1 post.*Your Pro plan expired on 2020-01-01/);
       assert.equal(expiredView.expired, true);
+      assert.equal(expiredView.expiredPlan, "pro");
       assert.equal(proPlan.expired, false);
-      assert.equal(entitlementsForPlan("free", "default", "2020-01-01T00:00:00Z").expired, false, "a Free plan with a past date is not expired Pro");
+      assert.equal(proPlan.expiredPlan, null);
+      assert.equal(entitlementsForPlan("free", "default", "2020-01-01T00:00:00Z").expired, false, "a Free plan with a past date is not an expired paid plan");
+      assert.equal(entitlementsForPlan("free", "default", "2020-01-01T00:00:00Z").expiredPlan, null);
 
       const businessesRoute = require("../app/api/businesses/route");
       const retried = await businessesRoute.POST(request("/api/businesses", "POST", { name: "Retried synthetic", timezone: "UTC", onboardingKey }));
@@ -216,7 +276,7 @@ async function main() {
         assert.deepEqual(await (await upgradeRoute.GET(upgradeRequest("entitlements-upgrade-session"))).json(), { eligible: false, plan: "free" });
         assert.equal((await upgradeRoute.POST(upgradeRequest("entitlements-upgrade-session", "POST"))).status, 403, "an empty allowlist refuses self-service upgrades");
 
-        process.env[SELF_SERVICE_UPGRADE_ENV] = "UPGRADE@example.invalid, someone-else@example.invalid";
+        process.env[SELF_SERVICE_UPGRADE_ENV] = "UPGRADE@example.invalid, upgrade-business@example.invalid, someone-else@example.invalid";
         assert.deepEqual(await (await upgradeRoute.GET(upgradeRequest("entitlements-upgrade-session"))).json(), { eligible: true, plan: "free" });
         const upgraded = await upgradeRoute.POST(upgradeRequest("entitlements-upgrade-session", "POST"));
         assert.equal(upgraded.status, 200);
@@ -230,6 +290,16 @@ async function main() {
         ]);
         assert.equal((await (await upgradeRoute.POST(upgradeRequest("entitlements-upgrade-session", "POST"))).json()).changed, false, "a repeat is a no-op");
         assert.equal((await c.query("SELECT count(*) n FROM owner_plan_events WHERE owner_id='upgrade-owner'")).rows[0].n, "1");
+
+        // The self-service helper only ever offers Pro, so an allowlisted Business
+        // owner is left alone instead of being downgraded.
+        assert.deepEqual(await (await upgradeRoute.GET(upgradeRequest("entitlements-upgrade-business-session"))).json(), { eligible: true, plan: "business" });
+        const businessUpgrade = await upgradeRoute.POST(upgradeRequest("entitlements-upgrade-business-session", "POST"));
+        assert.equal(businessUpgrade.status, 200);
+        const businessUpgradeBody = await businessUpgrade.json();
+        assert.equal(businessUpgradeBody.plan, "business");
+        assert.equal(businessUpgradeBody.changed, false);
+        assert.equal((await entitlementsFor("upgrade-business-owner")).plan, "business");
 
         assert.equal((await upgradeRoute.POST(upgradeRequest("entitlements-blocked-session", "POST"))).status, 403, "an owner not on the allowlist is refused");
         assert.equal((await entitlementsFor("blocked-owner")).plan, "free");

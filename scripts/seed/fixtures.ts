@@ -87,7 +87,7 @@ export const SEED_BUSINESSES: BusinessSeed[] = [
   },
   {
     name: "Demo — Hespeler Powder Coating",
-    owner: "pro",
+    owner: "business",
     csv: "hespeler-powder-coating.csv",
     timezone: "America/Toronto",
     tone: "premium",

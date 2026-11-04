@@ -1,6 +1,6 @@
 import { query, transaction } from "../db";
 
-export type Plan = "free" | "pro";
+export type Plan = "free" | "pro" | "business";
 export type PlanSource = "default" | "manual" | "store";
 
 export type EntitlementLimits = {
@@ -21,8 +21,10 @@ export type Entitlements = {
   plan: Plan;
   source: PlanSource;
   expiresAt: string | null;
-  /** True when a stored Pro plan has lapsed and is being treated as Free. */
+  /** True when a stored paid plan has lapsed and is being treated as Free. */
   expired: boolean;
+  /** The stored plan that lapsed, so the copy can name it; null when nothing lapsed. */
+  expiredPlan: Plan | null;
   limits: EntitlementLimits;
 };
 
@@ -30,23 +32,27 @@ export type Entitlements = {
 // from here, and the app only displays what GET /api/entitlements returns.
 export const PLAN_LIMITS: Record<Plan, EntitlementLimits> = {
   free: { postsPerWeek: 1, templates: 1, watermark: true, reviewSync: false, aiReplies: false, brandVoice: false, businesses: 1 },
-  pro: { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, businesses: 3 }
+  pro: { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, businesses: 1 },
+  business: { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, businesses: 5 }
 };
 
 type Executor = (sql: string, values: unknown[]) => Promise<{ rows: any[] }>;
 
 export function planIsActive(plan: string, expiresAt: Date | string | null, now = new Date()): plan is Plan {
-  if (plan !== "free" && plan !== "pro") return false;
+  if (!Object.hasOwn(PLAN_LIMITS, plan)) return false;
   return plan === "free" || !expiresAt || new Date(expiresAt).getTime() > now.getTime();
 }
 
 export function entitlementsForPlan(plan: string, source: PlanSource, expiresAt: Date | string | null, now = new Date()): Entitlements {
-  const effective: Plan = planIsActive(plan, expiresAt, now) ? plan : "free";
+  const active = planIsActive(plan, expiresAt, now);
+  const effective: Plan = active ? plan : "free";
+  const expiredPlan = !active && planIsActive(plan, null, now) && plan !== "free" ? plan : null;
   return {
     plan: effective,
     source,
     expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
-    expired: plan === "pro" && effective === "free",
+    expired: expiredPlan !== null,
+    expiredPlan,
     limits: PLAN_LIMITS[effective]
   };
 }

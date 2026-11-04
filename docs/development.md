@@ -94,7 +94,8 @@ answers 404 for the demo sign-in even if the flag is set.
 
    | Owner | Plan | Businesses |
    | --- | --- | --- |
-   | `dev-owner` (`demo@praiseloop.invalid`) | Pro | Copper Kettle Café (21 reviews, 7 drafts), Hespeler Powder Coating (24 reviews, 6 drafts) |
+   | `dev-owner` (`demo@praiseloop.invalid`) | Pro | Copper Kettle Café (21 reviews, 7 drafts) |
+   | `dev-owner-business` (`demo-business@praiseloop.invalid`) | Business | Hespeler Powder Coating (24 reviews, 6 drafts) |
    | `dev-owner-free` (`demo-free@praiseloop.invalid`) | Free | Harbour Bike Repair (17 reviews, 3 drafts) |
    | `dev-owner-email` (`demo-email@praiseloop.invalid`) | Free | None; an email-only owner for walking email sign-in |
 
@@ -109,7 +110,7 @@ answers 404 for the demo sign-in even if the flag is set.
    The fake push token may make the worker contact Expo once; Expo rejects it and
    the token is dropped.
 
-   The seed is idempotent. Running it again replaces only the three demo owners'
+   The seed is idempotent. Running it again replaces only the four demo owners'
    businesses (and everything under them, plus their images) and leaves other
    owners alone; ids change, content does not. To reset, run it again. To remove
    the demo data, delete those owners' businesses, or drop the dev database
@@ -130,14 +131,15 @@ answers 404 for the demo sign-in even if the flag is set.
    ```
 
 4. On the phone, tap the demo button for the owner you want: **Pro demo owner**
-   (Copper Kettle Café and Hespeler Powder Coating), **Free demo owner** (Harbour
-   Bike Repair, with the watermark and the Free plan limits) or **Email demo
-   owner** (no businesses; walks the email-only account). Each button creates a
-   normal bearer session for that seeded owner. Approve a post, then open the
-   approved one and tap **Post** to open the share sheet. The caption is copied
-   to the clipboard; answer “Did you post it?” to record `shared`.
+   (Copper Kettle Café), **Business demo owner** (Hespeler Powder Coating),
+   **Free demo owner** (Harbour Bike Repair, with the watermark and the Free plan
+   limits) or **Email demo owner** (no businesses; walks the email-only account).
+   Each button creates a normal bearer session for that seeded owner. Approve a
+   post, then open the approved one and tap **Post** to open the share sheet. The
+   caption is copied to the clipboard; answer “Did you post it?” to record
+   `shared`.
 
-5. On the web, open `http://localhost:3000` and use the same three buttons under
+5. On the web, open `http://localhost:3000` and use the same four buttons under
    the sign-in options. They create the ordinary web session cookie for the
    chosen owner and go to `/approval`, so This Week, Plan and Brand can be used
    with the seeded data and no Google account. The buttons appear only when the

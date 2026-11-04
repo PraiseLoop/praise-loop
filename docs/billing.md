@@ -14,7 +14,8 @@ billing described here is built yet.** What exists today is in [design.md](desig
 | Buffer posting | Paid plans only | Decided by the owner |
 | Pro price | CA$29.99 a month plus tax | Working price, formally recorded in #223 |
 | Billing period | Monthly only, to start | Decided by the owner |
-| Business price, exact business limit | Not decided | Open, #222 and #215 |
+| Business price | Not decided | Open, #222 |
+| Business limits | 5 businesses, 5 posts a week per business | Decided (owner delegated the choice) |
 | Taxes, refund terms | Not decided | Open, #222 |
 
 The price is not in [decisions.md](decisions.md) yet on purpose. `scripts/test-plans.ts` requires
@@ -23,8 +24,9 @@ Nobody can buy until #223 ships, so that PR records the price and publishes it t
 
 ## What already exists
 
-- **Plans:** `free` and `pro`, one row per owner in `owner_plans`, with a source and an expiry.
-  `lib/services/entitlements.ts` holds the limits, and expired Pro falls back to Free without deleting data.
+- **Plans:** `free`, `pro` and `business`, one row per owner in `owner_plans`, with a source and an
+  expiry. `lib/services/entitlements.ts` holds the limits, and expired Pro or Business falls back to
+  Free without deleting data.
 - **Audit:** every change appends to `owner_plan_events`.
 - **Display:** `GET /api/entitlements` is read-only, and `/account`, `/plans` and the phone show what it returns.
 - **Issues:** #94, #133 and #134 are closed. #95 covers App Store and Google Play purchases only, and
@@ -91,8 +93,8 @@ Play's rules weren't checked either.
 
 | | Free | Pro | Business |
 |---|---|---|---|
-| Posts per week, per business | 1 | 5 | 5 or more |
-| Businesses | 1 | 1 | 3–10 |
+| Posts per week, per business | 1 | 5 | 5 |
+| Businesses | 1 | 1 | 5 |
 | Watermark | Yes | No | No |
 | Brand voice | No | Yes | Yes |
 | Posting through Buffer | No | Yes | Yes |
@@ -107,7 +109,7 @@ owners need moving. Approval stays required on every plan, and nothing auto-post
 |---|---|---|
 | Any plan except `free` or `pro` makes installed phone apps throw, so this fix ships first | `mobile/src/api/entitlements.ts` | #214 |
 | The phone's limits type is missing `brandVoice` | `mobile/src/api/entitlements.ts` | #214 |
-| `free` and `pro` are hardcoded in checks, types, scripts and display helpers | Migration 012, `entitlements.ts`, `set-plan.ts`, display helpers | #215 |
+| `free` and `pro` were hardcoded in checks, types, scripts and display helpers; the Business tier replaces that (#215) | Migration 012, `entitlements.ts`, `set-plan.ts`, display helpers | #215 |
 | Review sync, AI replies and templates have nothing enforcing them, because the features don't exist yet | `PLAN_LIMITS` | #218 |
 | Free owners can post through Buffer | `lib/services/bufferPosting.ts`, `app/api/buffer/` | #216 |
 | The business limit is only checked at creation, so a lapsed owner keeps every business generating | `lib/services/generation.ts` | #217 |
@@ -122,7 +124,7 @@ owners need moving. Approval stays required on every plan, and nothing auto-post
 npm run plan:set -- owner@example.com pro --reason "testing"
 ```
 
-The Pro and Free demo owners also work with `MOBILE_DEV_AUTH=1`.
+The Pro, Business and Free demo owners also work with `MOBILE_DEV_AUTH=1`.
 
 **In a production image:** `npm run plan:set` fails because `ts-node` is a dev dependency and the
 images leave it out. Run the compiled script in the worker instead, because the web image doesn't have it:

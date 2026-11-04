@@ -2,9 +2,10 @@ import { DEMO_OWNERS } from "../src/auth/demoOwners";
 
 describe("demo owner picker", () => {
   it("offers one button per seeded owner, labelled with the plan", () => {
-    expect(DEMO_OWNERS.map(owner => owner.key)).toEqual(["pro", "free", "email"]);
+    expect(DEMO_OWNERS.map(owner => owner.key)).toEqual(["pro", "business", "free", "email"]);
     expect(DEMO_OWNERS.map(owner => owner.label)).toEqual([
       "Pro demo owner",
+      "Business demo owner",
       "Free demo owner",
       "Email demo owner"
     ]);

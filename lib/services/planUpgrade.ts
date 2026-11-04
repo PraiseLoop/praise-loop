@@ -42,7 +42,7 @@ export async function selfServiceUpgradeStatus(ownerId: string): Promise<SelfSer
  */
 export async function selfServiceUpgrade(ownerId: string): Promise<SelfServiceUpgradeStatus & { changed: boolean }> {
   const status = await selfServiceUpgradeStatus(ownerId);
-  if (!status.eligible || status.entitlements.plan === "pro") return { ...status, changed: false };
+  if (!status.eligible || status.entitlements.plan !== "free") return { ...status, changed: false };
   const entitlements = await setOwnerPlan(ownerId, "pro", {
     actor: status.email ?? "owner",
     reason: "Self-service pilot upgrade"

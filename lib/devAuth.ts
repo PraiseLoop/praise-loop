@@ -9,12 +9,14 @@ export const DEV_OWNER_ID = "dev-owner";
 export const DEV_OWNER_EMAIL = "demo@praiseloop.invalid";
 export const DEV_OWNER_NAME = "Demo Owner";
 
-// The seeder also creates a Free owner so the plan limits and watermark can be seen, and an
-// email-only owner so the email-code sign-in (#157) can be walked without a mailbox. `pro` is
-// the default demo owner above. `free` has no name on purpose (#149), so the profile empty
-// state can be walked; the seeder clears it on every run.
+// The seeder also creates a Free owner so the plan limits and watermark can be seen, a Business
+// owner so the Business plan can be walked, and an email-only owner so the email-code
+// sign-in (#157) can be walked without a mailbox. `pro` is the default demo owner above. `free`
+// has no name on purpose (#149), so the profile empty state can be walked; the seeder clears it
+// on every run.
 export const DEV_OWNERS = {
   pro: { id: DEV_OWNER_ID, email: DEV_OWNER_EMAIL, name: DEV_OWNER_NAME },
+  business: { id: "dev-owner-business", email: "demo-business@praiseloop.invalid", name: "Demo Business Owner" },
   free: { id: "dev-owner-free", email: "demo-free@praiseloop.invalid", name: null as string | null },
   email: { id: "dev-owner-email", email: "demo-email@praiseloop.invalid", name: "Demo Email Owner", provider: "email" as const }
 } as const;
@@ -24,6 +26,7 @@ export type DevOwnerKey = keyof typeof DEV_OWNERS;
 // mobile/src/auth/demoOwners.ts because it is a separate package.
 export const DEV_OWNER_LABELS: Record<DevOwnerKey, string> = {
   pro: "Pro demo owner",
+  business: "Business demo owner",
   free: "Free demo owner",
   email: "Email demo owner"
 };

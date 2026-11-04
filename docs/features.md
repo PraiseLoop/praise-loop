@@ -359,20 +359,21 @@ stopping writes first; retain audit events, revision columns, and immutable medi
 
 ## Plans and entitlements (#94)
 
-An owner has one plan, `free` (the default) or `pro`, stored in `owner_plans`
-with its source (`manual` or `store`) and optional expiry. `owner_plan_events`
-is an append-only audit trail of every change. Every owned business inherits
-the owner's plan, which is what lets the plan limit "more than one business".
+An owner has one plan, `free` (the default), `pro` or `business`, stored in
+`owner_plans` with its source (`manual` or `store`) and optional expiry.
+`owner_plan_events` is an append-only audit trail of every change. Every owned
+business inherits the owner's plan, which is what lets the plan limit "more than
+one business".
 
-| Limit | Free | Pro |
-|---|---|---|
-| Drafts per business per week | 1 | 5 |
-| Templates | 1 | 1 today; 5 planned |
-| Image watermark | Yes | No |
-| Automatic review sync | No | Planned |
-| AI review replies | No | Planned |
-| Brand voice from your website | No | Yes |
-| Owned businesses | 1 | 3 |
+| Limit | Free | Pro | Business |
+|---|---|---|---|
+| Drafts per business per week | 1 | 5 | 5 |
+| Templates | 1 | 1 today; 5 planned | 1 today; 5 planned |
+| Image watermark | Yes | No | No |
+| Automatic review sync | No | Planned | Planned |
+| AI review replies | No | Planned | Planned |
+| Brand voice from your website | No | Yes | Yes |
+| Owned businesses | 1 | 1 | 5 |
 
 Only limits with a feature behind them are sold as included (#218). `templates`,
 `reviewSync` and `aiReplies` stay in `PLAN_LIMITS` for later features, but extra
@@ -401,7 +402,8 @@ The limits live in `lib/services/entitlements.ts` and are enforced on the server
   (`resetsOn` is the next Monday in the business's timezone, `resetsAt` that
   instant). Usage reads `generation_periods` and `generationWeek`, so it never
   disagrees with what the generator enforces. `expired` is true when a stored
-  Pro plan has lapsed and is read as Free. Apart from the allowlisted pilot
+  Pro or Business plan has lapsed and is read as Free, and `expiredPlan` names
+  the stored plan for the expiry copy. Apart from the allowlisted pilot
   upgrade below, no route lets an owner change their own plan.
 
 ### Plan page and limit messages (#133)
@@ -416,7 +418,7 @@ as read-only.
   templates, watermark, review sync, AI replies, businesses) and per-business
   usage such as "1 of 1 post this week" with the reset date. Review sync, AI
   replies and extra templates read as planned, never included (#218).
-- **Expired Pro** reads as Free with a note saying when Pro expired.
+- **Expired Pro or Business** reads as Free with a note saying when that plan expired.
 - **This Week** says "You've reached this week's limit" and names the plan
   limit, instead of "All caught up", when the weekly quota is used up. It
   distinguishes a plan-capped target from a quota the owner set themselves.
@@ -431,8 +433,8 @@ as read-only.
   instead of reading as Free (#214).
 - Onboarding does not yet mention the limit; that is a follow-up.
 
-Expired Pro falls back to Free at read time without deleting the stored plan, so
-a renewal restores Pro. Operators set plans with:
+Expired Pro or Business falls back to Free at read time without deleting the stored plan, so
+a renewal restores it. Operators set plans with:
 
 ```sh
 npm run plan:set -- owner@example.com pro --reason "Pilot upgrade"
@@ -462,7 +464,7 @@ request changes nothing.
 
 ### Public plans page (#134)
 
-`/plans` is public: a signed-out visitor sees the Free and Pro cards, what
+`/plans` is public: a signed-out visitor sees the Free, Pro and Business cards, what
 differs (posts each week per business, watermark, review sync, AI replies, brand
 voice, businesses) and a "Continue with Google" call to action. The landing
 page links to it from the header and the call to action, and also offers an
@@ -478,7 +480,7 @@ sign-in wall does not hide it.
   is not classified as shipped, planned or unlisted, or when a limit without a
   feature is advertised as available.
 - Prices stay off the page (`PLAN_PRICING = null`) until the owner records the
-  Free/Pro prices in `docs/decisions.md`. The test fails if a pricing decision is
+  Free/Pro/Business prices in `docs/decisions.md`. The test fails if a pricing decision is
   recorded without prices, or if a price appears before one is.
 - Wording is honest about what ships: Free's small watermark is stated plainly,
   review sync and AI replies read "Planned — not available yet", and extra
@@ -777,12 +779,13 @@ half.
 
 In a development process with `MOBILE_DEV_AUTH=1`, the phone sign-in screen and
 the web landing page each offer one button per seeded synthetic owner: **Pro
-demo owner**, **Free demo owner** and **Email demo owner**. The Free owner walks
-the watermark, weekly limit and plan page; the email-only owner walks the
-account with no businesses (`npm run dev:seed` creates all three).
+demo owner**, **Business demo owner**, **Free demo owner** and **Email demo
+owner**. The Free owner walks the watermark, weekly limit and plan page; the
+Business owner walks the Business plan; the email-only owner walks the
+account with no businesses (`npm run dev:seed` creates all four).
 
 - The phone still uses `POST /api/mobile/session/dev` with
-  `{"owner":"pro"|"free"|"email"}` and a bearer token.
+  `{"owner":"pro"|"business"|"free"|"email"}` and a bearer token.
 - The web uses `POST /api/dev/session` with the same body. It creates the normal
   hashed `auth_sessions` row and NextAuth cookie, so the whole web app works
   without Google. `GET /api/dev/session` supplies the button labels; it and the
