@@ -2,11 +2,11 @@ import { pool } from "../lib/db";
 import { runSeed } from "./seed/seed";
 
 // Synthetic data for walking the phone flow end to end without OpenAI, Google
-// OAuth or a review provider: three businesses with imported reviews and drafts in
-// every status, a Pro, a Free and an email-only owner, a push token and a Google
-// connection stub.
+// OAuth or a review provider: businesses with imported reviews and drafts in
+// every status, Pro, Business, Free and email-only owners, a push token and a
+// Google connection stub.
 // Refuses to run against a production process or a non-local DATABASE_URL, and
-// replaces only the two demo owners' rows, so no real owner's data is touched.
+// replaces only the four demo owners' rows, so no real owner's data is touched.
 // The data lives in scripts/seed/fixtures.ts and sample-data/csv/.
 async function main() {
   // `docker compose exec` inherits only the container environment (the Compose

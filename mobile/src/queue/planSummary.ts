@@ -2,7 +2,7 @@ import type { Entitlements, WeeklyUsage } from "../api/entitlements";
 
 // Wording mirrors lib/planDisplay.ts on the web so the two apps never disagree.
 // An unknown plan keeps the server's own name instead of being called Free.
-const planNames: Record<string, string> = { free: "Free", pro: "Pro" };
+const planNames: Record<string, string> = { free: "Free", pro: "Pro", business: "Business" };
 const planName = (plan: string) => planNames[plan] ?? `${plan.charAt(0).toUpperCase()}${plan.slice(1)}`;
 const posts = (count: number) => `${count} post${count === 1 ? "" : "s"}`;
 // Review sync (#46) and AI replies (#96) have no feature behind them yet, so a
@@ -16,7 +16,7 @@ export function usageFor(plan: Entitlements | null, businessId: number | null): 
 export function expiryNote(plan: Entitlements): string | null {
   if (!plan.expiresAt) return null;
   const date = plan.expiresAt.slice(0, 10);
-  if (plan.expired) return `Your Pro plan expired on ${date}, so you are on the Free plan.`;
+  if (plan.expired) return `Your ${planName(plan.expiredPlan ?? "Pro")} plan expired on ${date}, so you are on the Free plan.`;
   if (plan.plan === "free") return null;
   return `Your ${planName(plan.plan)} plan runs until ${date}.`;
 }

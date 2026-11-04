@@ -11,7 +11,7 @@ import { assertSeedable } from "./guard";
 import { SEED_BUSINESSES, SEED_PUSH_TOKEN, type BusinessSeed, type DraftSeed, type DraftStatus } from "./fixtures";
 
 const CSV_DIR = resolve(__dirname, "..", "..", "sample-data", "csv");
-const OWNER_PLANS: Record<DevOwnerKey, Plan> = { pro: "pro", free: "free", email: "free" };
+const OWNER_PLANS: Record<DevOwnerKey, Plan> = { pro: "pro", business: "business", free: "free", email: "free" };
 const OWNER_IDS = Object.values(DEV_OWNERS).map(owner => owner.id);
 
 // No Buffer connection is seeded (#29): a fake connection would need real
@@ -147,7 +147,7 @@ async function seedBusiness(seed: BusinessSeed, owner: string, plan: Plan) {
   return businessId;
 }
 
-// Replaces everything owned by the two seeded demo owners and nothing else. Safe to
+// Replaces everything owned by the four seeded demo owners and nothing else. Safe to
 // repeat: a second run rebuilds the same rows (new ids, same content).
 export async function runSeed(env: Record<string, string | undefined> = process.env): Promise<SeedSummary> {
   assertSeedable(env);

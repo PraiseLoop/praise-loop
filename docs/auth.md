@@ -397,11 +397,12 @@ Demo sign-in (development only): `POST /api/mobile/session/dev` mints a normal
 bearer session for the fixed `dev-owner` row, with no Google token. It exists only
 when `MOBILE_DEV_AUTH=1` **and** the process is not a production build; otherwise it
 returns 404 exactly like an unknown route. `npm run dev:seed` creates the owners and
-synthetic drafts; a body of `{"owner":"free"}` signs in as the seeded Free owner
-and `{"owner":"email"}` as the email-only owner, instead of the default Pro one.
+synthetic drafts; a body of `{"owner":"business"}` signs in as the seeded Business
+owner, `{"owner":"free"}` as the Free owner and `{"owner":"email"}` as the
+email-only owner, instead of the default Pro one.
 
 The web uses `POST /api/dev/session` with the same flag, production guard and
-`{"owner":"pro"|"free"|"email"}` body. It creates the normal `auth_sessions` row
+`{"owner":"pro"|"business"|"free"|"email"}` body. It creates the normal `auth_sessions` row
 and NextAuth cookie for that demo owner, so `/approval`, the plan page and the
 Brand page work without Google. A cookie-minting request must come from the app's
 own origin. `GET /api/dev/session` lists the owner keys and labels for the

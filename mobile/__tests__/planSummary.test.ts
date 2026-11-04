@@ -2,7 +2,8 @@ import type { Entitlements, WeeklyUsage } from "../src/api/entitlements";
 import { expiryNote, planLines, planUsageLines, quotaMetMessage, usageFor } from "../src/queue/planSummary";
 
 const free = { postsPerWeek: 1, templates: 1, watermark: true, reviewSync: false, aiReplies: false, brandVoice: false, businesses: 1 };
-const pro = { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, businesses: 3 };
+const pro = { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, businesses: 1 };
+const business = { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, businesses: 5 };
 const usage = (overrides: Partial<WeeklyUsage> = {}): WeeklyUsage => ({
   businessId: 1, name: "Cafe", timezone: "America/Toronto", resetsOn: "2026-11-02", allocated: 0, target: 1, weeklyTarget: 3, quotaMet: false, ...overrides
 });
@@ -31,10 +32,21 @@ describe("plan summary", () => {
   });
 
   it("explains an expired Pro plan as Free", () => {
-    const expired = plan({ expiresAt: "2026-01-01T00:00:00.000Z", expired: true });
+    const expired = plan({ expiresAt: "2026-01-01T00:00:00.000Z", expired: true, expiredPlan: "pro" });
     expect(expiryNote(expired)).toBe("Your Pro plan expired on 2026-01-01, so you are on the Free plan.");
     expect(expiryNote(plan({ plan: "pro", limits: pro, source: "manual", expiresAt: "2027-01-01T00:00:00.000Z" }))).toBe("Your Pro plan runs until 2027-01-01.");
     expect(expiryNote(plan())).toBeNull();
+  });
+
+  it("names an expired Business plan instead of calling it Pro", () => {
+    const expired = plan({ expiresAt: "2026-01-01T00:00:00.000Z", expired: true, expiredPlan: "business" });
+    expect(expiryNote(expired)).toBe("Your Business plan expired on 2026-01-01, so you are on the Free plan.");
+  });
+
+  it("shows the Business plan name and its limits", () => {
+    const lines = planLines(plan({ plan: "business", limits: business }), null);
+    expect(lines[0]).toBe("Business plan");
+    expect(lines[1]).toBe("5 posts a week per business, 5 businesses");
   });
 
   it("names an unknown plan instead of calling it Free", () => {

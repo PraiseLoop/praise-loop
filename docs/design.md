@@ -136,16 +136,16 @@ transactional.
   and expects 401, so a route is public only if explicitly allow-listed there (mobile config, the
   sign-in exchanges, the dev routes). Routes that are owner-wide rather than business-scoped are in
   `OWNER_WIDE_PATHS`.
-- **Plans and entitlements** (`lib/services/entitlements.ts`): one plan per owner (`free`/`pro`),
+- **Plans and entitlements** (`lib/services/entitlements.ts`): one plan per owner (`free`/`pro`/`business`),
   enforced on the server; clients read `GET /api/entitlements` and never unlock anything themselves.
   Free: 1 post/week, 1 template, watermark, 1 business. Pro: 5 posts/week, no watermark, brand voice,
-  3 businesses; review sync, AI replies and extra templates are planned and are not sold until the
-  server enforces them (#218). Expired Pro falls back to Free without deleting
-  data. Plan changes are operator-only (`scripts/set-plan.ts`), except that the pilot can allow
-  self-service upgrades for a comma-separated email list in `SELF_SERVICE_UPGRADE_EMAILS`; Stripe web
-  billing (#225) and store subscriptions (#95) are not built. The planned design is in
-  [billing.md](billing.md).
-- **Dev sign-in** (`MOBILE_DEV_AUTH=1`, never in production): demo owners (Pro, Free, email-only) on
+  1 business; review sync, AI replies and extra templates are planned and are not sold until the
+  server enforces them (#218). Business: Pro's features plus 5 businesses. Expired Pro or Business
+  falls back to Free without deleting data. Plan changes are operator-only (`scripts/set-plan.ts`),
+  except that the pilot can allow self-service upgrades to Pro for a comma-separated email list in
+  `SELF_SERVICE_UPGRADE_EMAILS`; Stripe web billing (#225) and store subscriptions (#95) are not
+  built. The planned design is in [billing.md](billing.md).
+- **Dev sign-in** (`MOBILE_DEV_AUTH=1`, never in production): demo owners (Pro, Business, Free, email-only) on
   the phone and the web landing page, backed by `lib/devAuth.ts` and the dev seeder.
 
 ## 5. Clients

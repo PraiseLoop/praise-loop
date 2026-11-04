@@ -20,6 +20,8 @@ export type Entitlements = {
   source: "default" | "manual" | "store";
   expiresAt: string | null;
   expired: boolean;
+  /** The stored plan that lapsed when the owner now reads as Free (#215). */
+  expiredPlan?: string | null;
   limits: { postsPerWeek: number; templates: number; watermark: boolean; reviewSync: boolean; aiReplies: boolean; brandVoice: boolean; businesses: number };
   usage: WeeklyUsage[];
 };

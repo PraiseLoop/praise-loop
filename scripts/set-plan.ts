@@ -1,12 +1,12 @@
 import { query, pool } from "../lib/db";
-import { setOwnerPlan, type Plan } from "../lib/services/entitlements";
+import { PLAN_LIMITS, setOwnerPlan, type Plan } from "../lib/services/entitlements";
 
 const usage = `Usage:
   npm run plan:set -- OWNER_ID_OR_EMAIL PLAN [--expires YYYY-MM-DD] [--reason "..."]
   npm run plan:set -- --business BUSINESS_ID PLAN [--expires YYYY-MM-DD]
   npm run plan:set -- --email OWNER_EMAIL PLAN
 
-PLAN is free or pro. --business resolves its owner through the existing claim.
+PLAN is one of free, pro or business. --business resolves its owner through the existing claim.
 Every change appends an owner_plan_events audit row.`;
 
 async function main() {
@@ -23,7 +23,7 @@ async function main() {
     else if (arg === "--email" || arg === "--owner") owner = args[++i] ?? null;
     else if (arg === "--expires") expires = args[++i] ?? null;
     else if (arg === "--reason") reason = args[++i] ?? "";
-    else if (arg === "free" || arg === "pro") plan = arg;
+    else if (Object.hasOwn(PLAN_LIMITS, arg)) plan = arg as Plan;
     else if (!owner && arg) owner = arg;
     else throw new Error(usage);
   }

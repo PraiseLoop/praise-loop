@@ -124,7 +124,7 @@ through the Expo push service when a business's weekly drafts are complete, and
 removes tokens that Expo reports as no longer registered. Notifications carry no
 review text or captions, only a count and a deep link to the queue.
 
-**Entitlements** (#94). A per-owner plan (`free` or `pro`) with
+**Entitlements** (#94). A per-owner plan (`free`, `pro` or `business`) with
 limits checked on the server: posts per week, templates, watermark, review sync,
 AI replies, number of businesses. Owner-level storage is what makes "more than
 one business" enforceable; every owned business inherits the plan. Store purchases
@@ -185,7 +185,7 @@ is enforced today:
   first as the [contributing rules](../CONTRIBUTING.md) require.
 - The pilot doesn't depend on any of this: it can still invoice manually and set plans by hand.
 - The public `/plans` page (#134) shows only the enforced limits, with no prices,
-  until the Free/Pro prices are recorded in `docs/decisions.md`.
+  until the plan prices are recorded in `docs/decisions.md`.
 
 ## Hosting
 

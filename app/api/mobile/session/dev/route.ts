@@ -5,8 +5,8 @@ import { createMobileSession } from "../../../../../lib/mobileSessions";
 // Demo-only counterpart to POST /api/mobile/session: no Google token, a fixed
 // synthetic owner. Available only in a development process with MOBILE_DEV_AUTH=1
 // (see lib/devAuth.ts); otherwise it answers exactly like an unknown route.
-// An optional JSON body {"owner":"free"} signs in as the seeded Free owner instead
-// of the default Pro demo owner.
+// An optional JSON body {"owner":"business"} signs in as the seeded Business
+// owner instead of the default Pro demo owner.
 export async function POST(req?: Request) {
   if (!devAuthEnabled()) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

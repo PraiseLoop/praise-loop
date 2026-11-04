@@ -5,9 +5,9 @@ import type { EntitlementLimits, Plan } from "./services/entitlements";
 // this module only words them. Type-only imports keep the database layer out
 // of bundles that render the comparison.
 
-export const PLAN_ORDER: Plan[] = ["free", "pro"];
+export const PLAN_ORDER: Plan[] = ["free", "pro", "business"];
 
-export const publicPlanName: Record<Plan, string> = { free: "Free", pro: "Pro" };
+export const publicPlanName: Record<Plan, string> = { free: "Free", pro: "Pro", business: "Business" };
 
 export type PlanComparisonRow = {
   /** The limit this row explains; a test checks every shipped or planned limit has a row. */
@@ -38,13 +38,13 @@ export const PLAN_ROWS: PlanComparisonRow[] = [
   {
     key: "reviewSync",
     label: "Automatic review sync",
-    note: "Automatic review sync (Google reviews) is planned for Pro but is not available yet, so both plans start with a spreadsheet import.",
+    note: "Automatic review sync (Google reviews) is planned for Pro and Business but is not available yet, so every plan starts with a spreadsheet import.",
     value: l => l.reviewSync ? notAvailable : "Not included"
   },
   {
     key: "aiReplies",
     label: "AI review replies",
-    note: "AI review replies are planned for Pro but are not available yet.",
+    note: "AI review replies are planned for Pro and Business but are not available yet.",
     value: l => l.aiReplies ? notAvailable : "Not included"
   },
   {
@@ -73,7 +73,7 @@ export function planNotes(rows: ComparedRow[]): string[] {
   return [...new Set(rows.flatMap(row => row.note ? [row.note] : []))];
 }
 
-// Prices are deliberately absent until the owner records the Free/Pro prices in
-// docs/decisions.md (issue #134). Fill PLAN_PRICING in the same change as that
+// Prices are deliberately absent until the owner records the Free/Pro/Business
+// prices in docs/decisions.md (issue #134). Fill PLAN_PRICING in the same change as that
 // decision; scripts/test-plans.ts fails when the decision and the page disagree.
 export const PLAN_PRICING: Record<Plan, string> | null = null;

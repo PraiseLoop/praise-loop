@@ -8,12 +8,13 @@ import styles from "./plans.module.css";
 
 export const metadata: Metadata = {
   title: "Plans · PraiseLoop",
-  description: "What the Free and Pro PraiseLoop plans include: posts each week, watermark, brand voice and businesses."
+  description: "What the Free, Pro and Business PraiseLoop plans include: posts each week, watermark, brand voice and businesses."
 };
 
 const taglines: Record<Plan, string> = {
   free: "For one business getting started.",
-  pro: "For a business posting more often, without a watermark."
+  pro: "For a business posting more often, without a watermark.",
+  business: "For owners running several businesses."
 };
 
 // The comparison is worded from the same limits the server enforces, so a plan
@@ -32,14 +33,15 @@ export default function PlansPage() {
       <main className={styles.main}>
         <section className={styles.intro}>
           <span className="pl-eyebrow">Plans</span>
-          <h1 className={styles.headline}>Two plans. Your approval, always.</h1>
+          <h1 className={styles.headline}>Three plans. Your approval, always.</h1>
           <p className={styles.lede}>
-            Start on Free. Pro makes more posts each week and removes the watermark. Every plan keeps
-            reviews and drafts private to your account, and nothing posts without your OK.
+            Start on Free. Pro makes more posts each week and removes the watermark, while Business
+            adds room for several businesses. Every plan keeps reviews and drafts private to your
+            account, and nothing posts without your OK.
           </p>
         </section>
 
-        <section aria-label="Compare the Free and Pro plans" className={styles.grid}>
+        <section aria-label="Compare the Free, Pro and Business plans" className={styles.grid}>
           {PLAN_ORDER.map(plan => (
             <article key={plan} className={styles.plan}>
               <div className={styles.planHead}>

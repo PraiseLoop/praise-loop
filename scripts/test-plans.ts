@@ -21,16 +21,19 @@ assert.deepEqual(
 );
 assert.ok(includesKey(UNLISTED_LIMITS, "templates"), "templates stay off the comparison until a second design exists and the limit is enforced (#218)");
 assert.deepEqual(PLAN_ROWS.map(row => row.key).sort(), [...SHIPPED_LIMITS, ...PLANNED_LIMITS].sort(), "only shipped and planned limits get a comparison row");
-assert.deepEqual(PLAN_ORDER, ["free", "pro"]);
+assert.deepEqual(PLAN_ORDER, ["free", "pro", "business"]);
+assert.equal(PLAN_LIMITS.pro.businesses, 1, "Pro keeps one business; several move to Business");
+assert.equal(PLAN_LIMITS.business.businesses, 5);
+assert.ok(PLAN_LIMITS.business.postsPerWeek >= PLAN_LIMITS.pro.postsPerWeek, "Business has at least Pro's weekly posts");
 
 const rows = planComparison(PLAN_LIMITS);
-assert.deepEqual(rows.map(row => ({ label: row.label, free: row.values.free, pro: row.values.pro })), [
-  { label: "Posts each week, per business", free: "1 post", pro: "5 posts" },
-  { label: "Watermark on images", free: "Small PraiseLoop watermark", pro: "No watermark" },
-  { label: "Automatic review sync", free: "Not included", pro: "Planned — not available yet" },
-  { label: "AI review replies", free: "Not included", pro: "Planned — not available yet" },
-  { label: "Brand voice", free: "Not included", pro: "Learn from your website" },
-  { label: "Businesses", free: "1 business", pro: "3 businesses" }
+assert.deepEqual(rows.map(row => ({ label: row.label, free: row.values.free, pro: row.values.pro, business: row.values.business })), [
+  { label: "Posts each week, per business", free: "1 post", pro: "5 posts", business: "5 posts" },
+  { label: "Watermark on images", free: "Small PraiseLoop watermark", pro: "No watermark", business: "No watermark" },
+  { label: "Automatic review sync", free: "Not included", pro: "Planned — not available yet", business: "Planned — not available yet" },
+  { label: "AI review replies", free: "Not included", pro: "Planned — not available yet", business: "Planned — not available yet" },
+  { label: "Brand voice", free: "Not included", pro: "Learn from your website", business: "Learn from your website" },
+  { label: "Businesses", free: "1 business", pro: "1 business", business: "5 businesses" }
 ], "a plan limit changed; update the comparison wording and this expectation together");
 
 // A limit is only shown as available when it has a feature behind it. Planned
@@ -49,8 +52,8 @@ for (const row of rows) {
 
 // Unshipped features stay honest: the labels and notes must not claim they work.
 assert.deepEqual(planNotes(rows), [
-  "Automatic review sync (Google reviews) is planned for Pro but is not available yet, so both plans start with a spreadsheet import.",
-  "AI review replies are planned for Pro but are not available yet.",
+  "Automatic review sync (Google reviews) is planned for Pro and Business but is not available yet, so every plan starts with a spreadsheet import.",
+  "AI review replies are planned for Pro and Business but are not available yet.",
   "Brand voice learns a short, editable profile from your own public website; nothing is scraped from social accounts."
 ]);
 assert.doesNotMatch(JSON.stringify(rows), /Up to 5 templates/, "templates must not be sold until more designs exist");

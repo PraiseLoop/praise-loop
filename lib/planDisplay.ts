@@ -24,14 +24,14 @@ export type WeeklyUsage = {
 
 export type EntitlementsWithUsage = Entitlements & { usage: WeeklyUsage[] };
 
-const planNames: Record<string, string> = { free: "Free", pro: "Pro" };
+const planNames: Record<string, string> = { free: "Free", pro: "Pro", business: "Business" };
 export const planName = (plan: string) => planNames[plan] ?? plan;
 
-/** A stored Pro plan whose expiry has passed reads as Free; this explains why. */
-export function expiryNote(e: Pick<Entitlements, "plan" | "expiresAt" | "expired">): string | null {
+/** A stored paid plan whose expiry has passed reads as Free; this explains why. */
+export function expiryNote(e: Pick<Entitlements, "plan" | "expiresAt" | "expired" | "expiredPlan">): string | null {
   if (!e.expiresAt) return null;
   const date = e.expiresAt.slice(0, 10);
-  if (e.expired) return `Your Pro plan expired on ${date}, so you are on the Free plan.`;
+  if (e.expired) return `Your ${planName(e.expiredPlan ?? e.plan)} plan expired on ${date}, so you are on the Free plan.`;
   if (e.plan === "free") return null;
   return `Your ${planName(e.plan)} plan runs until ${date}.`;
 }
@@ -49,7 +49,7 @@ export function quotaMetMessage(e: Pick<Entitlements, "plan" | "limits">, usage:
 }
 
 /** The full This Week notice for a used-up quota: the limit, when posts resume, and any expiry note. */
-export function weekLimitNotice(e: Pick<Entitlements, "plan" | "limits" | "expiresAt" | "expired">, usage: WeeklyUsage | undefined): string | null {
+export function weekLimitNotice(e: Pick<Entitlements, "plan" | "limits" | "expiresAt" | "expired" | "expiredPlan">, usage: WeeklyUsage | undefined): string | null {
   const message = usage ? quotaMetMessage(e, usage) : null;
   if (!usage || !message) return null;
   const expiry = expiryNote(e);
