@@ -20,6 +20,8 @@ export type WeeklyUsage = {
   /** What the owner asked for, before the plan cap. */
   weeklyTarget: number;
   quotaMet: boolean;
+  /** Over the plan's business limit after a downgrade: visible, but no new generation. */
+  paused: boolean;
 };
 
 export type EntitlementsWithUsage = Entitlements & { usage: WeeklyUsage[] };
@@ -37,6 +39,12 @@ export function expiryNote(e: Pick<Entitlements, "plan" | "expiresAt" | "expired
 }
 
 const posts = (count: number) => `${count} post${count === 1 ? "" : "s"}`;
+const businesses = (count: number) => `${count} business${count === 1 ? "" : "es"}`;
+
+/** Explains a business that is over the plan's limit after a downgrade. The phone has its own wording, with no upgrade prompt. */
+export function pausedBusinessMessage(e: Pick<Entitlements, "plan" | "limits">): string {
+  return `This business is paused because the ${planName(e.plan)} plan includes ${businesses(e.limits.businesses)}. Upgrade to resume new posts; your existing posts are still available.`;
+}
 
 /** Names the plan limit when the week's quota is used up; null while there is room. */
 export function quotaMetMessage(e: Pick<Entitlements, "plan" | "limits">, usage: Pick<WeeklyUsage, "target" | "weeklyTarget" | "quotaMet">): string | null {

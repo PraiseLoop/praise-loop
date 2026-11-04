@@ -57,6 +57,25 @@ export function entitlementsForPlan(plan: string, source: PlanSource, expiresAt:
   };
 }
 
+export type BusinessAllowance = {
+  /** Owned businesses that may generate, oldest first. */
+  active: number[];
+  /** The businesses over the plan's limit: stored and visible, but generation is paused. */
+  paused: number[];
+};
+
+// The rule after a downgrade: nothing is deleted. The oldest businesses within the
+// plan's limit stay active (created_at, then id) and the rest are paused. The same
+// check runs inside the generation lock, so a paused business creates no drafts and
+// reserves no quota; upgrading raises the limit and resumes them with no data change.
+export async function businessAllowance(ownerId: string, limit: number, exec: Executor = query): Promise<BusinessAllowance> {
+  const rows = (await exec("SELECT id FROM businesses WHERE owner_id=$1 ORDER BY created_at, id", [ownerId])).rows;
+  const ids = rows.map(row => Number(row.id));
+  const active = ids.slice(0, Math.max(0, Math.floor(limit)));
+  const allowed = new Set(active);
+  return { active, paused: ids.filter(id => !allowed.has(id)) };
+}
+
 // Expired plans fall back to free without deleting the row, so restoring expiry
 // (or a renewal webhook) brings Pro back with no data changes.
 export async function entitlementsFor(ownerId: string, exec: Executor = query, now = new Date()): Promise<Entitlements> {

@@ -6,9 +6,9 @@ import { NextRequest } from "next/server";
 import sharp from "sharp";
 import { databaseFixture } from "./db-fixture";
 import { sessionHash } from "../lib/auth-adapter";
-import { PLAN_LIMITS, entitlementsFor, entitlementsForPlan, setOwnerPlan } from "../lib/services/entitlements";
+import { PLAN_LIMITS, businessAllowance, entitlementsFor, entitlementsForPlan, setOwnerPlan } from "../lib/services/entitlements";
 import { SELF_SERVICE_UPGRADE_ENV, isSelfServiceUpgradeEmail, selfServiceUpgradeEmails } from "../lib/services/planUpgrade";
-import { expiryNote, formatLocalDate, quotaMetMessage, weekLimitNotice } from "../lib/planDisplay";
+import { expiryNote, formatLocalDate, pausedBusinessMessage, quotaMetMessage, weekLimitNotice } from "../lib/planDisplay";
 import { entitlementsWithUsage, localMidnight, weeklyUsage } from "../lib/services/planUsage";
 import { processGeneration, requestGeneration, type GenerationDeps } from "../lib/services/generation";
 import { renderDraftImage } from "../lib/services/imageRenderer";
@@ -68,7 +68,8 @@ async function main() {
         ('free-owner','free@example.invalid'),('pro-owner','pro@example.invalid'),
         ('business-owner','business@example.invalid'),('expired-business-owner','expired-business@example.invalid'),
         ('expired-owner','expired@example.invalid'),('api-owner','api@example.invalid'),
-        ('upgrade-owner','upgrade@example.invalid'),('upgrade-business-owner','upgrade-business@example.invalid'),('blocked-owner','blocked@example.invalid')`);
+        ('upgrade-owner','upgrade@example.invalid'),('upgrade-business-owner','upgrade-business@example.invalid'),('blocked-owner','blocked@example.invalid'),
+        ('over-limit-owner','over-limit@example.invalid')`);
       await c.query(`INSERT INTO auth_sessions VALUES
         ($1,'api-owner',now()+interval '1 hour'),
         ($2,'upgrade-owner',now()+interval '1 hour'),
@@ -192,8 +193,10 @@ async function main() {
       assert.equal(body.usage.length, 1);
       assert.deepEqual({ ...usageOf(body), weekStart: undefined, resetsOn: undefined, resetsAt: undefined }, {
         businessId: Number(apiBusiness), name: "API synthetic", timezone: "UTC", weekStart: undefined, resetsOn: undefined, resetsAt: undefined,
-        allocated: 0, target: 1, weeklyTarget: 3, quotaMet: false
+        allocated: 0, target: 1, weeklyTarget: 3, quotaMet: false, paused: false
       });
+      assert.equal(usageOf(body).paused, false);
+      assert.equal(pausedBusinessMessage(body), "This business is paused because the Free plan includes 1 business. Upgrade to resume new posts; your existing posts are still available.");
       assert.equal(quotaMetMessage(body, usageOf(body)), null);
       // Quota met: the route reports the used-up week and the message names the Free limit.
       await c.query("INSERT INTO generation_periods(business_id,period_start,timezone,target,allocated,completed) VALUES($1,$2,'UTC',1,1,1)", [apiBusiness, usageOf(body).weekStart]);
@@ -238,6 +241,40 @@ async function main() {
       assert.equal(expiryNote(expiredBusinessView), "Your Business plan expired on 2020-01-01, so you are on the Free plan.");
       assert.equal((await c.query("SELECT count(*) n FROM businesses WHERE id=$1", [expiredBusinessBusiness])).rows[0].n, "1", "expiry keeps the Business data");
       assert.equal((await c.query("SELECT plan FROM owner_plans WHERE owner_id='expired-business-owner'")).rows[0].plan, "business", "expiry keeps the stored Business plan for renewal");
+
+      // A downgrade keeps every business but pauses the ones over the plan limit. The
+      // oldest businesses (created_at, then id) stay active; renewing resumes the rest.
+      await setOwnerPlan("over-limit-owner", "business", { reason: "Synthetic Business plan before downgrade" });
+      const overBusiness = async (name: string, createdAt: string) =>
+        Number((await c.query("INSERT INTO businesses(name,timezone,owner_id,created_at,weekly_target) VALUES($1,'UTC','over-limit-owner',$2,5) RETURNING id", [name, createdAt])).rows[0].id);
+      const overNewest = await overBusiness("Newest synthetic", "2026-01-03T00:00:00Z");
+      const overOldest = await overBusiness("Oldest synthetic", "2026-01-01T00:00:00Z");
+      const overMiddle = await overBusiness("Middle synthetic", "2026-01-02T00:00:00Z");
+      await reviews(overOldest); await reviews(overMiddle); await reviews(overNewest);
+      assert.deepEqual((await businessAllowance("over-limit-owner", 5)).active, [overOldest, overMiddle, overNewest], "created_at decides the order, not the id");
+      assert.deepEqual((await businessAllowance("over-limit-owner", 5)).paused, []);
+
+      // A draft created while the business was allowed stays visible and approved after the pause.
+      const pausedDraft = Number((await c.query("INSERT INTO draft_posts(business_id,quote_text,caption_text,status,created_at) VALUES($1,'Synthetic paused quote','Synthetic paused caption','approved',now()-interval '30 days') RETURNING id", [overNewest])).rows[0].id);
+      await setOwnerPlan("over-limit-owner", "free", { reason: "Synthetic downgrade to Free" });
+      const downgradedBusinesses = await businessAllowance("over-limit-owner", 1);
+      assert.deepEqual(downgradedBusinesses.active, [overOldest]);
+      assert.deepEqual(downgradedBusinesses.paused, [overMiddle, overNewest]);
+      const overUsage = await entitlementsWithUsage("over-limit-owner", now);
+      assert.equal(overUsage.usage.find(u => u.businessId === overOldest)?.paused, false);
+      assert.equal(overUsage.usage.find(u => u.businessId === overMiddle)?.paused, true);
+      assert.equal(overUsage.usage.find(u => u.businessId === overNewest)?.paused, true);
+      const pausedRequest = await requestGeneration(overNewest, 5, now);
+      assert.equal(pausedRequest.inserted, 0);
+      assert.equal(pausedRequest.reason, "business_paused");
+      assert.equal((await c.query("SELECT count(*) n FROM generation_periods WHERE business_id=$1", [overNewest])).rows[0].n, "0", "a paused business reserves no quota");
+      assert.equal((await c.query("SELECT count(*) n FROM draft_posts WHERE business_id=$1", [overNewest])).rows[0].n, "1", "pausing keeps existing drafts");
+      assert.equal((await c.query("SELECT status FROM draft_posts WHERE id=$1", [pausedDraft])).rows[0].status, "approved", "existing drafts can still be approved");
+      assert.equal((await requestGeneration(overOldest, 5, now)).inserted, 1, "the oldest business keeps generating on Free");
+      assert.equal((await c.query("SELECT count(*) n FROM businesses WHERE owner_id='over-limit-owner'")).rows[0].n, "3", "a downgrade deletes nothing");
+      await setOwnerPlan("over-limit-owner", "business", { reason: "Synthetic renewal" });
+      assert.equal((await entitlementsWithUsage("over-limit-owner", now)).usage.every(u => u.paused === false), true, "renewing resumes every business");
+      assert.equal((await requestGeneration(overNewest, 5, now)).inserted, 5, "the resumed business generates again");
 
       // The This Week notice depends only on usage, not on which posts are still listed, so a
       // Free owner who skipped their one allocated post still sees the plan limit and reset day.

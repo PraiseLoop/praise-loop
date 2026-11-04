@@ -6,7 +6,7 @@ import { chargeGeneration } from "../authorization";
 import { selectQuoteCandidates } from "./quoteSelector";
 import { generateCaptionVariants } from "./captions";
 import { renderDraftImage } from "./imageRenderer";
-import { entitlementsFor } from "./entitlements";
+import { businessAllowance, entitlementsFor } from "./entitlements";
 import type { BrandTone } from "../branding";
 export function generationWeek(now: Date, timezone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year:"numeric", month:"2-digit", day:"2-digit" }).formatToParts(now);
@@ -24,7 +24,11 @@ export async function requestGeneration(businessId: number, limit = 5, now = new
     // The plan caps the owner's configured weekly target; enforce it inside the
     // same business lock so a downgrade cannot be raced by a queued request.
     const entitlements = await entitlementsFor(business.owner_id, (sql,values)=>c.query(sql,values), now);
+    // A downgrade keeps every business but only the oldest ones within the plan may
+    // generate. Check this inside the same lock, before a period or any quota exists.
+    const allowance = await businessAllowance(business.owner_id, entitlements.limits.businesses, (sql,values)=>c.query(sql,values));
     const target = Math.min(business.weekly_target, entitlements.limits.postsPerWeek);
+    if (!allowance.active.some(id => String(id) === String(businessId))) return { inserted:0, reason:"business_paused", periodStart:null, target };
     const week = generationWeek(now,business.timezone);
     await c.query(`INSERT INTO generation_periods(business_id,period_start,timezone,target,allocated,completed)
       SELECT $1,$2,$3,$4,count(*),count(*) FILTER(WHERE caption_text<>'' AND image_path IS NOT NULL)

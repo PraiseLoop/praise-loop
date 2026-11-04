@@ -1,11 +1,12 @@
 "use client";
+import Link from "next/link";
 import { useBusiness, useProfile } from "../AppShell";
 import { apiFetch } from "../apiFetch";
 import ProfileNameForm from "../ProfileNameForm";
 import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
 import { ADD_NAME_HINT, ADD_NAME_PROMPT, displayName } from "../../lib/profileDisplay";
-import { expiryNote, formatLocalDate, planName, quotaMetMessage } from "../../lib/planDisplay";
+import { expiryNote, formatLocalDate, pausedBusinessMessage, planName, quotaMetMessage } from "../../lib/planDisplay";
 import { usePlan } from "../ui/usePlan";
 import PlanUpgrade from "./PlanUpgrade";
 
@@ -173,7 +174,8 @@ export default function AccountPage() {
             <strong>{u.name}</strong>
             <span>{u.allocated} of {u.target} {u.target === 1 ? "post" : "posts"} this week</span>
             <span className="pl-small pl-muted">Resets {formatLocalDate(u.resetsOn)} ({u.timezone})</span>
-            {quotaMetMessage(plan, u) ? <span className="pl-small">{quotaMetMessage(plan, u)}</span> : null}
+            {u.paused ? <span className="pl-small">{pausedBusinessMessage(plan)} <Link href="/plans">See plans</Link></span> : null}
+            {!u.paused && quotaMetMessage(plan, u) ? <span className="pl-small">{quotaMetMessage(plan, u)}</span> : null}
           </div>
         )) : <p className="pl-muted">Add a business to see your weekly usage.</p>}
       </section>

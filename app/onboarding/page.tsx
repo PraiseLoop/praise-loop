@@ -19,7 +19,8 @@ const jobLabels: Record<string, string> = { pending: "Waiting its turn…", runn
 const noDrafts: Record<string, string> = {
   reviews_exhausted: "None of your reviews can become posts yet. Add a few 4–5 star reviews with at least 30 characters, then try again.",
   quota_met: "You’ve used this week’s posts. New ones can be made next week.",
-  backlog_full: "Posts are still being made. Check back in a minute."
+  backlog_full: "Posts are still being made. Check back in a minute.",
+  business_paused: "This business is paused because your plan includes fewer businesses. Upgrade on the plans page to resume new posts."
 };
 
 function browserZone() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch { return "UTC"; } }

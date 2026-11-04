@@ -27,6 +27,11 @@ Nobody can buy until #223 ships, so that PR records the price and publishes it t
 - **Plans:** `free`, `pro` and `business`, one row per owner in `owner_plans`, with a source and an
   expiry. `lib/services/entitlements.ts` holds the limits, and expired Pro or Business falls back to
   Free without deleting data.
+- **Downgrades:** an owner keeps every business, but only the oldest ones within the plan's business
+  limit generate (ordered by `created_at` then `id`). The rest are paused and resume automatically
+  after an upgrade. The web shows the pause with a link to the plans page; the phone only explains it,
+  with no upgrade prompt or link (see the Apple rules below). Existing drafts stay visible and can
+  still be approved (#217).
 - **Audit:** every change appends to `owner_plan_events`.
 - **Display:** `GET /api/entitlements` is read-only, and `/account`, `/plans` and the phone show what it returns.
 - **Issues:** #94, #133 and #134 are closed. #95 covers App Store and Google Play purchases only, and
@@ -67,8 +72,8 @@ From Apple's App Review Guidelines (page reports last updated 2026-10-16):
   hosting. PraiseLoop isn't one of them.
 
 Until #95 ships, the phone app shows plan status only, with no upgrade prompt or link. The list of
-entitlement regions wasn't checked, so confirm how this applies before any store submission. Google
-Play's rules weren't checked either.
+entitlement regions wasn't checked, so confirm how this applies before any store submission.
+Google Play's rules weren't checked either.
 
 ## Design
 
@@ -112,7 +117,7 @@ owners need moving. Approval stays required on every plan, and nothing auto-post
 | `free` and `pro` were hardcoded in checks, types, scripts and display helpers; the Business tier replaces that (#215) | Migration 012, `entitlements.ts`, `set-plan.ts`, display helpers | #215 |
 | Review sync, AI replies and templates have nothing enforcing them, because the features don't exist yet | `PLAN_LIMITS` | #218 |
 | Free owners can post through Buffer | `lib/services/bufferPosting.ts`, `app/api/buffer/` | #216 |
-| The business limit is only checked at creation, so a lapsed owner keeps every business generating | `lib/services/generation.ts` | #217 |
+| The business limit is only checked at creation, so a lapsed owner keeps every business generating; #217 pauses the extra businesses and resumes them on upgrade | `lib/services/generation.ts` | #217 |
 | Deleting an account wouldn't cancel a Stripe subscription, so a deleted owner could keep being charged | `lib/services/accountDeletion.ts` | #220 |
 | Email-code sign-in to an existing Google owner is flagged for review before billing, because of reassigned mailboxes | [design.md](design.md) | #221 |
 

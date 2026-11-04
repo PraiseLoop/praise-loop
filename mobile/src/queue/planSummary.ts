@@ -5,9 +5,19 @@ import type { Entitlements, WeeklyUsage } from "../api/entitlements";
 const planNames: Record<string, string> = { free: "Free", pro: "Pro", business: "Business" };
 const planName = (plan: string) => planNames[plan] ?? `${plan.charAt(0).toUpperCase()}${plan.slice(1)}`;
 const posts = (count: number) => `${count} post${count === 1 ? "" : "s"}`;
+const businesses = (count: number) => `${count} business${count === 1 ? "" : "es"}`;
 // Review sync (#46) and AI replies (#96) have no feature behind them yet, so a
 // plan that allows them still reads as planned, never as available.
 const featureState = (value: boolean) => value ? "planned, not available yet" : "not included";
+
+/**
+ * A business over the plan's limit is paused, not deleted. Unlike the web copy this never
+ * mentions upgrading: until store purchases exist (#95), Apple's rules keep the app from
+ * pointing owners to a purchase outside it. See docs/billing.md.
+ */
+export function pausedBusinessMessage(plan: Entitlements): string {
+  return `This business is paused because the ${planName(plan.plan)} plan includes ${businesses(plan.limits.businesses)}. New posts have stopped; your existing posts are still available.`;
+}
 
 export function usageFor(plan: Entitlements | null, businessId: number | null): WeeklyUsage | null {
   return plan?.usage.find(item => item.businessId === businessId) ?? null;
@@ -47,6 +57,6 @@ export function planLines(plan: Entitlements, usage: WeeklyUsage | null): string
 // is no selected queue to scope it to. Each line names its business.
 export function planUsageLines(plan: Entitlements | null): string[] {
   return (plan?.usage ?? []).map(usage =>
-    `${usage.name}: ${usage.allocated} of ${usage.target} ${usage.target === 1 ? "post" : "posts"} this week, resets ${usage.resetsOn} (${usage.timezone})`
+    `${usage.name}: ${usage.allocated} of ${usage.target} ${usage.target === 1 ? "post" : "posts"} this week, resets ${usage.resetsOn} (${usage.timezone})${usage.paused ? " — paused" : ""}`
   );
 }

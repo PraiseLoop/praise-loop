@@ -9,6 +9,8 @@ export type WeeklyUsage = {
   target: number;
   weeklyTarget: number;
   quotaMet: boolean;
+  /** Optional so older builds keep working when the server adds this field. */
+  paused?: boolean;
 };
 
 // Read-only mirror of GET /api/entitlements. The server owns every limit; the
