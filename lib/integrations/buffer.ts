@@ -11,7 +11,7 @@ export class SchedulerRejected extends Error { constructor(m: string) { super(`B
 // manually or via the post-status API; they must NOT resubmit (no provider dedupe).
 export class SchedulerAmbiguous extends Error { constructor(m: string) { super(`Buffer outcome unknown (${m}); check the channel before retrying.`); } }
 export type PostingMode = "draft" | "live";
-export type BufferOptions = { accessToken: string; channelId: string; mode: PostingMode; fetchImpl?: typeof fetch; timeoutMs?: number; maxRateLimitRetries?: number; sleep?: (ms: number) => Promise<void>; endpoint?: string };
+export type BufferOptions = { accessToken: string; channelId: string; /** The channel's network (lowercase). Instagram needs a post type. */ service?: string; mode: PostingMode; fetchImpl?: typeof fetch; timeoutMs?: number; maxRateLimitRetries?: number; sleep?: (ms: number) => Promise<void>; endpoint?: string };
 const CREATE = `mutation($input: CreatePostInput!){ createPost(input:$input){ __typename ... on PostActionSuccess { post { id status } } ... on MutationError { message } } }`;
 const STATUS = `query($input: PostInput!){ post(input:$input){ id status externalLink sentAt error { message } } }`;
 // Error types Buffer returns for a request it refused before creating anything. Only these
@@ -41,7 +41,7 @@ export class BufferSchedulerAdapter implements SchedulerAdapter {
   /** Sends the post now (`live`) or saves it as a Buffer draft (`draft`). Never schedules in Buffer's queue. */
   async submitPost(p: SchedulePayload): Promise<ScheduleReceipt> {
     if (!p.captionText.trim() || !p.mediaUrl) throw new SchedulerRejected("incomplete draft: caption and provider-fetchable media required");
-    const input = { channelId: this.o.channelId, text: p.captionText, schedulingType: "automatic", mode: "shareNow", needsApproval: false, saveToDraft: this.o.mode === "draft", assets: [{ image: { url: p.mediaUrl } }] };
+    const input = { channelId: this.o.channelId, text: p.captionText, schedulingType: "automatic", mode: "shareNow", needsApproval: false, saveToDraft: this.o.mode === "draft", assets: [{ image: { url: p.mediaUrl } }], ...(this.o.service === "instagram" ? { metadata: { instagram: { type: "post", shouldShareToFeed: true } } } : {}) };
     const json = await this.call(JSON.stringify({ query: CREATE, variables: { input } }));
     const r = json.data?.createPost;
     if (r?.post?.id) return { provider: "buffer", externalId: String(r.post.id), status: String(r.post.status ?? "") };

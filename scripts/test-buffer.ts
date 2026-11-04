@@ -13,6 +13,7 @@ function make(responses: (Response | Error)[], mode: "draft" | "live" = "live") 
   return { calls, a: new BufferSchedulerAdapter({ accessToken: "TOKEN", channelId: "ch1", mode, fetchImpl, sleep: async () => {} }) };
 }
 async function main() {
+  let igBody = "";
   const good = { data: { createPost: { __typename: "PostActionSuccess", post: { id: "p1", status: "sending" } } } };
   let t = make([ok(good)]);
   const r = await t.a.submitPost(payload);
@@ -25,6 +26,11 @@ async function main() {
   // draft mode asks Buffer to keep it as a draft, so nothing is published
   t = make([ok(good)], "draft"); await t.a.submitPost(payload);
   assert.equal(JSON.parse(t.calls[0].body).variables.input.saveToDraft, true);
+  // Instagram requires a post type and a feed flag (Buffer rejected the first real post without them); other networks get no metadata
+  assert.equal(sent.metadata, undefined, "no metadata unless the channel is Instagram");
+  const ig = new BufferSchedulerAdapter({ accessToken: "TOKEN", channelId: "ch1", service: "instagram", mode: "draft", fetchImpl: (async (_u: string, init: RequestInit) => { igBody = String(init.body); return ok(good); }) as unknown as typeof fetch });
+  await ig.submitPost(payload);
+  assert.deepEqual(JSON.parse(igBody).variables.input.metadata, { instagram: { type: "post", shouldShareToFeed: true } }, "documented InstagramPostMetadataInput");
   // incomplete drafts never reach the network
   t = make([]);
   await assert.rejects(t.a.submitPost({ ...payload, mediaUrl: "" }), SchedulerRejected);
