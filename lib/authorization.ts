@@ -27,7 +27,8 @@ export async function readSession(req: NextRequest): Promise<Session | null> {
 export async function ownerId(req: NextRequest) { return (await readSession(req))?.owner ?? null; }
 export async function chargeGeneration(owner: string, amount = 1, kind = "generation") {
   const configured = Number(process.env.OWNER_GENERATION_DAILY_LIMIT ?? 25);
-  const limit = kind === "preview" ? 120 : Number.isSafeInteger(configured) && configured > 0 ? configured : 25;
+  // The design picker renders every design on each form change, so previews need more room. They use no AI.
+  const limit = kind === "preview" ? 600 : Number.isSafeInteger(configured) && configured > 0 ? configured : 25;
   if (!Number.isSafeInteger(amount) || amount < 1 || amount > limit) return false;
   return !!(await query(`INSERT INTO owner_usage(owner_id,day,kind,calls) VALUES($1,(now() AT TIME ZONE 'UTC')::date,$2,$3)
     ON CONFLICT(owner_id,day,kind) DO UPDATE SET calls=owner_usage.calls+$3 WHERE owner_usage.calls+$3<=$4 RETURNING calls`, [owner,kind,amount,limit])).rowCount;

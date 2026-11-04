@@ -55,7 +55,8 @@ async function handlePOST(req: NextRequest) {
       logoUrl: row.logo_url,
       brandTone: row.brand_tone,
       templateConfig: row.brand_colors,
-      watermark: entitlements.limits.watermark
+      watermark: entitlements.limits.watermark,
+      templatesAllowed: entitlements.limits.templates
     });
 
     const updated = await query<{ id: number; image_path: string }>(

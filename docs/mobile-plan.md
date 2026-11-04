@@ -127,9 +127,9 @@ removes tokens that Expo reports as no longer registered. Notifications carry no
 review text or captions, only a count and a deep link to the queue.
 
 **Entitlements** (#94). A per-owner plan (`free`, `pro` or `business`) with
-limits checked on the server: posts per week, templates, watermark, review sync,
-AI replies, number of businesses. Owner-level storage is what makes "more than
-one business" enforceable; every owned business inherits the plan. Store purchases
+limits checked on the server: posts per week, quote-card designs, watermark,
+review sync, AI replies, number of businesses. Owner-level storage is what makes
+"more than one business" enforceable; every owned business inherits the plan. Store purchases
 change the plan through a verified webhook (#95); the app never decides what's unlocked.
 
 **Account deletion** (#93). App Store guideline 5.1.1(v) requires apps that
@@ -175,7 +175,7 @@ is enforced today:
 |---|---|
 | CSV import | Automatic Google review sync (#46) |
 | 1 post a week | 3–5 posts a week |
-| One template, small watermark | No watermark; more templates once they exist |
+| One quote-card design (Classic), small watermark | No watermark; all four quote-card designs |
 | Captions | AI review replies, brand voice |
 | Phone share sheet and image download | Automatic posting (through Buffer, Pro and Business only) |
 | | More than one business |

@@ -2,7 +2,7 @@ import { validTimezone } from "../../../lib/timezone";
 import { rasterLogo } from "../../../lib/services/logos";
 import { ownerRoute, currentOwner } from "../../../lib/authorization";
 import { NextRequest, NextResponse } from "next/server";
-import { parseBrandColors, parseLogoUrl, validBrandConfig, type BrandTone } from "../../../lib/branding";
+import { parseBrandColors, parseLogoUrl, quoteOptions, templateWithinLimit, validBrandConfig, type BrandTone } from "../../../lib/branding";
 import { query, transaction } from "../../../lib/db";
 import { entitlementsFor } from "../../../lib/services/entitlements";
 
@@ -105,6 +105,9 @@ async function handlePOST(req: NextRequest) {
       if (existing.rowCount) return { business: existing.rows[0] };
     }
     const entitlements = await entitlementsFor(owner, (sql, values) => c.query(sql, values));
+    if (!templateWithinLimit(quoteOptions(parsedBrandColors).template, entitlements.limits.templates)) {
+      return { templateLimit: entitlements.limits.templates };
+    }
     const count = Number((await c.query<{ n: string }>("SELECT count(*) n FROM businesses WHERE owner_id=$1", [owner])).rows[0].n);
     if (count >= entitlements.limits.businesses) return { limit: entitlements.limits.businesses };
     const inserted = await c.query<BusinessRow>(
@@ -121,6 +124,12 @@ async function handlePOST(req: NextRequest) {
     return NextResponse.json({
       error: `Your plan includes ${result.limit} ${result.limit === 1 ? "business" : "businesses"}; upgrade to add another.`,
       code: "business_limit_reached"
+    }, { status: 403 });
+  }
+  if ("templateLimit" in result) {
+    return NextResponse.json({
+      error: `Your plan includes ${result.templateLimit} quote design${result.templateLimit === 1 ? "" : "s"}; upgrade to choose this one.`,
+      code: "template_limit_reached"
     }, { status: 403 });
   }
 

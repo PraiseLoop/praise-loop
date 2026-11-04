@@ -139,7 +139,7 @@ export default function Onboarding() {
             </div>
             <details>
               <summary style={{ cursor: "pointer", fontWeight: 600, color: "var(--pl-green)" }}>Preview a sample post</summary>
-              <div style={{ marginTop: 12, maxWidth: 320 }}><BrandPreview primary={primary} secondary={secondary} quoteSize="standard" tone={tone} /></div>
+              <div style={{ marginTop: 12, maxWidth: 320 }}><BrandPreview primary={primary} secondary={secondary} quoteSize="standard" tone={tone} template="quote-card-v1" /></div>
             </details>
           </form>
         ) : null}

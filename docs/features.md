@@ -13,7 +13,7 @@ automatic approval or publishing is required.
 
 1. Sign in, enter business name (1–120 characters), IANA timezone, colors and tone.
    Optional PNG/JPEG/WebP logo is validated before saving (256 KB / 4 MP); remote
-   URLs/SVG/animation are rejected. Synthetic preview reuses the shared template.
+   URLs/SVG/animation are rejected. Synthetic preview reuses the shared renderer and designs.
 2. Import a CSV or download the synthetic sample. Inspect persisted totals/bounded
    row errors. Duplicate imports are safe. Add more reviews if there are fewer than
    three eligible 4–5 star, 30+ character, suitable reviews after curation.
@@ -293,25 +293,38 @@ the page deletes only PraiseLoop's stored tokens.
 
 Quote-card rendering uses Sharp/Pango measured wrapping with Bricolage Grotesque, loaded
 from `assets/fonts` (SIL OFL, licence alongside), on a 1080px canvas with 80px safe margins
-and automatic black/white contrast. Layout: rating stars top left and the business name
-top right as a small brand header, the verbatim quote in the middle, the reviewer's name
-as the signature bottom left, logo bottom right. A review with no reviewer name has no
-signature: the business name is never used as one. Quotes fit at
-32–48px (Large: 40–56px); unfit text is rejected verbatim, never truncated. The Polished
-(`premium`) tone sets the quote in DejaVu Serif. Supply optional logos as PNG/JPEG/WebP base64 data URLs (256 KB,
-4 MP maximum); remote URLs/SVG/animation are rejected without network requests.
-Manual and worker generation use the same tone/colors/logo. Regenerate explicitly
-after brand changes. `IMAGE_EVIDENCE_DIR=/tmp/evidence npm test` saves synthetic PNGs.
+and automatic black/white contrast. Four designs exist, all using the same brand colours,
+logo and free watermark:
+
+- **Classic** (`quote-card-v1`, the frozen original): rating stars top left and the business
+  name top right as a small brand header, the verbatim quote in the middle, the reviewer's
+  name as the signature bottom left, logo bottom right.
+- **Spotlight** (`quote-card-v2`): a centred poster with the logo top left, business name and
+  stars centred above the quote, and the reviewer centred below it.
+- **Split** (`quote-card-v3`): the quote in the brand colour above a secondary-colour footer
+  holding the business name, reviewer and logo.
+- **Framed** (`quote-card-v4`): an editorial column with the reviewer at the top, a narrower
+  quote in the middle and the business name along the bottom inside a thin secondary frame.
+
+A review with no reviewer name has no signature: the business name is never used as one.
+Quotes shrink through the sizes each design allows and are rejected verbatim if they still
+do not fit, never truncated. The Polished (`premium`) tone sets the quote in DejaVu Serif.
+Supply optional logos as PNG/JPEG/WebP base64 data URLs (256 KB, 4 MP maximum); remote
+URLs/SVG/animation are rejected without network requests. Manual and worker generation use
+the same design, tone, colours and logo. Regenerate explicitly after brand changes.
+`IMAGE_EVIDENCE_DIR=/tmp/evidence npm test` saves synthetic PNGs.
 
 Quote rendering falls back to DejaVu and Noto core/CJK fonts in both runtime images, including for Chinese, Japanese, Korean and other supported Unicode scripts. Host installations must install the same font packages before rendering.
-Template settings: Brand (`/brand`) → Quote text size → live preview →
-Save changes. `quote-card-v1` is the single supported template. Standard fits quotes at
-32–48px; Large uses 40–56px and may reject longer quotes. Settings live in
-`businesses.brand_colors` with data-preserving defaults in migration 005; run
-`npm run db:migrate`. Color controls choose readable black/white text automatically.
-Saving settings never changes existing draft images; explicitly regenerate and
-review a new image. `TEST_DATABASE_URL=postgres://... npm test` also verifies real
-Postgres migration preservation and settings round-trip in a disposable schema.
+Template settings: Brand (`/brand`) → Quote-card design → Quote text size → live
+preview → Save changes. Free keeps Classic; Pro and Business include all four designs.
+Settings live in `businesses.brand_colors` with data-preserving defaults in migration
+005; run `npm run db:migrate`. The server checks the effective plan on both business
+creation and the brand save, and refuses a design the plan does not include. After a
+downgrade the saved choice is kept, but new images fall back to Classic until the plan
+allows it again. Color controls choose readable black/white text automatically. Saving
+settings never changes existing draft images; explicitly regenerate and review a new
+image. `TEST_DATABASE_URL=postgres://... npm test` also verifies real Postgres migration
+preservation and settings round-trip in a disposable schema.
 
 ## Brand voice (#97)
 
@@ -402,7 +415,7 @@ is what lets the plan limit "more than one business".
 | Limit | Free | Pro | Business |
 |---|---|---|---|
 | Drafts per business per week | 1 | 5 | 5 |
-| Templates | 1 | 1 today; 5 planned | 1 today; 5 planned |
+| Quote-card designs | 1 (Classic) | 4 | 4 |
 | Image watermark | Yes | No | No |
 | Automatic posting (through Buffer) | No | Yes | Yes |
 | Automatic review sync | No | Planned | Planned |
@@ -410,11 +423,10 @@ is what lets the plan limit "more than one business".
 | Brand voice from your website | No | Yes | Yes |
 | Owned businesses | 1 | 1 | 5 |
 
-Only limits with a feature behind them are sold as included (#218). `templates`,
-`reviewSync` and `aiReplies` stay in `PLAN_LIMITS` for later features, but extra
-templates are left off the public comparison until a second design ships and the
-allowance is enforced, and review sync/AI replies read as planned, never
-included, on the plan page, account page and phone. When #46 or #96 ships it
+Only limits with a feature behind them are sold as included (#218). The four
+quote-card designs are shipped and `templates` is compared on the plan page,
+account page and phone. `reviewSync` and `aiReplies` stay in `PLAN_LIMITS` for
+later features and read as planned, never included. When #46 or #96 ships it
 must check its limit on the server as part of its acceptance criteria.
 
 The limits live in `lib/services/entitlements.ts` and are enforced on the server:
@@ -447,6 +459,11 @@ The limits live in `lib/services/entitlements.ts` and are enforced on the server
   resubmitted: it ends `error`/`failed` with the `plan_required` reason, and the
   approval card and schedule explain why. Free owners keep the phone share sheet
   and image download, and approval is required on every plan.
+- Business creation and the brand save check the saved design against the
+  effective plan's `templates` allowance; the save keeps an unchanged design from
+  before a downgrade but refuses choosing a new one the plan does not include.
+  The renderer also falls back to Classic for a saved design the effective plan
+  no longer allows, without changing the saved choice or any existing image.
 - `POST /api/businesses` serializes creation per owner with an advisory lock and
   refuses a new business past the limit. A repeated `onboardingKey` still returns
   the original business, so a retried onboarding request cannot be blocked or
@@ -472,9 +489,9 @@ as read-only.
 
 - **Plan page** (`/account`, reached from the profile menu; #150): the plan, where it came from
   (default, manual or store), its expiry, what it includes (posts per week,
-  templates, watermark, automatic posting, review sync, AI replies, businesses) and per-business
-  usage such as "1 of 1 post this week" with the reset date. Review sync, AI
-  replies and extra templates read as planned, never included (#218).
+  quote-card designs, watermark, automatic posting, review sync, AI replies, businesses) and
+  per-business usage such as "1 of 1 post this week" with the reset date. Review
+  sync and AI replies read as planned, never included (#218).
 - **Expired Pro or Business** reads as Free with a note saying when that plan expired.
 - **This Week** says "You've reached this week's limit" and names the plan
   limit, instead of "All caught up", when the weekly quota is used up. It
@@ -541,9 +558,9 @@ sign-in wall does not hide it.
   Free/Pro/Business prices in `docs/decisions.md`. The test fails if a pricing decision is
   recorded without prices, or if a price appears before one is.
 - Wording is honest about what ships: Free's small watermark is stated plainly,
-  review sync and AI replies read "Planned — not available yet", and extra
-  templates are not compared until a second design exists. Nothing implies
-  posting is connected or that there is a checkout.
+  the four quote-card designs are compared, and review sync and AI replies read
+  "Planned — not available yet". Nothing implies posting is connected or that
+  there is a checkout.
 - There is no payment, web checkout, promo code or plan-change control here;
   plans are still changed by operators or a store webhook (#95).
 - A 401 while signed out does not redirect off `/plans` (`lib/sessionExpiry.ts`

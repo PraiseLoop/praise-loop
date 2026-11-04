@@ -8,6 +8,7 @@ import { assertSeedable } from "./seed/guard";
 import { SEED_BUSINESSES } from "./seed/fixtures";
 import { runSeed } from "./seed/seed";
 import { entitlementsFor } from "../lib/services/entitlements";
+import { QUOTE_TEMPLATES } from "../lib/branding";
 
 const DEV = { MOBILE_DEV_AUTH: "1", NODE_ENV: "development" };
 
@@ -85,9 +86,14 @@ async function main() {
       const seeded = one.businesses.filter(b => b.owner_id !== "real-owner");
       assert.deepEqual(seeded.map(b => b.name).sort(), SEED_BUSINESSES.map(b => b.name).sort());
       assert.equal(seeded.every(b => b.name.startsWith("Demo — ")), true);
-      assert.deepEqual(first.businesses.map(b => b.reviews), [21, 24, 17], "every CSV row is imported");
+      assert.deepEqual(first.businesses.map(b => b.reviews), [21, 24, 17, 21], "every CSV row is imported");
+      assert.deepEqual(
+        [...new Set(seeded.map(b => b.brand_colors.template))].sort(),
+        [...QUOTE_TEMPLATES].sort(),
+        "the dev seed shows every quote-card design"
+      );
       assert.deepEqual(one.businesses.filter(b => b.owner_id === "dev-owner").map(b => b.name), ["Demo — Copper Kettle Café"], "the Pro demo keeps one business under its new limit");
-      assert.deepEqual(one.businesses.filter(b => b.owner_id === "dev-owner-business").map(b => b.name), ["Demo — Hespeler Powder Coating"], "the extra Pro business moved to the Business demo");
+      assert.deepEqual(one.businesses.filter(b => b.owner_id === "dev-owner-business").map(b => b.name), ["Demo — Copper Kettle Café Riverside", "Demo — Hespeler Powder Coating"], "the extra Pro businesses moved to the Business demo");
       assert.equal((await entitlementsFor("dev-owner")).plan, "pro");
       assert.equal((await entitlementsFor("dev-owner-business")).plan, "business");
       assert.equal((await entitlementsFor("dev-owner-business")).source, "stripe", "the Business demo shows a web subscription");

@@ -8,7 +8,7 @@ export type PlanSource = "default" | "manual" | "store" | "stripe";
 export type EntitlementLimits = {
   /** Drafts the weekly generator may create for one owned business. */
   postsPerWeek: number;
-  /** Templates available to the business; only one exists today. */
+  /** Quote-card designs available to the business, in QUOTE_TEMPLATES order. */
   templates: number;
   watermark: boolean;
   reviewSync: boolean;
@@ -36,8 +36,8 @@ export type Entitlements = {
 // from here, and the app only displays what GET /api/entitlements returns.
 export const PLAN_LIMITS: Record<Plan, EntitlementLimits> = {
   free: { postsPerWeek: 1, templates: 1, watermark: true, reviewSync: false, aiReplies: false, brandVoice: false, automaticPosting: false, businesses: 1 },
-  pro: { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, automaticPosting: true, businesses: 1 },
-  business: { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, automaticPosting: true, businesses: 5 }
+  pro: { postsPerWeek: 5, templates: 4, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, automaticPosting: true, businesses: 1 },
+  business: { postsPerWeek: 5, templates: 4, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, automaticPosting: true, businesses: 5 }
 };
 
 type Executor = (sql: string, values: unknown[]) => Promise<{ rows: any[] }>;

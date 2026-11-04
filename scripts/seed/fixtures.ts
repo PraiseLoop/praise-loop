@@ -35,7 +35,7 @@ export const SEED_BUSINESSES: BusinessSeed[] = [
     csv: "copper-kettle-cafe.csv",
     timezone: "America/Toronto",
     tone: "friendly",
-    colors: { primary: "#8c3b2e", secondary: "#f3e6d6", template: "quote-card-v1", quoteSize: "standard" },
+    colors: { primary: "#8c3b2e", secondary: "#f3e6d6", template: "quote-card-v2", quoteSize: "standard" },
     weeklyTarget: 4,
     brandVoice: "Warm, neighbourly and unhurried, with a fondness for small everyday details. We speak like a barista who knows your order, using plain words and gentle humour. Sentences stay short and inviting, never salesy or grand. We celebrate regulars, early mornings and the quiet corner table.\nExamples: “Your usual is ready.” “Save room for a cinnamon bun.”",
     googleLocation: "accounts/1000000001/locations/2000000001",
@@ -91,7 +91,7 @@ export const SEED_BUSINESSES: BusinessSeed[] = [
     csv: "hespeler-powder-coating.csv",
     timezone: "America/Toronto",
     tone: "premium",
-    colors: { primary: "#1f2a44", secondary: "#e4e7ee", template: "quote-card-v1", quoteSize: "standard" },
+    colors: { primary: "#1f2a44", secondary: "#e4e7ee", template: "quote-card-v3", quoteSize: "standard" },
     weeklyTarget: 3,
     drafts: [
       {
@@ -158,6 +158,38 @@ export const SEED_BUSINESSES: BusinessSeed[] = [
         quote: "I learned more in ten minutes than in a year of guessing.",
         caption: "",
         status: "failed"
+      }
+    ]
+  },
+  {
+    // The fourth design needs a fourth business: designs are saved per business, and
+    // the Free demo may only use quote-card-v1. This Business demo reuses the café
+    // reviews so every design is visible in the seeded accounts.
+    name: "Demo — Copper Kettle Café Riverside",
+    owner: "business",
+    csv: "copper-kettle-cafe.csv",
+    timezone: "America/Toronto",
+    tone: "premium",
+    colors: { primary: "#3f5d4a", secondary: "#e8dfc8", template: "quote-card-v4", quoteSize: "standard" },
+    weeklyTarget: 2,
+    drafts: [
+      {
+        review: "sample-cafe-006",
+        quote: "I work from here two mornings a week. Nobody hurries you, the soup of the day is always good, and the oat milk is on the house if you ask nicely.",
+        caption: "A quiet table, a good soup and no rush. Our kind of morning.",
+        status: "draft"
+      },
+      {
+        review: "sample-cafe-009",
+        quote: "They made a birthday cake for my daughter at short notice and even wrote her name on it in icing. Truly kind people.",
+        caption: "A last-minute birthday cake is always worth the extra icing. Happy birthday!",
+        status: "approved"
+      },
+      {
+        review: "sample-cafe-013",
+        quote: "The baristas are patient with a nervous first-timer like me. Asked about every bean on the shelf and got a proper answer.",
+        caption: "Ask about every bean — that is what we are here for.",
+        status: "draft"
       }
     ]
   }

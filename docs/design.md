@@ -141,11 +141,12 @@ transactional.
   unlock anything themselves. The manual grant stays in `owner_plans`, provider subscriptions live in
   `owner_subscriptions`, and the effective plan is the highest active grant in `PLAN_ORDER` (#219).
   Every change appends to `owner_plan_events`; a provider event only ever writes the subscription
-  tables. Free: 1 post/week, 1 template, watermark, 1 business, no automatic posting. Pro: 5 posts/week, no
-  watermark, brand voice, automatic posting through Buffer, 1 business; review sync, AI replies and extra templates are planned and are not sold
-  until the server enforces them (#218). Business: Pro's features plus 5 businesses. Expired Pro or
+  tables. Free: 1 post/week, the Classic quote-card design, watermark, 1 business, no automatic posting. Pro: 5 posts/week, no
+  watermark, brand voice, automatic posting through Buffer, all four quote-card designs, 1 business;
+  review sync and AI replies are planned and are not sold until the server enforces them (#218). Business: Pro's features plus 5 businesses. Expired Pro or
   Business falls back to Free without deleting data, so automatic posting is refused and queued
-  posts fail closed; after any downgrade only the oldest
+  posts fail closed, and a saved Pro design stays saved but new images render the Classic design.
+  After any downgrade only the oldest
   businesses within the limit generate, and the rest are paused until an upgrade (#217). Plan
   changes are operator-only
   (`scripts/set-plan.ts`), except that the pilot can allow self-service upgrades to Pro for a

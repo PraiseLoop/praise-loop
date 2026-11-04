@@ -19,7 +19,7 @@ assert.deepEqual(
   Object.keys(PLAN_LIMITS.free).sort(),
   "classify every plan limit as shipped, planned or unlisted"
 );
-assert.ok(includesKey(UNLISTED_LIMITS, "templates"), "templates stay off the comparison until a second design exists and the limit is enforced (#218)");
+assert.ok(includesKey(SHIPPED_LIMITS, "templates"), "templates are compared now that several designs exist and the limit is enforced (#230)");
 assert.deepEqual(PLAN_ROWS.map(row => row.key).sort(), [...SHIPPED_LIMITS, ...PLANNED_LIMITS].sort(), "only shipped and planned limits get a comparison row");
 assert.deepEqual(PLAN_ORDER, ["free", "pro", "business"]);
 assert.equal(PLAN_LIMITS.pro.businesses, 1, "Pro keeps one business; several move to Business");
@@ -32,6 +32,7 @@ assert.ok(PLAN_LIMITS.business.postsPerWeek >= PLAN_LIMITS.pro.postsPerWeek, "Bu
 const rows = planComparison(PLAN_LIMITS);
 assert.deepEqual(rows.map(row => ({ label: row.label, free: row.values.free, pro: row.values.pro, business: row.values.business })), [
   { label: "Posts each week, per business", free: "1 post", pro: "5 posts", business: "5 posts" },
+  { label: "Quote-card designs", free: "1 design", pro: "4 designs", business: "4 designs" },
   { label: "Watermark on images", free: "Small PraiseLoop watermark", pro: "No watermark", business: "No watermark" },
   { label: "Automatic posting", free: "Not included", pro: "Through Buffer, with your approval", business: "Through Buffer, with your approval" },
   { label: "Automatic review sync", free: "Not included", pro: "Planned — not available yet", business: "Planned — not available yet" },

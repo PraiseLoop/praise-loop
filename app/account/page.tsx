@@ -109,7 +109,7 @@ export default function AccountPage() {
   const { limits } = plan;
   const rows: [string, string][] = [
     ["Posts per week, per business", String(limits.postsPerWeek)],
-    ["Templates", limits.templates === 1 ? "1 template" : "1 template today; more designs planned"],
+    ["Quote-card designs", `${limits.templates} ${limits.templates === 1 ? "design" : "designs"}`],
     ["Watermark on images", limits.watermark ? "Yes" : "No"],
     ["Automatic posting", limits.automaticPosting ? "Through Buffer, with your approval" : "Not included"],
     ["Automatic review sync", plannedOrNo(limits.reviewSync)],

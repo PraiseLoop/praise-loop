@@ -134,7 +134,8 @@ async function seedDraft(businessId: number, owner: string, seed: BusinessSeed, 
     secondaryBrandHex: seed.colors.secondary,
     brandTone: seed.tone,
     templateConfig: seed.colors,
-    watermark: PLAN_LIMITS[plan].watermark
+    watermark: PLAN_LIMITS[plan].watermark,
+    templatesAllowed: PLAN_LIMITS[plan].templates
   });
   const shared = draft.status === "shared";
   await query(
