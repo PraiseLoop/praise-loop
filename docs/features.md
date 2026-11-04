@@ -194,6 +194,15 @@ allows 1,000 requests per channel per month), and stop at `sent` or `error`.
   Instagram, with the account owner's agreement. Expect one draft in Buffer and nothing published. Only
   then consider `live`.
 
+### The Schedule page shows what is lined up (#206)
+
+A post that holds a slot (queued, being sent, sent and waiting, or unconfirmed) stays on the Schedule page as
+a filled tile at its time, with the quote and its real posting status; the tile has Cancel while it is still
+queued, and the two "did it go out?" buttons when it is unconfirmed. Open times are listed beside the filled
+ones. Finished results (posted, saved as a Buffer draft, not posted) appear under "Recently sent". The page
+refreshes every 5 seconds because the worker moves posts along on its own. The rules live in
+`lib/posting/lineup.ts`; the status wording is shared with the Approval cards (`postingView`).
+
 ### How to roll back
 
 Set `BUFFER_POSTING_MODE=off` and redeploy; queued posts wait and are marked `missed` after 2 hours.
