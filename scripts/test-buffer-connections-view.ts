@@ -21,13 +21,14 @@ function main() {
   assert.ok(outcomeMessage("expired")?.includes("took too long"));
   assert.ok(outcomeMessage("failed")?.includes("finish connecting"));
   assert.ok(outcomeMessage("not_configured")?.includes("isn’t set up"));
+  assert.match(outcomeMessage("plan_required") ?? "", /Pro and Business/);
   assert.equal(outcomeMessage("bogus"), null);
   assert.equal(outcomeMessage(""), null);
   assert.equal(outcomeMessage(null), null);
   assert.equal(outcomeMessage(undefined), null);
 
   // Every channel error code gets a sentence; unknown codes get the fallback.
-  for (const code of ["invalid_channel", "not_found", "not_connected", "needs_reconnect", "connection_changed"]) {
+  for (const code of ["invalid_channel", "not_found", "not_connected", "needs_reconnect", "connection_changed", "plan_required"]) {
     const message = channelErrorMessage(code);
     assert.equal(typeof message, "string");
     assert.ok(message.length > 20, `${code} has a plain sentence`);

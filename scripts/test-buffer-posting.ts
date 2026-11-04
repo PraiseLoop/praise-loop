@@ -44,9 +44,13 @@ async function main() {
       const NOW = Math.floor(Date.now() / 1000) * 1000; let clock = NOW; // real time: expiry is compared against the database clock
       const tick = (mode: "off" | "draft" | "live") => postingTick({ mode, env: ENV, now: () => clock, adapterFor });
       // One owner, business, connection, channel, scheduled draft and queued claim per case.
-      async function seed(o: { state?: string; due?: number; service?: string; type?: string; connection?: string; draft?: string; channel?: boolean } = {}) {
+      async function seed(o: { state?: string; due?: number; service?: string; type?: string; connection?: string; draft?: string; channel?: boolean; plan?: "free" | "pro" | "business"; expires?: string } = {}) {
         n += 1; const owner = `owner-${n}`;
         await c.query("INSERT INTO auth_users(id,email) VALUES($1,$2)", [owner, `${owner}@example.invalid`]);
+        const plan = o.plan ?? "pro";
+        if (plan !== "free" || o.expires) {
+          await c.query("INSERT INTO owner_plans(owner_id,plan,source,expires_at) VALUES($1,$2,'manual',$3)", [owner, plan, o.expires ?? null]);
+        }
         const business = Number((await c.query("INSERT INTO businesses(name,timezone,owner_id) VALUES('Synthetic','UTC',$1) RETURNING id", [owner])).rows[0].id);
         const conn = Number((await c.query("INSERT INTO buffer_connections(owner_id,organization_id,encrypted_access_token,encrypted_refresh_token,access_expires_at,scope,status) VALUES($1,'org','a','r',now()+interval '1 hour','s',$2) RETURNING id", [owner, o.connection ?? "active"])).rows[0].id);
         if (o.channel !== false) await c.query("INSERT INTO business_buffer_channels(business_id,connection_id,channel_id,channel_name,service,channel_type) VALUES($1,$2,'ch1','Synthetic',$3,$4)", [business, conn, o.service ?? "instagram", o.type ?? "business"]);
@@ -165,6 +169,16 @@ async function main() {
       for (const [code, options] of refused) {
         d = await seed(options); r = await tick("live");
         assert.equal(r.failed, 1, code); assert.equal(submits(), 0, `${code} never reaches Buffer`); assert.equal((await claim(d)).error_code, code);
+        await reset();
+      }
+      // 11b. Automatic posting is paid: a Free plan, or a lapsed Pro plan, fails the queued post
+      // closed without calling Buffer. Nothing is resubmitted.
+      for (const options of [{ plan: "free" }, { plan: "pro", expires: "2020-01-01T00:00:00Z" }] as const) {
+        d = await seed(options); r = await tick("live");
+        assert.equal(r.failed, 1, JSON.stringify(options)); assert.equal(submits(), 0, "no Buffer call without the limit");
+        row = await claim(d); assert.deepEqual([row.state, row.error_code, row.image_token_hash], ["error", "plan_required", null]);
+        assert.equal(await status(d), "failed");
+        await tick("live"); assert.equal(submits(), 0, "a failed post is not retried");
         await reset();
       }
       d = await seed({ service: "facebook", type: "page" }); assert.equal((await tick("live")).submitted, 1, "a Facebook Page is not subject to the Instagram rule");

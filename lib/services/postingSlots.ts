@@ -3,6 +3,7 @@ export { validTimezone } from "../timezone";
 import { transaction } from "../db";
 import { availableImage } from "./draftLifecycle";
 import { postingMode, type PostingMode } from "./bufferPosting";
+import { entitlementsFor } from "./entitlements";
 export type PostingSlot={weekday:number;time:string};
 export const defaultPostingSlots:PostingSlot[]=[2,4,6].map(weekday=>({weekday,time:"10:00"}));
 export function validateSlots(value:unknown):PostingSlot[]{
@@ -43,6 +44,7 @@ export async function assignSlots(owner:string,businessId:number,items:{draftPos
     results.push(await transaction(async c=>{
       const fail=(error:string,status=409)=>({draftPostId:item.draftPostId,status,error});
       if(mode==="off")return fail("Posting through Buffer is not switched on yet",503);
+      if(!(await entitlementsFor(owner)).limits.automaticPosting)return fail("Automatic posting is included in Pro and Business plans",403);
       const b=(await c.query("SELECT * FROM businesses WHERE id=$1 AND owner_id=$2 FOR UPDATE",[businessId,owner])).rows[0];if(!b)return fail("Business not found",404);
       const d=(await c.query("SELECT * FROM draft_posts WHERE id=$1 AND business_id=$2 FOR UPDATE",[item.draftPostId,businessId])).rows[0];if(!d)return fail("Draft not found",404);
       if(d.version!==item.version||d.status!=="approved"||!d.caption_text.trim()||!await availableImage(d.image_path))return fail("Only current complete approved drafts can be assigned");

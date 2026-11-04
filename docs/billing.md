@@ -12,7 +12,7 @@ real payments are not. What exists today is in [design.md](design.md) and
 | First payment path | Stripe web checkout | Decided by the owner |
 | First customers arrive through | The web, not the iOS app | Decided by the owner |
 | Tiers | Free, Pro and Business | Decided by the owner |
-| Buffer posting | Paid plans only | Decided by the owner |
+| Buffer posting | Paid plans only: called automatic posting | Decided by the owner |
 | Pro price | CA$29.99 a month plus tax | Working price, formally recorded in #223 |
 | Billing period | Monthly only, to start | Decided by the owner |
 | Business price | Not decided | Open, #222 |
@@ -47,6 +47,10 @@ Nobody can buy until #223 ships, so that PR records the price and publishes it t
 - **Audit:** every plan change appends to `owner_plan_events`. Provider events never write
   `owner_plans`.
 - **Display:** `GET /api/entitlements` is read-only, and `/account`, `/plans` and the phone show what it returns.
+- **Automatic posting:** the paid limit `automaticPosting` is in `PLAN_LIMITS`
+  (`false` on Free, `true` on Pro and Business) and is enforced on the server when
+  connecting Buffer, choosing a channel, confirming a post for a slot, and in the
+  worker before sending. Approval is still required, and nothing auto-posts.
 - **Issues:** #94, #133 and #134 are closed. #95 covers App Store and Google Play purchases only, and
   says "No web checkout yet". Nothing covered web checkout, more tiers or a billing data model until
   this investigation.
@@ -117,11 +121,20 @@ Google Play's rules weren't checked either.
 | Businesses | 1 | 1 | 5 |
 | Watermark | Yes | No | No |
 | Brand voice | No | Yes | Yes |
-| Posting through Buffer | No | Yes | Yes |
+| Automatic posting (through Buffer) | No | Yes | Yes |
 | Review sync, AI replies (once built) | No | Yes | Yes |
 
 This moves the multi-business limit from Pro to Business. The app isn't in production, so no live
 owners need moving. Approval stays required on every plan, and nothing auto-posts.
+
+The paid feature and its `PLAN_LIMITS` entry are called **automatic posting**
+(`automaticPosting`), not Buffer posting, so the plan does not change when direct
+publishing (#234) replaces Buffer. Buffer is only the first provider it applies to.
+Free owners keep the phone share sheet and image download. The server refuses a Free
+or expired plan when connecting Buffer, choosing a channel, confirming a post for a
+slot, and again in the worker immediately before it sends. A post already queued when
+a plan lapses is not sent and not resubmitted: it ends `failed` with the reason
+`plan_required`, and the owner sees why on the approval card and schedule.
 
 ## Problems found
 

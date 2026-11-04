@@ -16,6 +16,7 @@ async function main() {
   try {
     await databaseFixture(async (c) => {
       await c.query("INSERT INTO auth_users(id,email) VALUES('cards-owner','cards@example.invalid')");
+      await c.query("INSERT INTO owner_plans(owner_id,plan,source) VALUES('cards-owner','pro','manual')");
       await c.query("INSERT INTO auth_sessions VALUES($1,'cards-owner',now()+interval '1 hour')", [sessionHash("cards-session")]);
       const bid = (await c.query("INSERT INTO businesses(name,timezone,owner_id) VALUES('Synthetic cards café','UTC','cards-owner') RETURNING id")).rows[0].id;
       writeFileSync(join(root, "preview.png"), await sharp({ create: { width: 1080, height: 1080, channels: 3, background: "#1f2937" } }).png().toBuffer());

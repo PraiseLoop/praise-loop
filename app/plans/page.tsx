@@ -8,7 +8,7 @@ import styles from "./plans.module.css";
 
 export const metadata: Metadata = {
   title: "Plans · PraiseLoop",
-  description: "What the Free, Pro and Business PraiseLoop plans include: posts each week, watermark, brand voice and businesses."
+  description: "What the Free, Pro and Business PraiseLoop plans include: posts each week, watermark, automatic posting, brand voice and businesses."
 };
 
 const taglines: Record<Plan, string> = {
@@ -35,9 +35,9 @@ export default function PlansPage() {
           <span className="pl-eyebrow">Plans</span>
           <h1 className={styles.headline}>Three plans. Your approval, always.</h1>
           <p className={styles.lede}>
-            Start on Free. Pro makes more posts each week and removes the watermark, while Business
-            adds room for several businesses. Every plan keeps reviews and drafts private to your
-            account, and nothing posts without your OK.
+            Start on Free. Pro makes more posts each week, removes the watermark and adds automatic
+            posting through Buffer, while Business adds room for several businesses. Every plan keeps
+            reviews and drafts private to your account, and nothing posts without your OK.
           </p>
         </section>
 

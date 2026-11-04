@@ -12,6 +12,7 @@ async function main() {
   if (process.env.TEST_BROWSER !== "1") { console.log("Buffer connections browser skipped: build and set TEST_BROWSER/TEST_DATABASE_URL"); return; }
   await databaseFixture(async c => {
     await c.query("INSERT INTO auth_users(id,name,email) VALUES('buffer-browser','Synthetic Buffer Owner','buffer-browser@example.invalid')");
+    await c.query("INSERT INTO owner_plans(owner_id,plan,source) VALUES('buffer-browser','pro','manual')");
     await c.query("INSERT INTO auth_sessions VALUES($1,'buffer-browser',now()+interval '1 hour')", [sessionHash("buffer-browser-session")]);
 
     // Never call the real Buffer API. An empty client id makes connect answer 503.

@@ -15,7 +15,7 @@ const imageRendererModule = require("../lib/services/imageRenderer");
 // run against a database in test-entitlements.ts.
 entitlementsModule.entitlementsFor = async () => ({
   plan: "pro", source: "manual", expiresAt: null,
-  limits: { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, businesses: 100 }
+  limits: { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, automaticPosting: true, businesses: 100 }
 });
 dbModule.transaction = async (run: (client: { query: unknown }) => Promise<unknown>) => run({ query: dbModule.query });
 

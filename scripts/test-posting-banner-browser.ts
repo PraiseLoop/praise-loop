@@ -9,6 +9,7 @@ async function main() {
   if (process.env.TEST_BROWSER !== "1") { console.log("Posting banner browser test skipped: build and set TEST_BROWSER/TEST_DATABASE_URL"); return; }
   await databaseFixture(async (c) => {
     await c.query("INSERT INTO auth_users(id,email) VALUES('banner-owner','banner-owner@example.invalid')");
+    await c.query("INSERT INTO owner_plans(owner_id,plan,source) VALUES('banner-owner','pro','manual')");
     await c.query("INSERT INTO auth_sessions VALUES($1,'banner-owner',now()+interval '1 hour')", [sessionHash("banner-session")]);
     const business = Number((await c.query("INSERT INTO businesses(name,timezone,owner_id) VALUES('Synthetic banner','UTC','banner-owner') RETURNING id")).rows[0].id);
     const launch = () => chromium.launch({ executablePath: process.env.CHROMIUM_PATH === "playwright" ? undefined : process.env.CHROMIUM_PATH ?? "/usr/bin/chromium", args: ["--no-sandbox"] });

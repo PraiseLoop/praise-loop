@@ -79,8 +79,15 @@ function authorizeParams(url: string) {
   return new URL(url).searchParams;
 }
 
-async function seedOwner(client: PoolClient, id: string) {
+async function seedOwner(client: PoolClient, id: string, options: { plan?: "free" | "pro" | "business"; expiresAt?: string } = {}) {
   await client.query("INSERT INTO auth_users(id,name,email) VALUES($1,$2,$3)", [id, id, `${id}@example.invalid`]);
+  const plan = options.plan ?? "pro";
+  if (plan !== "free") {
+    await client.query(
+      "INSERT INTO owner_plans(owner_id,plan,source,expires_at) VALUES($1,$2,'manual',$3)",
+      [id, plan, options.expiresAt ?? null]
+    );
+  }
   const business = Number((await client.query(
     "INSERT INTO businesses(name,timezone,owner_id) VALUES($1,'UTC',$2) RETURNING id",
     [id, id]
@@ -190,6 +197,34 @@ async function main() {
       process.env.BUFFER_REDIRECT_URI = "https://dev.praiseloop.invalid/api/buffer/callback";
       assert.equal(authorizeParams(await startBufferConnect(a.owner)).get("redirect_uri"), "https://dev.praiseloop.invalid/api/buffer/callback");
       delete process.env.BUFFER_REDIRECT_URI;
+
+      // Automatic posting is a paid feature: Free and expired plans cannot start a connection,
+      // and no OAuth state or Buffer call is made.
+      const free = await seedOwner(client, "buffer-free", { plan: "free" });
+      const expiredOwner = await seedOwner(client, "buffer-expired", { plan: "pro", expiresAt: "2020-01-01T00:00:00Z" });
+      for (const owner of [free.owner, expiredOwner.owner]) {
+        await assert.rejects(
+          startBufferConnect(owner),
+          (error: unknown) => error instanceof BufferConnectionError && error.code === "plan_required" && error.status === 403
+        );
+        assert.equal(
+          Number((await client.query("SELECT count(*) FROM buffer_oauth_states WHERE owner_id=$1", [owner])).rows[0].count),
+          0,
+          `${owner} gets no OAuth state`
+        );
+      }
+
+      // A plan that lapses between starting and finishing is refused before the token exchange.
+      const lapsed = await seedOwner(client, "buffer-lapsed");
+      const lapsedState = authorizeParams(await startBufferConnect(lapsed.owner)).get("state")!;
+      await client.query("UPDATE owner_plans SET expires_at=now()-interval '1 day' WHERE owner_id=$1", [lapsed.owner]);
+      const lapsedFetch = bufferFetch();
+      await assert.rejects(
+        completeBufferConnect({ state: lapsedState, code: "synthetic-code" }, { fetchImpl: lapsedFetch.fetchImpl }),
+        (error: unknown) => error instanceof BufferConnectionError && error.code === "plan_required" && error.status === 403
+      );
+      assert.equal(lapsedFetch.calls.length, 0, "Buffer is never contacted for an owner without the limit");
+      assert.equal(await connectionCount(client, lapsed.owner), 0);
 
       // --- complete, token request and encryption at rest ----------------
       const exchange = bufferFetch();
@@ -508,6 +543,26 @@ async function main() {
       await assert.rejects(
         selectBufferChannel(m.owner, foreignBusiness.businessId, "ig-1", { fetchImpl: selectable.fetchImpl }),
         (error: unknown) => error instanceof BufferConnectionError && error.code === "not_found"
+      );
+
+      // A Free owner cannot choose a channel either, and Buffer is not called to list them.
+      const freeChannel = await seedOwner(client, "buffer-free-channel", { plan: "free" });
+      await seedConnection(client, freeChannel.owner);
+      const noPlanFetch = bufferFetch({ api: () => channelsResponse(channels) });
+      await assert.rejects(
+        selectBufferChannel(freeChannel.owner, freeChannel.businessId, "ig-1", { fetchImpl: noPlanFetch.fetchImpl }),
+        (error: unknown) => error instanceof BufferConnectionError && error.code === "plan_required" && error.status === 403
+      );
+      assert.equal(noPlanFetch.calls.length, 0, "a Free owner never reaches the channel list");
+      assert.deepEqual(await getBufferConnection(freeChannel.owner, { fetchImpl: noPlanFetch.fetchImpl }), {
+        connected: true,
+        status: "active",
+        channels: []
+      }, "the connection page still loads local state, without calling Buffer");
+      assert.equal(noPlanFetch.calls.length, 0, "listing channels for a Free owner never calls Buffer");
+      assert.equal(
+        Number((await client.query("SELECT count(*) FROM business_buffer_channels WHERE business_id=$1", [freeChannel.businessId])).rows[0].count),
+        0
       );
       assert.equal(
         Number((await client.query("SELECT count(*) FROM business_buffer_channels WHERE business_id=$1", [foreignBusiness.businessId])).rows[0].count),

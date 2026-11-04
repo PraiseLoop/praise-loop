@@ -17,6 +17,7 @@ async function main() {
   try {
     await databaseFixture(async (c) => {
       await c.query("INSERT INTO auth_users(id,email) VALUES('lineup-owner','lineup-owner@example.invalid')");
+      await c.query("INSERT INTO owner_plans(owner_id,plan,source) VALUES('lineup-owner','pro','manual')");
       await c.query("INSERT INTO auth_sessions VALUES($1,'lineup-owner',now()+interval '1 hour')", [sessionHash("lineup-session")]);
       const days = [0, 1, 2, 3, 4, 5, 6].map(weekday => ({ weekday, time: "10:00" }));
       const business = Number((await c.query("INSERT INTO businesses(name,timezone,owner_id,posting_slots) VALUES('Synthetic lineup','UTC','lineup-owner',$1::jsonb) RETURNING id", [JSON.stringify(days)])).rows[0].id);
