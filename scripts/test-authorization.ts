@@ -19,7 +19,7 @@ async function main() {
   // unguessable, time-limited, revocable token in the address is the only credential (scripts/test-buffer-posting.ts).
   // The Buffer callback is public by design (#29): the browser arrives from Buffer
   // without a session cookie, and the single-use state row authenticates the completion.
-  const publicRoutes = new Set(["app/api/mobile/config/route.ts", "app/api/mobile/session/apple/route.ts", "app/api/mobile/session/microsoft/route.ts", "app/api/mobile/session/dev/route.ts", "app/api/mobile/session/email/route.ts", "app/api/dev/session/route.ts", "app/api/buffer/callback/route.ts", "app/api/public-media/[name]/route.ts"]);
+  const publicRoutes = new Set(["app/api/mobile/config/route.ts", "app/api/mobile/session/apple/route.ts", "app/api/mobile/session/microsoft/route.ts", "app/api/mobile/session/dev/route.ts", "app/api/mobile/session/email/route.ts", "app/api/dev/session/route.ts", "app/api/dev/billing/route.ts", "app/api/buffer/callback/route.ts", "app/api/public-media/[name]/route.ts"]);
   for (const file of files("app/api").filter(f => !f.includes("/auth/") && !publicRoutes.has(f))) {
     const route = require(join("..",file));
     const path = "/" + file.replace(/\/route.ts$/, "").replace("[id]", "999999").replace("[name]", "draft-999999.png");
@@ -39,6 +39,8 @@ async function main() {
   const devWebRoute = require("../app/api/dev/session/route");
   assert.equal((await devWebRoute.GET()).status, 404, "web demo sign-in must be missing without MOBILE_DEV_AUTH");
   assert.equal((await devWebRoute.POST(new NextRequest("http://localhost/api/dev/session", { method: "POST", body: JSON.stringify({ owner: "pro" }) }))).status, 404, "web demo session cannot be minted without MOBILE_DEV_AUTH");
+  const devBillingRoute = require("../app/api/dev/billing/route");
+  assert.equal((await devBillingRoute.POST(new NextRequest("http://localhost/api/dev/billing", { method: "POST", body: JSON.stringify({ action: "checkout", plan: "pro" }) }))).status, 404, "the fake checkout must be missing without MOBILE_DEV_AUTH");
   process.env.MOBILE_MINIMUM_VERSION = "1.2.0";
   process.env.MOBILE_LATEST_VERSION = "1.4.0";
   process.env.MOBILE_FEATURES = "queue, sharing, Not Valid,queue,";

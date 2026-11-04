@@ -95,7 +95,7 @@ answers 404 for the demo sign-in even if the flag is set.
    | Owner | Plan | Businesses |
    | --- | --- | --- |
    | `dev-owner` (`demo@praiseloop.invalid`) | Pro | Copper Kettle Café (21 reviews, 7 drafts) |
-   | `dev-owner-business` (`demo-business@praiseloop.invalid`) | Business | Hespeler Powder Coating (24 reviews, 6 drafts) |
+   | `dev-owner-business` (`demo-business@praiseloop.invalid`) | Business (seeded web subscription) | Hespeler Powder Coating (24 reviews, 6 drafts) |
    | `dev-owner-free` (`demo-free@praiseloop.invalid`) | Free | Harbour Bike Repair (17 reviews, 3 drafts) |
    | `dev-owner-email` (`demo-email@praiseloop.invalid`) | Free | None; an email-only owner for walking email sign-in |
 
@@ -163,6 +163,24 @@ The demo owner is an ordinary `auth_users` row, so ownership checks, version
 conflicts and audit events behave exactly as they do for a real owner. Never set
 `MOBILE_DEV_AUTH` on a shared or production server.
 
+### Fake billing in development
+
+Set `BILLING_PROVIDER=fake` and `MOBILE_DEV_AUTH=1` in `.env`, then use the
+development-only `POST /api/dev/billing` route to walk a subscription without a
+provider. It answers 404 unless both development flags are usable. `checkout`
+starts a fake subscription, and the returned `externalId` is passed to `renew`,
+`fail` and `cancel`:
+
+```sh
+curl -s http://localhost:3000/api/dev/billing -H 'Content-Type: application/json' \
+  -d '{"action":"checkout","owner":"pro","plan":"business"}'
+```
+
+Every action goes through the same `applyBillingEvent` path a real webhook will
+use (#223), so duplicates, out-of-order deliveries and the owner's plan read the
+same as production. `GET /api/entitlements` stays read-only. The fake adapter is
+refused by a production build and no payment or network call is made.
+
 ## Quickstart — all containers (production-style)
 
 ```bash
@@ -200,6 +218,7 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `APIFY_MAX_CHARGE_USD` | no | Apify's `maxTotalChargeUsd` for every run (default `0.50`). This is a spend cap on the owner's own Apify account |
 | `MEDIA_ROOT` | no | Where rendered draft images are written/served (default `private-media`, the owner-protected `generated_media` volume mount in Compose; host upgrades must move existing images there as described in [auth.md](auth.md)) |
 | `SELF_SERVICE_UPGRADE_EMAILS` | no | Comma-separated verified owner emails allowed to see **Upgrade to Pro** on `/account` and change their own plan to open-ended Pro (no payment). Empty or unset allows nobody. Written to `owner_plan_events` with the email as actor |
+| `BILLING_PROVIDER` | no | `fake` enables the local billing adapter and the development-only `POST /api/dev/billing` walkthrough (#219). Refused in a production process, like `MOBILE_DEV_AUTH`; no provider or payment is configured yet |
 | `REDIS_URL` | no | Reserved for future queue work; unused by the current worker |
 
 Postgres and Redis ports are bound to loopback (`127.0.0.1`) only — reachable

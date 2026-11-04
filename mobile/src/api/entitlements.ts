@@ -19,7 +19,7 @@ export type Entitlements = {
   // Any non-empty plan name: an installed app must keep working when the server
   // adds a plan this build has never heard of.
   plan: string;
-  source: "default" | "manual" | "store";
+  source: "default" | "manual" | "store" | "stripe";
   expiresAt: string | null;
   expired: boolean;
   /** The stored plan that lapsed when the owner now reads as Free (#215). */

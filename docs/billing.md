@@ -1,7 +1,8 @@
 # Billing and tiers
 
-The investigation behind PraiseLoop's billing plan, carried out on 2026-11-04. **None of the
-billing described here is built yet.** What exists today is in [design.md](design.md) and
+The investigation behind PraiseLoop's billing plan, carried out on 2026-11-04. The
+subscription tables and provider interface are built (#219); checkout, webhooks and
+real payments are not. What exists today is in [design.md](design.md) and
 [features.md](features.md). Tracking issue: #225.
 
 ## Decisions so far
@@ -32,7 +33,19 @@ Nobody can buy until #223 ships, so that PR records the price and publishes it t
   after an upgrade. The web shows the pause with a link to the plans page; the phone only explains it,
   with no upgrade prompt or link (see the Apple rules below). Existing drafts stay visible and can
   still be approved (#217).
-- **Audit:** every change appends to `owner_plan_events`.
+- **Subscriptions (#219):** `owner_subscriptions` holds one row per provider subscription, and
+  `billing_events` records each provider event once with a unique `(provider, event_id)`. The manual
+  `owner_plans` row and every active subscription are separate grants; the owner reads the highest
+  active plan and the source names the grant that won. Expired manual Pro with an active Business
+  subscription reads Business, and a lapsed subscription does not remove an active manual grant.
+  Statuses count through `subscriptionIsActive`; `past_due` keeps the plan for a short grace period.
+- **Provider interface (#219):** `lib/integrations/billing.ts` defines the provider shape, and a
+  fake adapter walks checkout, renewal, failed payment and cancellation through the same
+  `applyBillingEvent` path a real webhook will use. `BILLING_PROVIDER=fake` selects it only in a
+  development process; a production build refuses it. `POST /api/dev/billing` is the local
+  walkthrough and answers 404 without `MOBILE_DEV_AUTH`.
+- **Audit:** every plan change appends to `owner_plan_events`. Provider events never write
+  `owner_plans`.
 - **Display:** `GET /api/entitlements` is read-only, and `/account`, `/plans` and the phone show what it returns.
 - **Issues:** #94, #133 and #134 are closed. #95 covers App Store and Google Play purchases only, and
   says "No web checkout yet". Nothing covered web checkout, more tiers or a billing data model until
@@ -77,14 +90,16 @@ Google Play's rules weren't checked either.
 
 ## Design
 
-1. **Keep payment sources separate (#219).** One `owner_plans` row can't hold several sources, so a
+1. **Keep payment sources separate (#219, built).** One `owner_plans` row can't hold several sources, so a
    store "expired" event could wipe out an active Stripe plan or a manual grant.
    - `owner_plans` stays for manual grants, and webhooks never write to it.
    - `owner_subscriptions` gets one row per provider subscription.
    - `billing_events` has a unique event ID per provider, so duplicates are ignored.
    - The owner gets the highest plan that's currently active.
-2. **Use one provider interface (#219).** Stripe, a fake adapter and later the stores sit behind it.
-   `CONTRIBUTING.md` requires the stub and a recorded decision first.
+2. **Use one provider interface (#219, built).** Stripe, a fake adapter and later the stores sit behind it.
+   `CONTRIBUTING.md` requires the stub and a recorded decision first. The fake is selected by
+   `BILLING_PROVIDER=fake`, refused in production, and walks checkout, renewal, failed payment and
+   cancellation locally through `/api/dev/billing` without a network call.
 3. **Upgrade only from the verified webhook (#223).** The server picks the Stripe price from a plan
    key, and the checkout success redirect grants nothing. Each event re-reads the subscription from
    Stripe, so out-of-order delivery doesn't matter. Cancelling and card changes go through Stripe's
@@ -143,7 +158,8 @@ The owner ran this on their stack on 2026-11-04 and it worked. The change applie
 `--expires YYYY-MM-DD` tests a lapse, and `free` downgrades.
 
 **Once billing exists:** test purchases through the fake adapter locally (#219) and through Stripe
-test mode with test cards (#223).
+test mode with test cards (#223). Set `BILLING_PROVIDER=fake` and `MOBILE_DEV_AUTH=1`, then use
+`POST /api/dev/billing` as described in [development.md](development.md#fake-billing-in-development).
 
 **Self-service upgrades:** PR #224, requested by the owner for testing, adds a separate route that
 lets owners on the `SELF_SERVICE_UPGRADE_EMAILS` allowlist upgrade themselves to Pro. It's off unless

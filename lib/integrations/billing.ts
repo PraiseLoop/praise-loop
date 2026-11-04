@@ -1,0 +1,118 @@
+import { randomUUID } from "node:crypto";
+import type { Plan } from "../services/entitlements";
+import type { BillingEvent, SubscriptionStatus } from "../services/subscriptions";
+
+// Provider adapters only translate their own events into the shared BillingEvent
+// shape; lib/services/subscriptions.ts is the one place that applies them. Stripe
+// (#223) and the app stores (#95) will sit behind this same interface.
+export type CheckoutInput = {
+  ownerId: string;
+  plan: Plan;
+  now?: Date;
+};
+
+export type SubscriptionInput = {
+  ownerId: string;
+  externalId: string;
+  plan: Plan;
+  now?: Date;
+};
+
+export type BillingProvider = {
+  readonly name: string;
+  checkout(input: CheckoutInput): Promise<BillingEvent>;
+  renew(input: SubscriptionInput): Promise<BillingEvent>;
+  failPayment(input: SubscriptionInput): Promise<BillingEvent>;
+  cancel(input: SubscriptionInput): Promise<BillingEvent>;
+};
+
+export const BILLING_PROVIDER_ENV = "BILLING_PROVIDER";
+const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+
+// Mirrors devAuthEnabled: the config alone is not enough, the process must also
+// not be a production build. A stray BILLING_PROVIDER=fake in a server .env
+// therefore cannot make the fake adapter available.
+export function fakeBillingEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  return env[BILLING_PROVIDER_ENV] === "fake" && env.NODE_ENV !== "production";
+}
+
+function requireFake(env: Record<string, string | undefined> = process.env) {
+  if (!fakeBillingEnabled(env)) {
+    throw new Error("The fake billing provider is not available in this process");
+  }
+}
+
+function event(
+  provider: string,
+  type: string,
+  input: { ownerId: string; externalId: string; plan: Plan; status: SubscriptionStatus; currentPeriodEnd: Date; cancelAtPeriodEnd?: boolean; now: Date }
+): BillingEvent {
+  return {
+    provider,
+    eventId: `fake_evt_${randomUUID()}`,
+    type,
+    ownerId: input.ownerId,
+    externalId: input.externalId,
+    plan: input.plan,
+    status: input.status,
+    currentPeriodEnd: input.currentPeriodEnd,
+    cancelAtPeriodEnd: input.cancelAtPeriodEnd ?? false,
+    occurredAt: input.now
+  };
+}
+
+export const fakeBillingProvider: BillingProvider = {
+  name: "fake",
+  async checkout(input) {
+    requireFake();
+    const now = input.now ?? new Date();
+    return event("fake", "checkout.completed", {
+      ...input,
+      externalId: `fake_sub_${randomUUID()}`,
+      status: "active",
+      currentPeriodEnd: new Date(now.getTime() + MONTH_MS),
+      now
+    });
+  },
+  async renew(input) {
+    requireFake();
+    const now = input.now ?? new Date();
+    return event("fake", "subscription.renewed", {
+      ...input,
+      status: "active",
+      currentPeriodEnd: new Date(now.getTime() + MONTH_MS),
+      now
+    });
+  },
+  async failPayment(input) {
+    requireFake();
+    const now = input.now ?? new Date();
+    // The payment failed at the end of the paid period; the grace period in
+    // subscriptionIsActive keeps the plan briefly while the owner retries.
+    return event("fake", "subscription.payment_failed", {
+      ...input,
+      status: "past_due",
+      currentPeriodEnd: now,
+      now
+    });
+  },
+  async cancel(input) {
+    requireFake();
+    const now = input.now ?? new Date();
+    return event("fake", "subscription.canceled", {
+      ...input,
+      status: "canceled",
+      currentPeriodEnd: now,
+      cancelAtPeriodEnd: true,
+      now
+    });
+  }
+};
+
+export function billingProvider(env: Record<string, string | undefined> = process.env): BillingProvider {
+  if (env[BILLING_PROVIDER_ENV] === "fake") {
+    if (env.NODE_ENV === "production") throw new Error("The fake billing provider is not available in production");
+    return fakeBillingProvider;
+  }
+  throw new Error("No billing provider is configured");
+}

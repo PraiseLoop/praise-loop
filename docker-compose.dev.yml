@@ -93,6 +93,8 @@ services:
       - MOBILE_FEATURES=${MOBILE_FEATURES:-}
       # Demo sign-in: only meaningful with next dev; ignored by production builds.
       - MOBILE_DEV_AUTH=${MOBILE_DEV_AUTH:-}
+      # Fake billing walkthrough (#219): only meaningful with next dev.
+      - BILLING_PROVIDER=${BILLING_PROVIDER:-}
       - EMAIL_TRANSPORT=${EMAIL_TRANSPORT:-}
       - EMAIL_FROM=${EMAIL_FROM:-}
       - RESEND_API_KEY=${RESEND_API_KEY:-}

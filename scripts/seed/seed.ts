@@ -12,6 +12,12 @@ import { SEED_BUSINESSES, SEED_PUSH_TOKEN, type BusinessSeed, type DraftSeed, ty
 
 const CSV_DIR = resolve(__dirname, "..", "..", "sample-data", "csv");
 const OWNER_PLANS: Record<DevOwnerKey, Plan> = { pro: "pro", business: "business", free: "free", email: "free" };
+// The Business demo owner walks a provider subscription rather than a manual grant,
+// so the account screen can show a web subscription (#219). The fake adapter never
+// reaches a provider; this is just the same row a checkout would have written.
+const OWNER_SUBSCRIPTIONS: Partial<Record<DevOwnerKey, { provider: string; externalId: string; plan: Plan }>> = {
+  business: { provider: "fake", externalId: "dev-seed-business", plan: "business" }
+};
 const OWNER_IDS = Object.values(DEV_OWNERS).map(owner => owner.id);
 
 // No Buffer connection is seeded (#29): a fake connection would need real
@@ -38,6 +44,34 @@ async function ensurePlan(ownerId: string, plan: Plan) {
   const current = await entitlementsFor(ownerId);
   const settled = current.plan === plan && (plan === "free" || (current.source === "manual" && !current.expiresAt));
   if (!settled) await setOwnerPlan(ownerId, plan, { actor: "dev-seed", reason: "demo data" });
+}
+
+// Keeps one synthetic subscription row and its initial audit event. A second seed
+// renews the row, so the demo owner doesn't lapse to Free, but adds no history.
+async function ensureSubscription(ownerId: string, subscription: { provider: string; externalId: string; plan: Plan }) {
+  const periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const existing = await query<{ owner_id: string }>(
+    "SELECT owner_id FROM owner_subscriptions WHERE provider=$1 AND external_id=$2",
+    [subscription.provider, subscription.externalId]
+  );
+  if (existing.rowCount) {
+    if (existing.rows[0].owner_id !== ownerId) throw new Error("A seed subscription belongs to another owner");
+    await query(
+      "UPDATE owner_subscriptions SET status='active', plan=$3, current_period_end=$4, last_event_at=now(), updated_at=now() WHERE provider=$1 AND external_id=$2",
+      [subscription.provider, subscription.externalId, subscription.plan, periodEnd]
+    );
+    return;
+  }
+  await query(
+    `INSERT INTO owner_subscriptions(owner_id,provider,external_id,plan,status,current_period_end,last_event_at)
+     VALUES($1,$2,$3,$4,'active',$5,now())`,
+    [ownerId, subscription.provider, subscription.externalId, subscription.plan, periodEnd]
+  );
+  await query(
+    `INSERT INTO owner_plan_events(owner_id,plan,source,expires_at,actor,reason)
+     VALUES($1,$2,'stripe',$3,'dev-seed','demo subscription')`,
+    [ownerId, subscription.plan, periodEnd]
+  );
 }
 
 async function seededImagePaths(): Promise<string[]> {
@@ -160,7 +194,17 @@ export async function runSeed(env: Record<string, string | undefined> = process.
 
   const oldImages = await seededImagePaths();
   const ids = await transaction(async () => {
-    for (const key of Object.keys(owners) as DevOwnerKey[]) await ensurePlan(owners[key], OWNER_PLANS[key]);
+    for (const key of Object.keys(owners) as DevOwnerKey[]) {
+      const subscription = OWNER_SUBSCRIPTIONS[key];
+      if (subscription) {
+        // An older seed may have left a manual Business grant; remove it so the
+        // sample shows the subscription source instead of a same-plan tie.
+        await query("DELETE FROM owner_plans WHERE owner_id=$1", [owners[key]]);
+        await ensureSubscription(owners[key], subscription);
+      } else {
+        await ensurePlan(owners[key], OWNER_PLANS[key]);
+      }
+    }
     await query("DELETE FROM businesses WHERE owner_id = ANY($1)", [OWNER_IDS]);
     await query("DELETE FROM device_push_tokens WHERE owner_id = ANY($1) AND token LIKE 'ExponentPushToken[devseed-%'", [OWNER_IDS]);
     await query(

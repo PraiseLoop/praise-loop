@@ -69,7 +69,9 @@ async function main() {
         ('business-owner','business@example.invalid'),('expired-business-owner','expired-business@example.invalid'),
         ('expired-owner','expired@example.invalid'),('api-owner','api@example.invalid'),
         ('upgrade-owner','upgrade@example.invalid'),('upgrade-business-owner','upgrade-business@example.invalid'),('blocked-owner','blocked@example.invalid'),
-        ('over-limit-owner','over-limit@example.invalid')`);
+        ('over-limit-owner','over-limit@example.invalid'),
+        ('mixed-business-owner','mixed-business@example.invalid'),('mixed-manual-owner','mixed-manual@example.invalid'),
+        ('lapsed-subscription-owner','lapsed-subscription@example.invalid')`);
       await c.query(`INSERT INTO auth_sessions VALUES
         ($1,'api-owner',now()+interval '1 hour'),
         ($2,'upgrade-owner',now()+interval '1 hour'),
@@ -108,6 +110,31 @@ async function main() {
       assert.equal(expiredBusiness.limits.businesses, 1);
       assert.equal(expiredBusiness.expiredPlan, "business");
       assert.equal((await c.query("SELECT plan FROM owner_plans WHERE owner_id='expired-business-owner'")).rows[0].plan, "business", "expiry keeps the stored Business plan for renewal");
+
+      // A subscription is a second, independent grant (#219): the highest active
+      // plan wins and the source names the grant that won.
+      await c.query(`INSERT INTO owner_subscriptions(owner_id,provider,external_id,plan,status,current_period_end) VALUES
+        ('mixed-business-owner','stripe','sub-mixed-business','business','active',now()+interval '30 days'),
+        ('mixed-manual-owner','stripe','sub-mixed-manual','business','canceled',now()-interval '1 day'),
+        ('lapsed-subscription-owner','stripe','sub-lapsed','business','active',now()-interval '1 day')`);
+      await setOwnerPlan("mixed-business-owner", "pro", { expiresAt: "2020-01-01T00:00:00Z", reason: "Expired synthetic manual grant" });
+      const mixedBusiness = await entitlementsFor("mixed-business-owner");
+      assert.equal(mixedBusiness.plan, "business", "an active subscription outranks an expired manual grant");
+      assert.equal(mixedBusiness.source, "stripe");
+      assert.equal(mixedBusiness.expired, false, "an active subscription is not reported as expired");
+      assert.equal((await c.query("SELECT plan FROM owner_plans WHERE owner_id='mixed-business-owner'")).rows[0].plan, "pro", "the expired manual row is kept");
+
+      await setOwnerPlan("mixed-manual-owner", "pro", { reason: "Active synthetic manual grant" });
+      const mixedManual = await entitlementsFor("mixed-manual-owner");
+      assert.equal(mixedManual.plan, "pro", "a lapsed subscription does not remove the manual grant");
+      assert.equal(mixedManual.source, "manual", "the winning grant supplies the source");
+      assert.equal((await c.query("SELECT status FROM owner_subscriptions WHERE owner_id='mixed-manual-owner'")).rows[0].status, "canceled", "the lapsed subscription row is kept");
+
+      const lapsedSubscription = await entitlementsFor("lapsed-subscription-owner");
+      assert.equal(lapsedSubscription.plan, "free");
+      assert.equal(lapsedSubscription.expired, true);
+      assert.equal(lapsedSubscription.expiredPlan, "business");
+      assert.equal((await c.query("SELECT count(*)::int n FROM owner_subscriptions WHERE owner_id='lapsed-subscription-owner'")).rows[0].n, 1, "expiry keeps subscription data");
 
       const business = async (owner: string, name: string) =>
         (await c.query("INSERT INTO businesses(name,timezone,owner_id) VALUES($1,'UTC',$2) RETURNING id", [name, owner])).rows[0].id;

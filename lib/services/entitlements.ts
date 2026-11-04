@@ -1,7 +1,9 @@
 import { query, transaction } from "../db";
+import { PLAN_ORDER } from "../plansDisplay";
+import { sourceForProvider, subscriptionIsActive } from "./subscriptions";
 
 export type Plan = "free" | "pro" | "business";
-export type PlanSource = "default" | "manual" | "store";
+export type PlanSource = "default" | "manual" | "store" | "stripe";
 
 export type EntitlementLimits = {
   /** Drafts the weekly generator may create for one owned business. */
@@ -76,12 +78,73 @@ export async function businessAllowance(ownerId: string, limit: number, exec: Ex
   return { active, paused: ids.filter(id => !allowed.has(id)) };
 }
 
-// Expired plans fall back to free without deleting the row, so restoring expiry
-// (or a renewal webhook) brings Pro back with no data changes.
+type Grant = { plan: Plan; source: PlanSource; expiresAt: Date | null; active: boolean };
+
+const planRank = (plan: Plan) => PLAN_ORDER.indexOf(plan);
+
+function highest(grants: Grant[]): Grant | undefined {
+  // PLAN_ORDER is the single ranking, so adding a tier cannot leave a hardcoded
+  // list behind. Manual grants are added first, so they win a same-tier tie.
+  return grants.slice().sort((a, b) => planRank(b.plan) - planRank(a.plan))[0];
+}
+
+// The effective plan is the highest active grant across the manual row and every
+// provider subscription. Expired or lapsed grants fall back to free without
+// deleting the stored row, so restoring expiry (or a renewal) brings the plan
+// back with no data changes. `exec` may be a transaction client: generation
+// calls this inside its owner lock.
 export async function entitlementsFor(ownerId: string, exec: Executor = query, now = new Date()): Promise<Entitlements> {
-  const row = (await exec("SELECT plan,source,expires_at FROM owner_plans WHERE owner_id=$1", [ownerId])).rows[0];
-  if (!row) return entitlementsForPlan("free", "default", null, now);
-  return entitlementsForPlan(row.plan, row.source, row.expires_at, now);
+  const manual = (await exec("SELECT plan,source,expires_at FROM owner_plans WHERE owner_id=$1", [ownerId])).rows[0];
+  const subscriptions = (await exec(
+    "SELECT provider,plan,status,current_period_end FROM owner_subscriptions WHERE owner_id=$1",
+    [ownerId]
+  )).rows;
+
+  const grants: Grant[] = [];
+  if (manual && Object.hasOwn(PLAN_LIMITS, manual.plan)) {
+    grants.push({
+      plan: manual.plan,
+      source: manual.source,
+      expiresAt: manual.expires_at ? new Date(manual.expires_at) : null,
+      active: planIsActive(manual.plan, manual.expires_at, now)
+    });
+  }
+  for (const row of subscriptions) {
+    if (!Object.hasOwn(PLAN_LIMITS, row.plan)) continue;
+    grants.push({
+      plan: row.plan,
+      source: sourceForProvider(row.provider),
+      expiresAt: row.current_period_end ? new Date(row.current_period_end) : null,
+      active: subscriptionIsActive(row.status, row.current_period_end, now)
+    });
+  }
+
+  const active = highest(grants.filter(grant => grant.active));
+  if (active) {
+    // Do not re-check the expiry here: a past_due subscription inside its grace
+    // period is active even though its paid-through date has passed.
+    return {
+      plan: active.plan,
+      source: active.source,
+      expiresAt: active.expiresAt ? active.expiresAt.toISOString() : null,
+      expired: false,
+      expiredPlan: null,
+      limits: PLAN_LIMITS[active.plan]
+    };
+  }
+
+  // No grant is active, so this owner is on Free whatever the dates say: a failed first
+  // payment or an immediate cancellation still has a future period end. Only a grant whose
+  // period has really ended is reported as expired, so the app can say when it lapsed.
+  const lapsed = highest(grants.filter(grant => grant.plan !== "free" && grant.expiresAt && grant.expiresAt.getTime() <= now.getTime()));
+  return {
+    plan: "free",
+    source: lapsed?.source ?? "default",
+    expiresAt: lapsed?.expiresAt ? lapsed.expiresAt.toISOString() : null,
+    expired: Boolean(lapsed),
+    expiredPlan: lapsed?.plan ?? null,
+    limits: PLAN_LIMITS.free
+  };
 }
 
 export async function setOwnerPlan(ownerId: string, plan: Plan, options: { source?: "manual" | "store"; expiresAt?: Date | string | null; actor?: string; reason?: string } = {}) {

@@ -10,7 +10,7 @@ import { expiryNote, formatLocalDate, pausedBusinessMessage, planName, quotaMetM
 import { usePlan } from "../ui/usePlan";
 import PlanUpgrade from "./PlanUpgrade";
 
-const sources = { default: "Default plan", manual: "Set manually or with a pilot upgrade", store: "App store subscription" } as const;
+const sources = { default: "Default plan", manual: "Set manually or with a pilot upgrade", store: "App store subscription", stripe: "Web subscription" } as const;
 // Review sync (#46) and AI replies (#96) have no feature behind them yet, so a
 // plan that allows them still reads as planned, never as included.
 const plannedOrNo = (value: boolean) => value ? "Planned — not available yet" : "Not included";

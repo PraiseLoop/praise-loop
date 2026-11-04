@@ -18,6 +18,7 @@ async function snapshot(client: PoolClient, media: string) {
     owners: await rows("SELECT id,email,name FROM auth_users ORDER BY id"),
     methods: await rows("SELECT owner_id,provider,provider_account_id,email FROM auth_accounts ORDER BY owner_id,provider"),
     plans: await rows("SELECT owner_id,plan,source FROM owner_plans ORDER BY owner_id"),
+    subscriptions: await rows("SELECT owner_id,provider,external_id,plan,status FROM owner_subscriptions ORDER BY owner_id"),
     planEvents: await rows("SELECT owner_id,plan,actor FROM owner_plan_events ORDER BY owner_id,id"),
     tokens: await rows("SELECT owner_id,token,platform FROM device_push_tokens ORDER BY token"),
     businesses: await rows("SELECT name,owner_id,timezone,brand_tone,brand_colors,weekly_target,brand_voice FROM businesses ORDER BY name"),
@@ -89,8 +90,11 @@ async function main() {
       assert.deepEqual(one.businesses.filter(b => b.owner_id === "dev-owner-business").map(b => b.name), ["Demo — Hespeler Powder Coating"], "the extra Pro business moved to the Business demo");
       assert.equal((await entitlementsFor("dev-owner")).plan, "pro");
       assert.equal((await entitlementsFor("dev-owner-business")).plan, "business");
+      assert.equal((await entitlementsFor("dev-owner-business")).source, "stripe", "the Business demo shows a web subscription");
       assert.equal((await entitlementsFor("dev-owner-free")).plan, "free");
       assert.equal((await entitlementsFor("dev-owner-email")).plan, "free");
+      assert.deepEqual(one.subscriptions, [{ owner_id: "dev-owner-business", provider: "fake", external_id: "dev-seed-business", plan: "business", status: "active" }]);
+      assert.equal(one.plans.some(p => p.owner_id === "dev-owner-business"), false, "the subscription demo has no same-plan manual grant");
       assert.equal((await client.query("SELECT count(*)::int n FROM auth_accounts WHERE provider='email' AND owner_id='dev-owner-email'")).rows[0].n, 1);
       assert.equal(one.owners.every(o => String(o.email).endsWith(".invalid")), true, "synthetic emails only");
       assert.equal(one.owners.find(o => o.id === "dev-owner-free")!.name, null, "the Free demo owner has no name for the profile empty state");
