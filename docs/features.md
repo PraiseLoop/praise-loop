@@ -418,6 +418,9 @@ as read-only.
   themselves moved to the Profile screen (#151) and read the same endpoint.
   Wording lives in `lib/planDisplay.ts` (web) and
   `mobile/src/queue/planSummary.ts` (phone) and both are covered by tests.
+  An installed app accepts any non-empty plan name the server sends, so a new
+  tier cannot break it; a plan it does not recognise keeps the server's name
+  instead of reading as Free (#214).
 - Onboarding does not yet mention the limit; that is a follow-up.
 
 Expired Pro falls back to Free at read time without deleting the stored plan, so

@@ -1,7 +1,9 @@
 import type { Entitlements, WeeklyUsage } from "../api/entitlements";
 
 // Wording mirrors lib/planDisplay.ts on the web so the two apps never disagree.
-const planName = (plan: string) => (plan === "pro" ? "Pro" : "Free");
+// An unknown plan keeps the server's own name instead of being called Free.
+const planNames: Record<string, string> = { free: "Free", pro: "Pro" };
+const planName = (plan: string) => planNames[plan] ?? `${plan.charAt(0).toUpperCase()}${plan.slice(1)}`;
 const posts = (count: number) => `${count} post${count === 1 ? "" : "s"}`;
 
 export function usageFor(plan: Entitlements | null, businessId: number | null): WeeklyUsage | null {
