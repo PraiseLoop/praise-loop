@@ -193,6 +193,7 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `EMAIL_FROM` | for real sends | Sender, for example `Praise Loop <no-reply@mail.example.com>`, on a domain verified in Resend. With the fake transport it defaults to `Praise Loop <no-reply@praiseloop.invalid>` |
 | `RESEND_API_KEY` | for real sends | Resend API key, supplied only through runtime secret configuration. A missing key (or `EMAIL_FROM`) fails closed with a clear `email_unavailable` error; nothing crashes at startup |
 | `MEDIA_ROOT` | no | Where rendered draft images are written/served (default `private-media`, the owner-protected `generated_media` volume mount in Compose; host upgrades must move existing images there as described in [auth.md](auth.md)) |
+| `SELF_SERVICE_UPGRADE_EMAILS` | no | Comma-separated verified owner emails allowed to see **Upgrade to Pro** on `/account` and change their own plan to open-ended Pro (no payment). Empty or unset allows nobody. Written to `owner_plan_events` with the email as actor |
 | `REDIS_URL` | no | Reserved for future queue work; unused by the current worker |
 
 Postgres and Redis ports are bound to loopback (`127.0.0.1`) only — reachable

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { EntitlementsWithUsage } from "../../lib/planDisplay";
 import { apiFetch } from "../apiFetch";
 
@@ -11,16 +11,18 @@ import { apiFetch } from "../apiFetch";
 export function usePlan() {
   const [plan, setPlan] = useState<EntitlementsWithUsage | null>(null);
   const [failed, setFailed] = useState(false);
+  const [version, setVersion] = useState(0);
+  const reload = useCallback(() => setVersion(value => value + 1), []);
   useEffect(() => {
     let current = true;
     apiFetch("/api/entitlements")
       .then(async response => {
         if (!response.ok) throw new Error("plan unavailable");
         const data: EntitlementsWithUsage = await response.json();
-        if (current) setPlan(data);
+        if (current) { setPlan(data); setFailed(false); }
       })
       .catch(() => { if (current) setFailed(true); });
     return () => { current = false; };
-  }, []);
-  return { plan, failed };
+  }, [version]);
+  return { plan, failed, reload };
 }
