@@ -202,6 +202,14 @@ previous image predates the new claim states: its slot assignment would leave cl
 and a claim blocks editing its draft. If an older image must run, delete the `queued` claims and set
 those drafts back to `approved` first.
 
+### The "is posting set up?" banner (#205)
+
+The Approval and Schedule pages ask `GET /api/businesses/<id>/posting-setup` (database only, never calls
+Buffer) and show one banner for the business: posting switched off, Buffer not connected, needs reconnecting,
+no channel chosen, or a personal Instagram account. Each fixable state links to Connections. In `draft` mode a
+ready business shows "Test mode: posts are saved as drafts"; in `live` mode a ready business shows nothing.
+The wording lives in `lib/posting/postingSetup.ts`.
+
 ### Not built yet
 
 - The phone app shows nothing about posting yet. On the web the approval cards show the status, let the
