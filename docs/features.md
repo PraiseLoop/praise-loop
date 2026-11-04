@@ -327,6 +327,22 @@ one the prompt falls back to the tone setting exactly as before.
 - **Rollback:** stop calling the route and clear the three columns if needed. The
   migration is additive and old code ignores them.
 
+## Fetch Google reviews through Apify (#232)
+
+A removable stopgap until official sync (#46). When `APIFY_TOKEN` is set, the reviews page shows a
+form where an owner pastes one Google Maps link or place ID for their business, confirms it's their
+own, and starts a fetch. The page polls until it finishes and shows what was imported.
+
+- **Limits:** reviews per fetch come from `APIFY_REVIEW_LIMIT_FREE`, `_PRO` and `_BUSINESS`
+  (defaults 5, 10 and 15). One fetch per business per `APIFY_REVIEW_RUN_INTERVAL_HOURS` (default 24),
+  with a spend cap of `APIFY_MAX_CHARGE_USD` per run (default 0.50).
+- **Stored:** review text, stars, date, the source review ID and a short reviewer name such as
+  "Jane D.". The rows use `source='apify_google'`.
+- **Risk:** Google's terms prohibit bulk downloads, and the owner accepted that. See
+  [integrations.md](integrations.md) for the decision, the risk and the live-run status.
+- **Tests:** `scripts/test-apify-reviews.ts`, using a fake adapter and synthetic data.
+- **Rollback:** unset `APIFY_TOKEN` to hide it. Migration 023 only adds, so it can stay in place.
+
 ## CSV review import
 
 CSV imports are limited to 1 MB / 1000 logical rows; quoted multiline cells are

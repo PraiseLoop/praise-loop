@@ -305,7 +305,9 @@ The product currently retains reviews and turns them into edited social graphics
 We cannot assume that indefinite storage or off-platform reuse is permitted by
 API access or business-owner consent alone. Obtain provider clarification for this
 specific use before connecting/importing; these notes are not a legal determination.
-Do not silently repurpose Places API rules, remove attribution, or scrape instead.
+Do not silently repurpose Places API rules, remove attribution, or scrape instead. The one
+owner-approved exception is the removable Apify stopgap below (#232); it is not official API
+access and is not presented as such.
 
 ### Exact owner actions to unblock
 
@@ -362,3 +364,82 @@ the sync in the #43 worker, periodic full reconciliation for deleted reviews,
 review-reuse/retention policy confirmation from Google, key rotation, and the
 mandatory live test with sanitized evidence. Add `GOOGLE_TOKEN_KEY` to deploy secrets
 before use.
+
+## Apify Google reviews stopgap (#232) — accepted 2026-11-04
+
+Status: built. One owner-approved live run on 2026-11-04, on the owner's own place with a
+`maps.app.goo.gl` link and a cap of 5 reviews, went through the real client. It finished in under a
+minute and cost about US$0.009. The URL, request and result fields all matched: 5 reviews came back
+with `reviewId`, `stars`, `text`, `publishedAtDate` and `name`. 4 passed the row checks and 1 had no
+text. That run didn't write to a database and didn't use the reviews page, so the full flow and
+`reviewsStartDate` on later runs haven't been run live. Field names stay in
+`lib/integrations/apifyReviews.ts`, so a correction is small if Apify changes them.
+
+### Decision and risk
+
+The owner chose this on 2026-11-04 and accepted the risk. Google Maps terms prohibit bulk
+downloads of content, and Google's general terms list scraping as a reason it can suspend access,
+so Google can block this at any time. This is a removable stopgap, not a substitute for official
+Business Profile access (#46), and it must never be used on a business the owner does not run.
+
+### Scope and safety
+
+- `reviews.source` has a new value, `apify_google`, so these rows stay identifiable and cannot
+  collide with official `google` rows. Migration `023_apify_reviews.sql` holds the change.
+- The owner enters exactly one place ID, Google Maps place URL or `maps.app.goo.gl` short link.
+  Search strings, directions and multiple places are refused. `apify_review_places` records that
+  one place, who confirmed it is their own business and when.
+- Each run is sent with `maxCrawledPlacesPerSearch: 1`, all enrichment off (`maxImages: 0`),
+  `reviewsSort: "newest"`, and `reviewsStartDate` on later runs of the same place. `maxReviews`
+  comes from the owner's effective plan (`APIFY_REVIEW_LIMIT_FREE` / `_PRO` / `_BUSINESS`, defaults
+  5/10/15), so a lapsed paid plan gets the Free cap.
+- `maxTotalChargeUsd` comes from `APIFY_MAX_CHARGE_USD` (default 0.50). One run per business every
+  `APIFY_REVIEW_RUN_INTERVAL_HOURS` (default 24) on every plan, plus the daily owner counter
+  (`owner_usage` kind `apify_reviews`). A failed or timed-out run can be retried. The checks and the
+  start share a per-business lock, so two quick clicks can't start two paid runs. A start the
+  provider refuses rolls back, leaving no daily count or stored place.
+- No long request is held: the start stores Apify's run ID and status, and `GET
+  /api/businesses/:id/apify-reviews` polls it. A `SUCCEEDED` dataset is imported through a
+  conditional update, so two polls cannot import it twice. Reviews with no text are skipped.
+- Dataset items are untrusted. They use the same row checks as CSV import
+  (`lib/services/reviewValidation.ts`): integer 1–5 stars, text, a valid UTC date, bounded text and
+  source ID. Rows store only the review text, stars, date, the source review ID and a short
+  reviewer name (first name plus last initial, such as “Jane D.”; a single name stays as it is).
+  The reviewer's ID, profile URL and photo, and the review URL, are discarded before storage.
+- A row the database refuses is counted as a storage failure, and the rest of the run still imports.
+- Apify's run ID stays on the server, because its run lookup needs no token.
+- We only control what PraiseLoop stores. The full results, including reviewer data, stay in the
+  run's dataset on the Apify account until Apify's retention removes them.
+
+### The Places API is not a review source
+
+Considered and rejected on 2026-11-04. Place Details returns at most five reviews, sorted by
+relevance by default; the `newest` sort is documented only on the legacy API, which new projects
+can no longer enable. Its [policies](https://developers.google.com/maps/documentation/places/web-service/policies)
+exempt only the place ID from caching limits, and require author attribution, a link to each review
+on Google Maps and Google Maps attribution wherever reviews are shown, which doesn't fit storing
+reviews or posting them on a quote card. It also proves nothing about who owns the business. The
+Maps Platform terms themselves couldn't be loaded, so check them before relying on this reading.
+
+### Configuration and live API
+
+Set on the web service, read at request time, never logged and never placed in a URL:
+
+- `APIFY_TOKEN` — the owner's Apify token. Sent only as `Authorization: Bearer …`. Unset hides the
+  feature and makes the POST fail closed with 503.
+- `APIFY_REVIEW_LIMIT_FREE`, `APIFY_REVIEW_LIMIT_PRO`, `APIFY_REVIEW_LIMIT_BUSINESS`,
+  `APIFY_REVIEW_RUN_INTERVAL_HOURS`, `APIFY_MAX_CHARGE_USD` — see above.
+
+The live client uses the Apify REST API for actor `compass~crawler-google-places`:
+`POST /v2/actors/compass~crawler-google-places/runs?maxTotalChargeUsd=…` with the JSON input,
+`GET /v2/actor-runs/:runId`, and `GET /v2/datasets/:datasetId/items?clean=true&format=json`.
+Run statuses `READY` and `RUNNING` (and the `-ING` wind-down states) are in progress; `SUCCEEDED`
+imports; `FAILED`, `TIMED-OUT` and `ABORTED` fail without importing.
+
+### When #46 lands
+
+Official sync writes `source='google'` and owns its own `google_connections` row. These
+`apify_google` rows remain separately identifiable, so they can be left for history, deleted, or
+reconciled against the official import without touching official rows. Remove the Apify route,
+UI, provider and token setting once the official path is live. No review text, real place link or
+real business name is committed in tests or sample data.

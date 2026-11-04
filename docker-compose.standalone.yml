@@ -62,6 +62,13 @@ services:
       - BUFFER_REDIRECT_URI=${BUFFER_REDIRECT_URI:-}
       - CREDENTIAL_ENCRYPTION_KEY=${CREDENTIAL_ENCRYPTION_KEY:-}
       - BUFFER_POSTING_MODE=${BUFFER_POSTING_MODE:-off}
+      # Apify Google reviews stopgap (#232); empty hides the feature.
+      - APIFY_TOKEN=${APIFY_TOKEN:-}
+      - APIFY_REVIEW_LIMIT_FREE=${APIFY_REVIEW_LIMIT_FREE:-5}
+      - APIFY_REVIEW_LIMIT_PRO=${APIFY_REVIEW_LIMIT_PRO:-10}
+      - APIFY_REVIEW_LIMIT_BUSINESS=${APIFY_REVIEW_LIMIT_BUSINESS:-15}
+      - APIFY_REVIEW_RUN_INTERVAL_HOURS=${APIFY_REVIEW_RUN_INTERVAL_HOURS:-24}
+      - APIFY_MAX_CHARGE_USD=${APIFY_MAX_CHARGE_USD:-0.50}
       - APP_ENV=${APP_ENV:-prod}
       - LOG_LEVEL=${LOG_LEVEL:-}
       # Only the tunnel's cloudflared is on the shared `edge` network, so the client-IP headers

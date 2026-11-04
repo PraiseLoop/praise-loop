@@ -194,6 +194,10 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `EMAIL_TRANSPORT` | no | `fake` (default outside production) or `resend`. `fake` records to an in-memory outbox and logs an `email_outbox` line, and is refused in a production process |
 | `EMAIL_FROM` | for real sends | Sender, for example `Praise Loop <no-reply@mail.example.com>`, on a domain verified in Resend. With the fake transport it defaults to `Praise Loop <no-reply@praiseloop.invalid>` |
 | `RESEND_API_KEY` | for real sends | Resend API key, supplied only through runtime secret configuration. A missing key (or `EMAIL_FROM`) fails closed with a clear `email_unavailable` error; nothing crashes at startup |
+| `APIFY_TOKEN` | no | Enables the removable Apify Google-reviews stopgap (#232, see [integrations.md](integrations.md)). Read from the environment and sent only as a Bearer header; a missing token hides the feature and makes its start route answer 503. Never commit a real token |
+| `APIFY_REVIEW_LIMIT_FREE` / `APIFY_REVIEW_LIMIT_PRO` / `APIFY_REVIEW_LIMIT_BUSINESS` | no | Reviews requested per Apify run for that plan (defaults `5` / `10` / `15`). The plan is read as a plain string; an unknown plan uses the free limit. Missing or invalid values use the defaults |
+| `APIFY_REVIEW_RUN_INTERVAL_HOURS` | no | One Apify run per business per interval on every plan (default `24`). A failed or timed-out run can be retried |
+| `APIFY_MAX_CHARGE_USD` | no | Apify's `maxTotalChargeUsd` for every run (default `0.50`). This is a spend cap on the owner's own Apify account |
 | `MEDIA_ROOT` | no | Where rendered draft images are written/served (default `private-media`, the owner-protected `generated_media` volume mount in Compose; host upgrades must move existing images there as described in [auth.md](auth.md)) |
 | `SELF_SERVICE_UPGRADE_EMAILS` | no | Comma-separated verified owner emails allowed to see **Upgrade to Pro** on `/account` and change their own plan to open-ended Pro (no payment). Empty or unset allows nobody. Written to `owner_plan_events` with the email as actor |
 | `REDIS_URL` | no | Reserved for future queue work; unused by the current worker |
