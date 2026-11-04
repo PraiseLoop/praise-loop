@@ -394,13 +394,15 @@ The limits live in `lib/services/entitlements.ts` and are enforced on the server
   (`resetsOn` is the next Monday in the business's timezone, `resetsAt` that
   instant). Usage reads `generation_periods` and `generationWeek`, so it never
   disagrees with what the generator enforces. `expired` is true when a stored
-  Pro plan has lapsed and is read as Free. No route lets an owner change
-  their own plan.
+  Pro plan has lapsed and is read as Free. Apart from the allowlisted pilot
+  upgrade below, no route lets an owner change their own plan.
 
 ### Plan page and limit messages (#133)
 
-Plans are visible but read-only: no upgrade button and no prices (pricing is
-decided after the pilot; see `docs/mobile-plan.md`).
+Plans show no prices (pricing is decided after the pilot; see
+`docs/mobile-plan.md`). During the pilot an owner whose verified email is on the
+server's allowlist sees an **Upgrade to Pro** button; everyone else sees the plan
+as read-only.
 
 - **Plan page** (`/account`, reached from the profile menu; #150): the plan, where it came from
   (default, manual or store), its expiry, what it includes (posts per week,
@@ -430,6 +432,15 @@ The script resolves an email or business to the owner and records the actor,
 reason and expiry in `owner_plan_events`. Payment-provider purchases will use
 the same module from a verified webhook (#95). Migration 012 is additive;
 rollback can leave the plan tables in place while reverting the checks.
+
+For the pilot, `SELF_SERVICE_UPGRADE_EMAILS` can hold a comma-separated list of
+verified owner emails. A listed owner sees **Upgrade to Pro** on `/account`;
+`GET /api/plan/upgrade` reports whether the button should appear, and
+`POST /api/plan/upgrade` sets an open-ended manual Pro plan (no payment). The
+change is recorded in `owner_plan_events` with the owner's email as actor and
+reason "Self-service pilot upgrade". An empty or unset list refuses every owner,
+so deployments that do not opt in keep plan changes operator-only. Repeating the
+request changes nothing.
 
 ### Public plans page (#134)
 

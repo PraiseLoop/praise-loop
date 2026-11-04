@@ -7,8 +7,9 @@ import { useCallback, useEffect, useState } from "react";
 import { ADD_NAME_HINT, ADD_NAME_PROMPT, displayName } from "../../lib/profileDisplay";
 import { expiryNote, formatLocalDate, planName, quotaMetMessage } from "../../lib/planDisplay";
 import { usePlan } from "../ui/usePlan";
+import PlanUpgrade from "./PlanUpgrade";
 
-const sources = { default: "Default plan", manual: "Set by PraiseLoop support", store: "App store subscription" } as const;
+const sources = { default: "Default plan", manual: "Set manually or with a pilot upgrade", store: "App store subscription" } as const;
 const yesNo = (value: boolean) => value ? "Included" : "Not included";
 
 type AuthMethod = { provider: string; email: string | null; addedAt: string | null; lastUsedAt: string | null };
@@ -17,12 +18,13 @@ const methodName = (provider: string) => providerNames[provider] ?? provider;
 const methodAdded = (addedAt: string | null) => addedAt ? `Added ${addedAt.slice(0, 10)}` : "Added before we tracked method dates";
 
 // The full profile and plan page (#150), reached from the profile menu. The name is
-// the only editable part; email is the verified sign-in address and plans are
-// changed by operators or a verified store webhook, never here.
+// the only editable part; email is the verified sign-in address. Plans are changed
+// by operators, a verified store webhook, or a pilot self-service upgrade whose
+// email allowlist the server checks.
 export default function AccountPage() {
   const { status } = useBusiness();
   const { profile, loaded } = useProfile();
-  const { plan, failed } = usePlan();
+  const { plan, failed, reload: reloadPlan } = usePlan();
   const [editing, setEditing] = useState(false);
   const [methods, setMethods] = useState<AuthMethod[] | null>(null);
   const [methodError, setMethodError] = useState<string | null>(null);
@@ -159,6 +161,7 @@ export default function AccountPage() {
             <div key={label}><dt className="pl-small pl-muted">{label}</dt><dd style={{ margin: 0, fontWeight: 600 }}>{value}</dd></div>
           ))}
         </dl>
+        <PlanUpgrade plan={plan.plan} onUpgraded={() => void reloadPlan()} />
       </section>
 
       <section aria-labelledby="usage-h" style={{ display: "flex", flexDirection: "column", gap: 16 }}>

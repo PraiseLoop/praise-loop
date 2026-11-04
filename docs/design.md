@@ -139,8 +139,9 @@ transactional.
   enforced on the server; clients read `GET /api/entitlements` and never unlock anything themselves.
   Free: 1 post/week, 1 template, watermark, 1 business. Pro: 5 posts/week, 5 templates, no watermark,
   review sync, AI replies, brand voice, 3 businesses. Expired Pro falls back to Free without deleting
-  data. Plan changes today are operator-only (`scripts/set-plan.ts`); store subscriptions (#95) are
-  not built.
+  data. Plan changes are operator-only (`scripts/set-plan.ts`), except that the pilot can allow
+  self-service upgrades for a comma-separated email list in `SELF_SERVICE_UPGRADE_EMAILS`; store
+  subscriptions (#95) are not built.
 - **Dev sign-in** (`MOBILE_DEV_AUTH=1`, never in production): demo owners (Pro, Free, email-only) on
   the phone and the web landing page, backed by `lib/devAuth.ts` and the dev seeder.
 
