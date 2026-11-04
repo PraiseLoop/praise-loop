@@ -8,6 +8,33 @@ import Icon from "../ui/Icon";
 type Review = { id: number; rating: number; author_name: string | null; text: string; reviewed_at: string; source: string; status: string };
 type ImportResult = { imported: number; duplicates: number; failedRows: number; skippedEmpty: number; rejectedInvalid: number; errors?: { row: number; error: string }[] };
 type Filter = "all" | "ready" | "used" | "unfit";
+type ApifyRun = {
+  id: number; status: string; startedAt: string; importedAt: string | null;
+  imported: number; duplicates: number; rejected: number; skipped: number; failedRows: number;
+  errorCode: string | null; inProgress: boolean;
+};
+type ApifyStatus = {
+  enabled: boolean;
+  place: { input: string; kind: string; confirmedAt: string } | null;
+  run: ApifyRun | null;
+  canStart: boolean;
+  nextRunAt: string | null;
+  limits: { maxReviews: number; intervalHours: number };
+};
+const apifyErrors: Record<string, string> = {
+  unavailable: "Fetching Google reviews isn’t available right now.",
+  confirmation_required: "Please confirm this is your own business.",
+  invalid_place: "That doesn’t look like a single Google Maps place. Paste the link to your business.",
+  run_in_progress: "A fetch is already running for this business.",
+  run_interval: "This business has already fetched reviews recently. Try again later.",
+  daily_limit: "You’ve reached today’s limit for fetching reviews. Try again tomorrow.",
+  provider_auth: "The review service refused our request. Nothing was fetched.",
+  provider_error: "The review service had a problem. Try again in a few minutes.",
+  provider_failed: "The review service couldn’t finish this fetch. You can try again.",
+  timeout: "This fetch took too long and was stopped. You can try again.",
+  missing_dataset: "The review service returned no results. You can try again."
+};
+const apifyError = (code: string | null | undefined) => apifyErrors[code ?? ""] ?? "Something went wrong fetching reviews. Try again.";
 
 const statusLabels: Record<string, [string, string]> = {
   ready: ["pl-badge-approved", "Ready"],
@@ -31,6 +58,9 @@ export default function ReviewsPage() {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [apify, setApify] = useState<ApifyStatus | null>(null);
+  const [apifyMessage, setApifyMessage] = useState("");
+  const [apifyBusy, setApifyBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const currentId = useRef(businessId);
   currentId.current = businessId;
@@ -43,13 +73,43 @@ export default function ReviewsPage() {
     setCounts(data.counts ?? {});
   }, []);
 
+  // The status call also advances an in-progress Apify run and imports a
+  // successful dataset once, so polling it is enough while a run is going.
+  const loadApify = useCallback(async (id: number | string, isCurrent: () => boolean = () => true) => {
+    const response = await apiFetch(`/api/businesses/${id}/apify-reviews`);
+    if (!isCurrent()) return;
+    // Keep the form on screen if a status check fails: polling tries again, and the page says why.
+    if (!response.ok) {
+      const failed = await response.json().catch(() => null) as { error?: string } | null;
+      if (isCurrent()) setApifyMessage(apifyError(failed?.error));
+      return;
+    }
+    const data = await response.json() as ApifyStatus;
+    if (!isCurrent()) return;
+    setApify(data);
+    setApifyMessage("");
+    if (data.run?.importedAt) await load(id, isCurrent);
+  }, [load]);
+
   useEffect(() => {
     setReviews([]); setCounts({}); setResult(null); setMessage("");
+    setApify(null); setApifyMessage("");
     if (!businessId) return;
     let current = true;
     void load(businessId, () => current);
+    void loadApify(businessId, () => current);
     return () => { current = false; };
-  }, [businessId, load]);
+  }, [businessId, load, loadApify]);
+
+  const apifyPolling = Boolean(apify?.run && (apify.run.inProgress || (apify.run.status === "SUCCEEDED" && !apify.run.importedAt)));
+  useEffect(() => {
+    if (!businessId || !apifyPolling) return;
+    const polledFor = businessId;
+    const timer = setInterval(() => {
+      void loadApify(polledFor, () => currentId.current === polledFor);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [businessId, apifyPolling, loadApify]);
 
   async function importCsv(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -73,6 +133,30 @@ export default function ReviewsPage() {
     } finally { setBusy(false); }
   }
 
+  async function fetchGoogleReviews(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!businessId) return;
+    const startedFor = businessId, stillCurrent = () => currentId.current === startedFor;
+    const formData = new FormData(e.currentTarget);
+    const place = String(formData.get("place") ?? "");
+    const confirmed = formData.get("confirmed") === "on";
+    setApifyBusy(true);
+    setApifyMessage("");
+    try {
+      const response = await apiFetch(`/api/businesses/${businessId}/apify-reviews`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ place, confirmed })
+      });
+      const data = await response.json();
+      if (!stillCurrent()) return;
+      if (!response.ok) { setApifyMessage(apifyError(data.error)); return; }
+      setApify(data);
+    } catch {
+      if (stillCurrent()) setApifyMessage("Connection problem. Check the status below before starting another run.");
+    } finally { setApifyBusy(false); }
+  }
+
   if (status === "loading") return <p className="pl-muted" role="status">Loading reviews…</p>;
   if (!business) return <div className="pl-empty"><h2>Set up your business first</h2><Link href="/onboarding" className="pl-btn pl-btn-primary">Get started</Link></div>;
 
@@ -88,6 +172,58 @@ export default function ReviewsPage() {
           <p className="pl-lede">Everything your customers have said, and which reviews we can turn into posts.</p>
         </div>
       </header>
+
+      {apify?.enabled ? (
+        <form key={businessId} onSubmit={fetchGoogleReviews} className="pl-panel" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div>
+            <h2 className="pl-h2" style={{ fontSize: 18, marginBottom: 4 }}>Fetch Google reviews</h2>
+            <p className="pl-small pl-muted" style={{ margin: 0 }}>
+              Temporary stopgap until official Google sync. Paste one Google Maps place link or place ID for this business.
+              We keep only a short reviewer name and the review text; the review link, reviewer profile and photo are discarded.
+            </p>
+          </div>
+          <label className="pl-field">
+            Google Maps link or place ID
+            <input
+              className="pl-input"
+              name="place"
+              type="text"
+              required
+              defaultValue={apify.place?.input ?? ""}
+              placeholder="https://www.google.com/maps/place/… or ChIJ…"
+            />
+          </label>
+          <label className="pl-small" style={{ display: "flex", alignItems: "flex-start", gap: 8, fontWeight: 400 }}>
+            <input type="checkbox" name="confirmed" required style={{ marginTop: 3 }} />
+            I confirm this is my own business.
+          </label>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <button type="submit" className="pl-btn pl-btn-primary" disabled={apifyBusy || !apify.canStart}>
+              <Icon name="reviews" size={18} />{apify.run?.inProgress ? "Fetching…" : "Fetch reviews"}
+            </button>
+            <span className="pl-small pl-muted">
+              Up to {apify.limits.maxReviews} reviews per run · next run after {apify.limits.intervalHours}h
+            </span>
+          </div>
+          {apify.run ? (
+            <p role="status" className="pl-small" style={{ margin: 0 }}>
+              {apify.run.inProgress
+                ? "Fetching your reviews. This can take a few minutes, and you can leave this page."
+                : apify.run.importedAt
+                  ? `${apify.run.imported} imported · ${apify.run.duplicates} duplicates skipped · ${apify.run.rejected} invalid · ${apify.run.skipped} without text · ${apify.run.failedRows} storage failures`
+                  : apify.run.errorCode
+                    ? apifyError(apify.run.errorCode)
+                    : "Finishing up…"}
+            </p>
+          ) : null}
+          {apify.nextRunAt && !apify.canStart && !apify.run?.inProgress ? (
+            <p className="pl-small pl-muted" style={{ margin: 0 }}>
+              Next run available after {new Date(apify.nextRunAt).toLocaleString()}.
+            </p>
+          ) : null}
+          {apifyMessage ? <p role="status" className="pl-small" style={{ margin: 0, color: "#A3361F", fontWeight: 600 }}>{apifyMessage}</p> : null}
+        </form>
+      ) : null}
 
       <form onSubmit={importCsv} className="pl-panel" style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 16 }}>
         <label className="pl-field" style={{ flex: "1 1 280px" }}>

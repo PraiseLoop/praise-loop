@@ -88,6 +88,15 @@ async function seedOwner(client: PoolClient, owner: string, label: string, withD
     "INSERT INTO google_connections(business_id,owner_id,location_name) VALUES($1,$2,'accounts/1/locations/2')",
     [business, owner]
   );
+  // Apify stopgap (#232): a confirmed place and one run must cascade with the business.
+  await client.query(
+    "INSERT INTO apify_review_places(business_id,place_input,place_kind,confirmed_by) VALUES($1,$2,'place_id',$3)",
+    [business, `ChIJsynthetic${owner}`, owner]
+  );
+  await client.query(
+    "INSERT INTO apify_review_runs(business_id,run_id,dataset_id,status) VALUES($1,$2,$3,'SUCCEEDED')",
+    [business, `apify-run-${owner}`, `apify-dataset-${owner}`]
+  );
   // Buffer connect (#29): the owner connection, a pending state and a channel
   // selection. All three cascade from auth_users/businesses.
   await client.query(
@@ -216,6 +225,7 @@ async function main() {
         "auth_accounts", "auth_sessions", "owner_usage", "owner_plans",
         "owner_plan_events", "device_push_tokens", "businesses", "google_connections",
         "buffer_connections", "buffer_oauth_states", "business_buffer_channels",
+        "apify_review_places", "apify_review_runs",
         "reviews", "draft_posts", "generation_periods", "generation_jobs",
         "posting_slot_claims", "push_deliveries"
       ]) {

@@ -70,7 +70,7 @@ business has reviews, a brand, drafts and a weekly target.
 
 ### Pipeline
 
-reviews (CSV import, `source='manual'`; Google sync is stubbed) → `quoteSelector` ranks candidate
+reviews (CSV import, `source='manual'`; Google sync is stubbed; the removable Apify stopgap writes `source='apify_google'`) → `quoteSelector` ranks candidate
 quotes → `lib/services/generation.ts` reserves the week's quota (`generation_periods`) and enqueues
 `generation_jobs` → worker writes caption + rendered PNG into `draft_posts` → owner approves →
 owner shares from the phone and confirms "I posted it" (`shared`).
@@ -106,7 +106,7 @@ fails closed. Nothing auto-posts.
 | Generation | `generation_periods`, `generation_jobs`, `posting_slot_claims` |
 | Plans and usage | `owner_plans`, `owner_plan_events`, `owner_usage` |
 | Phone | `device_push_tokens`, `push_deliveries` |
-| Integrations (stubbed) | `google_connections` |
+| Integrations (stubbed) | `google_connections`, `apify_review_places`, `apify_review_runs` |
 
 Rules: migrations are additive and data-preserving; parallel PRs collide on the number, so renumber
 the later one when rebasing (renumbering an applied file is safe: the runner matches the name after
@@ -185,6 +185,7 @@ Expo Router screens: `sign-in`, `queue`, `draft/[id]`, `profile`. Design rules t
 | Google native, Apple, Microsoft | phone sign-in; Microsoft also on web | built, tested with local keys only, never run live |
 | Buffer | automatic posting for owners with a Business/Creator Instagram or a Facebook Page (#29) | **feasibility spike done 2026-11-01**: live API key works, an app client exists; adapter and encrypted credentials built against mocks only; **Connect backend built (#29 part 1)**: OAuth, encrypted tokens, channel selection; **web Connect screen built (#29 part 2)**: connect/reconnect/disconnect and one channel per business, posting still off; phone UI, media-URL policy and worker submission **not built**; see below |
 | Google Business Profile | review sync (#46) | stubbed client; live client fails closed until access is approved |
+| Apify | owner's own Google reviews, removable stopgap (#232) | client proven with one live run; full flow tested with the fake adapter only; hidden without `APIFY_TOKEN`; Google can block scraping at any time |
 
 ### Buffer (#29): findings and decisions, 2026-11-01
 
@@ -238,6 +239,7 @@ Detail and sources are in the comment on #29 and in [integrations.md](integratio
 | Android APK release pipeline | merged; not yet run | #190 |
 | Real scheduler through Buffer | Connect + screen built; worker posting, image links, cancel and the off/draft/live gate built (#29 part 3); **never run live**; status display and `unknown` resolution not built | #29 |
 | Google review sync, AI review replies | blocked on access/policy | #46, #96 |
+| Apify Google reviews stopgap | built; client proven with one live run, full flow not yet run live; hidden without `APIFY_TOKEN` | #232 |
 | Stripe web billing, Business tier | planned, see [billing.md](billing.md) | #225 |
 | Store subscriptions, VPS, pilot hosting, store accounts | not started / owner tasks | #95, #98, #90, #91 |
 | Email + password | needs explicit owner approval first | #159 |
