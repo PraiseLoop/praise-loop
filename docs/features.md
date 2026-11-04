@@ -67,8 +67,9 @@ Run `npm ci`, `npm run db:migrate` (008), configure `REDIS_URL`, and run `npm ru
 Compose wires Redis into the worker. BullMQ 6 with ioredis handles durable delivery; Postgres
 is the authoritative outbox/claim/quota store, so lost Redis deliveries are rebuilt.
 The worker scans every 60s (minimum configurable 5s), not five new drafts per tick.
-Only owned businesses participate. The Brand page (Posts per week) exposes weekly target 1–5,
-default 3; changes apply to the next Monday-based business-local generation period.
+Only owned businesses participate, and after a downgrade only those within the plan's business
+allowance generate; the extra ones are paused (#217). The Brand page (Posts per week) exposes weekly
+target 1–5, default 3; changes apply to the next Monday-based business-local generation period.
 
 A business-row transaction reserves review/draft jobs and counts all initial drafts
 against the same period budget. Up to five pending/running/retrying jobs per business
@@ -403,6 +404,18 @@ The limits live in `lib/services/entitlements.ts` and are enforced on the server
 - `requestGeneration` caps the business's configured `weekly_target` inside the
   same business lock that reserves the weekly quota, including for a period
   created under an older plan.
+- After a downgrade nothing is deleted. `businessAllowance` in
+  `lib/services/entitlements.ts` orders the owner's businesses by `created_at`
+  then `id`; only the oldest ones within `limits.businesses` stay active. The
+  same check runs inside `requestGeneration`'s transaction and business lock, so
+  a paused business creates no drafts, no `generation_periods` row and reserves
+  no quota, and returns `business_paused`. Existing drafts of a paused business
+  stay visible and can still be approved. `GET /api/entitlements` adds an
+  optional `paused` flag to each usage entry; the account page and This Week show
+  the pause with a link to the plans page, and the phone explains it with no upgrade
+  prompt or link (see `docs/billing.md`). Upgrading raises the limit
+  and resumes the paused businesses on the next request. A picker for which
+  business stays active is a possible follow-up (#217).
 - The worker and the manual render route pass the free-plan watermark into the
   deterministic renderer. It is drawn in the bottom safe margin, so it never
   covers the quote, reviewer, business name or logo, and a plan change produces
@@ -414,7 +427,8 @@ The limits live in `lib/services/entitlements.ts` and are enforced on the server
 - `GET /api/entitlements` is owner-authenticated, read-only and returns the
   effective plan and limits, plus `usage`: one entry per owned business with this
   week's allocated drafts against the effective cap (the owner's weekly target
-  limited by the plan), whether the quota is met, and when the week resets
+  limited by the plan), whether the quota is met, whether the business is paused
+  over the plan's business limit, and when the week resets
   (`resetsOn` is the next Monday in the business's timezone, `resetsAt` that
   instant). Usage reads `generation_periods` and `generationWeek`, so it never
   disagrees with what the generator enforces. `expired` is true when a stored

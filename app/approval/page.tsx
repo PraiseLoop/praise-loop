@@ -7,7 +7,7 @@ import { useBusiness } from "../AppShell";
 import Icon from "../ui/Icon";
 import PostingBanner from "../ui/PostingBanner";
 import { usePlan } from "../ui/usePlan";
-import { weekLimitNotice } from "../../lib/planDisplay";
+import { pausedBusinessMessage, weekLimitNotice } from "../../lib/planDisplay";
 import PostCard, { stageOf, type Draft, type Stage } from "./PostCard";
 
 const conflict = "This post changed somewhere else. We loaded the latest version — try again.";
@@ -115,7 +115,8 @@ export default function ThisWeekPage() {
     : "Nothing to review yet";
   // The server owns the limits; when this week's quota is used up, name the plan limit.
   const usage = plan?.usage.find(u => String(u.businessId) === String(business.id));
-  const limitNote = plan ? weekLimitNotice(plan, usage) : null;
+  const pausedNote = plan && usage?.paused ? pausedBusinessMessage(plan) : null;
+  const limitNote = plan && !usage?.paused ? weekLimitNotice(plan, usage) : null;
 
   return (
     <>
@@ -134,6 +135,7 @@ export default function ThisWeekPage() {
 
       <p role="status" className="pl-toast">{message}</p>
 
+      {pausedNote ? <p className="pl-small pl-muted" style={{ margin: 0 }}>{pausedNote} <Link href="/plans">See plans</Link></p> : null}
       {limitNote && active.length ? <p className="pl-small pl-muted" style={{ margin: 0 }}>{limitNote} <Link href="/account">See your plan</Link></p> : null}
 
       <PostingBanner key={business.id} businessId={business.id} />

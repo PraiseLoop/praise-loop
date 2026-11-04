@@ -14,7 +14,7 @@ import { NotificationOffer } from "../notifications/NotificationOffer";
 import { parseBusinessId } from "../notifications/links";
 import { buildQueue, isGenerating, queueEmptyMessage, queueHeadline } from "../queue/queueState";
 import { selectBusinessId } from "../queue/selection";
-import { expiryNote, quotaMetMessage, usageFor } from "../queue/planSummary";
+import { expiryNote, pausedBusinessMessage, quotaMetMessage, usageFor } from "../queue/planSummary";
 import { noBusinessView } from "../queue/onboarding";
 import { useSession } from "../auth/SessionProvider";
 import { appConfig } from "../config";
@@ -208,7 +208,8 @@ export default function QueueScreen() {
   const view = loaded ? buildQueue(loaded.drafts, loaded.generation) : null;
   const generating = view ? isGenerating(view) : false;
   const usage = usageFor(plan, businessId);
-  const limitMessage = plan && usage ? quotaMetMessage(plan, usage) : null;
+  const pausedMessage = plan && usage?.paused ? pausedBusinessMessage(plan) : null;
+  const limitMessage = plan && usage && !usage.paused ? quotaMetMessage(plan, usage) : null;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
@@ -286,6 +287,8 @@ export default function QueueScreen() {
                 </Text>
               ) : null}
             </View>
+
+            {pausedMessage ? <Banner message={pausedMessage} tone="warning" /> : null}
 
             {limitMessage && plan && usage ? <Banner message={`${limitMessage} New posts start ${usage.resetsOn}.${expiryNote(plan) ? ` ${expiryNote(plan)}` : ""}`} tone="warning" /> : null}
 

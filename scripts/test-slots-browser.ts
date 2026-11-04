@@ -12,6 +12,7 @@ async function main(){
   const root=mkdtempSync(join(tmpdir(),"slots-browser-"));process.env.MEDIA_ROOT=root;
   try{await databaseFixture(async c=>{
     await c.query("INSERT INTO auth_users(id,email) VALUES('slots-browser','slots-browser@example.invalid')");
+    await c.query("INSERT INTO owner_plans(owner_id,plan,source) VALUES('slots-browser','business','manual')");
     await c.query("INSERT INTO auth_sessions VALUES($1,'slots-browser',now()+interval '1 hour')",[sessionHash("slots-browser-session")]);
     const bid=(await c.query("INSERT INTO businesses(name,timezone,owner_id) VALUES('Synthetic slots browser','America/New_York','slots-browser') RETURNING id")).rows[0].id;
     const other=(await c.query("INSERT INTO businesses(name,timezone,owner_id) VALUES('Other synthetic slots','UTC','slots-browser') RETURNING id")).rows[0].id;

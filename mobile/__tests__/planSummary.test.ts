@@ -1,5 +1,5 @@
 import type { Entitlements, WeeklyUsage } from "../src/api/entitlements";
-import { expiryNote, planLines, planUsageLines, quotaMetMessage, usageFor } from "../src/queue/planSummary";
+import { expiryNote, pausedBusinessMessage, planLines, planUsageLines, quotaMetMessage, usageFor } from "../src/queue/planSummary";
 
 const free = { postsPerWeek: 1, templates: 1, watermark: true, reviewSync: false, aiReplies: false, brandVoice: false, businesses: 1 };
 const pro = { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, businesses: 1 };
@@ -80,5 +80,14 @@ describe("plan summary", () => {
     expect(planUsageLines(null)).toEqual([]);
     // The profile shows the plan lines without a selected business's usage.
     expect(planLines(two, null).some(line => line.includes("this week"))).toBe(false);
+  });
+
+  it("explains a paused business over the plan limit", () => {
+    expect(pausedBusinessMessage(plan())).toBe(
+      "This business is paused because the Free plan includes 1 business. New posts have stopped; your existing posts are still available."
+    );
+    expect(pausedBusinessMessage(plan())).not.toMatch(/upgrade|plans page/i);
+    expect(pausedBusinessMessage(plan({ plan: "business", limits: business }))).toContain("includes 5 businesses");
+    expect(planUsageLines(plan({ usage: [usage({ paused: true })] }))[0]).toMatch(/ — paused$/);
   });
 });

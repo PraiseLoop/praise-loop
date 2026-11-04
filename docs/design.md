@@ -141,7 +141,8 @@ transactional.
   Free: 1 post/week, 1 template, watermark, 1 business. Pro: 5 posts/week, no watermark, brand voice,
   1 business; review sync, AI replies and extra templates are planned and are not sold until the
   server enforces them (#218). Business: Pro's features plus 5 businesses. Expired Pro or Business
-  falls back to Free without deleting data. Plan changes are operator-only (`scripts/set-plan.ts`),
+  falls back to Free without deleting data; after any downgrade only the oldest businesses within
+  the limit generate, and the rest are paused until an upgrade (#217). Plan changes are operator-only (`scripts/set-plan.ts`),
   except that the pilot can allow self-service upgrades to Pro for a comma-separated email list in
   `SELF_SERVICE_UPGRADE_EMAILS`; Stripe web billing (#225) and store subscriptions (#95) are not
   built. The planned design is in [billing.md](billing.md).

@@ -13,6 +13,10 @@ Decision log to capture architecture/product calls and why they were made.
 ## Log
 
 - Date: 2026-11-04
+  Decision: Pause generation for businesses above the plan's limit after a downgrade, keeping the oldest ones active and deleting nothing (#217)
+  Why: The business limit was only checked when a business was created, so a lapsed owner kept every business generating. Now `businessAllowance` in `lib/services/entitlements.ts` orders an owner's businesses by `created_at` then `id` and marks all but the first `limits.businesses` as paused. `requestGeneration` checks it inside the same transaction and business lock that reserves the week's quota, through the effective plan from `entitlementsFor`, so an expired plan counts as Free and a paused business creates no drafts, no period and no reserved quota. Nothing is deleted: every business and its existing drafts stay visible, and existing drafts can still be approved. `GET /api/entitlements` adds an optional `paused` flag per usage entry so the web and phone can show the pause and link to the plans page. Upgrading raises the limit and resumes the paused businesses on the next request with no data change. A picker for which business stays active is a possible follow-up; the oldest-first rule is the default for now.
+
+- Date: 2026-11-04
   Decision: Allow an email allowlist to upgrade itself to Pro for testing, as a narrow exception to operator-only plan changes (#227)
   Why: The owner wants to change a test account's plan without shell access to the worker. #94 keeps `/api/entitlements` read-only, so this is a separate route that is off unless `SELF_SERVICE_UPGRADE_EMAILS` is set, and every change is written to `owner_plan_events`. Matching on `auth_users.email` is safe because sign-in only stores an address there for providers that guarantee it (Google, our own email codes); Apple and Microsoft owners have no email there and cannot match. It unlocks Pro with no payment, so it is a testing aid and #223 removes it before real payments.
 

@@ -15,7 +15,8 @@ async function main() {
   assert.equal(validTimezone("Mars/Typo"),false);
   await databaseFixture(async client=>{
     await client.query("INSERT INTO auth_users(id,email) VALUES('generation-owner','generation@example.invalid')");
-    await client.query("INSERT INTO owner_plans(owner_id,plan,source) VALUES('generation-owner','pro','manual')");
+    // Business allows both fixture businesses to generate; this suite is not about the business limit.
+    await client.query("INSERT INTO owner_plans(owner_id,plan,source) VALUES('generation-owner','business','manual')");
     const bid = (await client.query("INSERT INTO businesses(name,timezone,owner_id) VALUES('Synthetic generation','America/New_York','generation-owner') RETURNING id")).rows[0].id;
     await client.query("INSERT INTO reviews(business_id,source,source_review_id,rating,text,reviewed_at) SELECT $1,'manual',n::text,5,'A wonderful synthetic experience with friendly staff '||n, '2020-07-01' FROM generate_series(1,20) n",[bid]);
     // Simulated weeks stay in the past: draft_posts.created_at uses the real DB clock and periods count

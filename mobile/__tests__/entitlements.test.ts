@@ -29,6 +29,13 @@ describe("entitlements API", () => {
     expect(plan.limits.brandVoice).toBe(true);
   });
 
+  it("accepts an optional paused flag and still works without it", async () => {
+    const paused = await fetchEntitlements(client({ plan: "free", source: "default", expiresAt: null, expired: false, limits, usage: [{ ...usage, paused: true }] }));
+    expect(paused.usage[0].paused).toBe(true);
+    const older = await fetchEntitlements(client({ plan: "free", source: "default", expiresAt: null, expired: false, limits, usage: [usage] }));
+    expect(older.usage[0].paused).toBeUndefined();
+  });
+
   it("rejects a response with no limits", async () => {
     await expect(fetchEntitlements(client({ plan: "pro", source: "default", expiresAt: null, expired: false, usage: [] }))).rejects.toThrow(
       "The server returned an invalid plan."
