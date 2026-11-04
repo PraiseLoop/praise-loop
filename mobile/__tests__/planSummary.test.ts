@@ -1,8 +1,8 @@
 import type { Entitlements, WeeklyUsage } from "../src/api/entitlements";
 import { expiryNote, planLines, planUsageLines, quotaMetMessage, usageFor } from "../src/queue/planSummary";
 
-const free = { postsPerWeek: 1, templates: 1, watermark: true, reviewSync: false, aiReplies: false, businesses: 1 };
-const pro = { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, businesses: 3 };
+const free = { postsPerWeek: 1, templates: 1, watermark: true, reviewSync: false, aiReplies: false, brandVoice: false, businesses: 1 };
+const pro = { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, businesses: 3 };
 const usage = (overrides: Partial<WeeklyUsage> = {}): WeeklyUsage => ({
   businessId: 1, name: "Cafe", timezone: "America/Toronto", resetsOn: "2026-11-02", allocated: 0, target: 1, weeklyTarget: 3, quotaMet: false, ...overrides
 });
@@ -35,6 +35,14 @@ describe("plan summary", () => {
     expect(expiryNote(expired)).toBe("Your Pro plan expired on 2026-01-01, so you are on the Free plan.");
     expect(expiryNote(plan({ plan: "pro", limits: pro, source: "manual", expiresAt: "2027-01-01T00:00:00.000Z" }))).toBe("Your Pro plan runs until 2027-01-01.");
     expect(expiryNote(plan())).toBeNull();
+  });
+
+  it("names an unknown plan instead of calling it Free", () => {
+    const unknown = plan({ plan: "team", limits: pro });
+    expect(planLines(unknown, null)[0]).toBe("Team plan");
+    expect(quotaMetMessage(unknown, usage({ allocated: 3, target: 3, quotaMet: true }))).toBe(
+      "You’ve made all 3 posts you asked for this week. The Team plan allows up to 5 a week."
+    );
   });
 
   it("lists limits and this week's usage", () => {
