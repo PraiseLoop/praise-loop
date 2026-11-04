@@ -132,17 +132,17 @@ docker compose exec worker node dist-worker/scripts/set-plan.js owner@example.co
 ```
 
 Run it from the folder with the stack's compose file, or use `docker exec <worker-container> node ...`.
-A test compile confirmed `tsconfig.worker.json` emits this script, but a successful run against a
-deployed stack hasn't been confirmed. The change applies on the next request. `--expires YYYY-MM-DD`
-tests a lapse, and `free` downgrades.
+The owner ran this on their stack on 2026-11-04 and it worked. The change applies on the next request.
+`--expires YYYY-MM-DD` tests a lapse, and `free` downgrades.
 
 **Once billing exists:** test purchases through the fake adapter locally (#219) and through Stripe
 test mode with test cards (#223).
 
-**Self-service upgrades:** #94 requires that the API can't change your own plan through
-`/api/entitlements`. Open PR #224 proposes a separate route that lets owners on an email allowlist
-upgrade themselves to Pro, and is off unless configured. It isn't part of this design. If it merges,
-its grants are manual ones that webhooks don't touch, and #215 needs to include it.
+**Self-service upgrades:** PR #224, requested by the owner for testing, adds a separate route that
+lets owners on the `SELF_SERVICE_UPGRADE_EMAILS` allowlist upgrade themselves to Pro. It's off unless
+configured, and `/api/entitlements` stays read-only. It's a testing aid, not part of the paid design:
+its grants are manual ones that webhooks don't touch, #215 needs to include it, and #223 removes it
+before real payments, because it unlocks Pro without paying.
 
 ## Order of work
 
