@@ -14,7 +14,7 @@ Last reviewed: 2026-11-01 (master after PR #190, plus the Buffer spike decisions
 | [features.md](features.md) | One section per shipped feature (what it does, tests, rollback) |
 | [decisions.md](decisions.md) | Dated log of decisions and why (add one for anything architectural) |
 | [mobile-plan.md](mobile-plan.md) | Why the product is mobile-first, phases, plans and pricing |
-| [billing.md](billing.md) | The billing and tiers investigation, planned design and order of work (not built yet) |
+| [billing.md](billing.md) | The billing and tiers investigation, subscription data model and order of work (payments not built) |
 | [integrations.md](integrations.md) | Email, Buffer and Google Business Profile feasibility and status |
 | [development.md](development.md) | Running it locally, env variables, tests, hosting, backups |
 | [android-release.md](android-release.md) | Building the Android APK on a tag for Obtainium |
@@ -104,7 +104,7 @@ fails closed. Nothing auto-posts.
 | Owners and sign-in | `auth_users`, `auth_accounts` (provider + provider account id → owner), `auth_sessions` (web and mobile, hashed token), `email_sign_in_codes` |
 | Business content | `businesses` (brand colours/tone/voice, timezone, weekly target), `reviews`, `draft_posts`, `draft_events` |
 | Generation | `generation_periods`, `generation_jobs`, `posting_slot_claims` |
-| Plans and usage | `owner_plans`, `owner_plan_events`, `owner_usage` |
+| Plans and usage | `owner_plans`, `owner_plan_events`, `owner_subscriptions`, `billing_events`, `owner_usage` |
 | Phone | `device_push_tokens`, `push_deliveries` |
 | Integrations (stubbed) | `google_connections`, `apify_review_places`, `apify_review_runs` |
 
@@ -136,16 +136,21 @@ transactional.
   and expects 401, so a route is public only if explicitly allow-listed there (mobile config, the
   sign-in exchanges, the dev routes). Routes that are owner-wide rather than business-scoped are in
   `OWNER_WIDE_PATHS`.
-- **Plans and entitlements** (`lib/services/entitlements.ts`): one plan per owner (`free`/`pro`/`business`),
-  enforced on the server; clients read `GET /api/entitlements` and never unlock anything themselves.
-  Free: 1 post/week, 1 template, watermark, 1 business. Pro: 5 posts/week, no watermark, brand voice,
-  1 business; review sync, AI replies and extra templates are planned and are not sold until the
-  server enforces them (#218). Business: Pro's features plus 5 businesses. Expired Pro or Business
-  falls back to Free without deleting data; after any downgrade only the oldest businesses within
-  the limit generate, and the rest are paused until an upgrade (#217). Plan changes are operator-only (`scripts/set-plan.ts`),
-  except that the pilot can allow self-service upgrades to Pro for a comma-separated email list in
-  `SELF_SERVICE_UPGRADE_EMAILS`; Stripe web billing (#225) and store subscriptions (#95) are not
-  built. The planned design is in [billing.md](billing.md).
+- **Plans and entitlements** (`lib/services/entitlements.ts`): one effective plan per owner
+  (`free`/`pro`/`business`), enforced on the server; clients read `GET /api/entitlements` and never
+  unlock anything themselves. The manual grant stays in `owner_plans`, provider subscriptions live in
+  `owner_subscriptions`, and the effective plan is the highest active grant in `PLAN_ORDER` (#219).
+  Every change appends to `owner_plan_events`; a provider event only ever writes the subscription
+  tables. Free: 1 post/week, 1 template, watermark, 1 business. Pro: 5 posts/week, no watermark,
+  brand voice, 1 business; review sync, AI replies and extra templates are planned and are not sold
+  until the server enforces them (#218). Business: Pro's features plus 5 businesses. Expired Pro or
+  Business falls back to Free without deleting data; after any downgrade only the oldest
+  businesses within the limit generate, and the rest are paused until an upgrade (#217). Plan
+  changes are operator-only
+  (`scripts/set-plan.ts`), except that the pilot can allow self-service upgrades to Pro for a
+  comma-separated email list in `SELF_SERVICE_UPGRADE_EMAILS`; the fake billing provider can walk a
+  subscription locally but is refused in production (#219); Stripe web billing (#225) and store
+  subscriptions (#95) are not built. The planned design is in [billing.md](billing.md).
 - **Dev sign-in** (`MOBILE_DEV_AUTH=1`, never in production): demo owners (Pro, Business, Free, email-only) on
   the phone and the web landing page, backed by `lib/devAuth.ts` and the dev seeder.
 
@@ -230,6 +235,7 @@ Detail and sources are in the comment on #29 and in [integrations.md](integratio
 | --- | --- | --- |
 | Weekly generation, approval, slots, branding, CSV import, onboarding | shipped | #9, #24–#28, #30, #43–#45 |
 | Plans/entitlements, plan page, public plans page | shipped (no payments) | #94, #133, #134 |
+| Subscription tables, provider interface, fake checkout | built; no real provider or payment | #219 |
 | Email-code, Google, linked methods, profile (web + phone), delete account | shipped | #149–#151, #156, #157, #93 |
 | Phone queue, detail, share sheet, Save to Photos, new version | shipped; device runs pending | #86, #87 |
 | Demo owner picker, dev seeder | shipped | #129, #154 |

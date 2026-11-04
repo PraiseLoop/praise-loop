@@ -376,11 +376,14 @@ stopping writes first; retain audit events, revision columns, and immutable medi
 
 ## Plans and entitlements (#94)
 
-An owner has one plan, `free` (the default), `pro` or `business`, stored in
-`owner_plans` with its source (`manual` or `store`) and optional expiry.
-`owner_plan_events` is an append-only audit trail of every change. Every owned
-business inherits the owner's plan, which is what lets the plan limit "more than
-one business".
+An owner's effective plan is `free` (the default), `pro` or `business`. The
+manual grant lives in `owner_plans` with its source (`manual` or `store`) and
+optional expiry; provider subscriptions live separately in `owner_subscriptions`
+(#219). The owner reads the highest active grant across both, and the reported
+source names the grant that won (`manual`, `store`, `stripe` or `default`).
+`owner_plan_events` is an append-only audit trail of every change; provider events
+never write `owner_plans`. Every owned business inherits the owner's plan, which
+is what lets the plan limit "more than one business".
 
 | Limit | Free | Pro | Business |
 |---|---|---|---|
@@ -480,7 +483,8 @@ docker compose exec worker node dist-worker/scripts/set-plan.js owner@example.co
 
 The script resolves an email or business to the owner and records the actor,
 reason and expiry in `owner_plan_events`. Payment-provider purchases will use
-the same module from a verified webhook (#95). Migration 012 is additive;
+the same module from a verified webhook (#95); the subscription tables and fake
+adapter are built (#219) but no real provider is connected. Migration 012 is additive;
 rollback can leave the plan tables in place while reverting the checks.
 
 For the pilot, `SELF_SERVICE_UPGRADE_EMAILS` can hold a comma-separated list of
@@ -811,7 +815,8 @@ In a development process with `MOBILE_DEV_AUTH=1`, the phone sign-in screen and
 the web landing page each offer one button per seeded synthetic owner: **Pro
 demo owner**, **Business demo owner**, **Free demo owner** and **Email demo
 owner**. The Free owner walks the watermark, weekly limit and plan page; the
-Business owner walks the Business plan; the email-only owner walks the
+Business owner walks the Business plan and shows a seeded web subscription
+(#219); the email-only owner walks the
 account with no businesses (`npm run dev:seed` creates all four).
 
 - The phone still uses `POST /api/mobile/session/dev` with

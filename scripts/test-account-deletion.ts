@@ -41,6 +41,16 @@ async function seedOwner(client: PoolClient, owner: string, label: string, withD
     "INSERT INTO owner_plan_events(owner_id,plan,source,actor,reason) VALUES($1,'free','manual','test','Synthetic event')",
     [owner]
   );
+  // Billing (#219): a provider subscription and the event that created it both
+  // belong to the owner and must disappear with the account.
+  await client.query(
+    "INSERT INTO owner_subscriptions(owner_id,provider,external_id,plan,status,current_period_end) VALUES($1,'stripe',$2,'pro','active',now()+interval '30 days')",
+    [owner, `sub-${owner}`]
+  );
+  await client.query(
+    "INSERT INTO billing_events(provider,event_id,owner_id,type,occurred_at) VALUES('stripe',$1,$2,'checkout.completed',now())",
+    [`evt-${owner}`, owner]
+  );
   await client.query(
     "INSERT INTO device_push_tokens(owner_id,token,platform) VALUES($1,$2,'ios')",
     [owner, `ExponentPushToken[${owner}]`]
@@ -223,7 +233,8 @@ async function main() {
       const beforeB = await ownershipCounts(client, b.owner, [b.businessId]);
       for (const table of [
         "auth_accounts", "auth_sessions", "owner_usage", "owner_plans",
-        "owner_plan_events", "device_push_tokens", "businesses", "google_connections",
+        "owner_plan_events", "owner_subscriptions", "billing_events",
+        "device_push_tokens", "businesses", "google_connections",
         "buffer_connections", "buffer_oauth_states", "business_buffer_channels",
         "apify_review_places", "apify_review_runs",
         "reviews", "draft_posts", "generation_periods", "generation_jobs",
