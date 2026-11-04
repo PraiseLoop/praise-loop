@@ -194,7 +194,8 @@ async function main() {
 
       // 15. The public route: every miss looks the same.
       d = await seed(); await tick("live"); const good = tokenOf();
-      const misses = [`${good.slice(0, -1)}A`, "short", "x".repeat(43), "../../etc/passwd", `${good}%00`, ""];
+      // The last base64url character carries only 4 bits, so a real token ends in "A" about 1 time in 16: pick a different one.
+      const misses = [`${good.slice(0, -1)}${good.endsWith("A") ? "B" : "A"}`, "short", "x".repeat(43), "../../etc/passwd", `${good}%00`, ""];
       for (const m of misses) { const res = await fetchImage(m); assert.equal(res.status, 404, m); assert.equal(res.headers.get("cache-control"), "no-store"); assert.equal(await res.text(), ""); }
       assert.equal((await publicMedia(new NextRequest(`http://localhost/api/public-media/${good}`), { params: Promise.resolve({ name: good }) })).status, 404, "needs the .png suffix");
       assert.equal(await resolvePublicImage(good), "fixture.png");
