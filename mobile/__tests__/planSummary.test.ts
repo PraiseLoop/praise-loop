@@ -2,8 +2,8 @@ import type { Entitlements, WeeklyUsage } from "../src/api/entitlements";
 import { expiryNote, pausedBusinessMessage, planLines, planUsageLines, quotaMetMessage, usageFor } from "../src/queue/planSummary";
 
 const free = { postsPerWeek: 1, templates: 1, watermark: true, reviewSync: false, aiReplies: false, brandVoice: false, businesses: 1 };
-const pro = { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, businesses: 1 };
-const business = { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, businesses: 5 };
+const pro = { postsPerWeek: 5, templates: 4, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, businesses: 1 };
+const business = { postsPerWeek: 5, templates: 4, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, businesses: 5 };
 const usage = (overrides: Partial<WeeklyUsage> = {}): WeeklyUsage => ({
   businessId: 1, name: "Cafe", timezone: "America/Toronto", resetsOn: "2026-11-02", allocated: 0, target: 1, weeklyTarget: 3, quotaMet: false, ...overrides
 });
@@ -61,6 +61,7 @@ describe("plan summary", () => {
     const lines = planLines(plan({ plan: "pro", limits: pro }), usage({ allocated: 2, target: 5 }));
     expect(lines[0]).toBe("Pro plan");
     expect(lines).toContain("2 of 5 posts this week, resets 2026-11-02 (America/Toronto)");
+    expect(lines[2]).toContain("4 quote-card designs");
     expect(lines[2]).toContain("Watermark: no");
     expect(lines[2]).toContain("Review sync: planned, not available yet");
     expect(lines[2]).toContain("AI replies: planned, not available yet");

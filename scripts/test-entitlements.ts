@@ -23,6 +23,9 @@ async function main() {
     assert.deepEqual(entitlementsForPlan("free", "default", null), { plan: "free", source: "default", expiresAt: null, expired: false, expiredPlan: null, limits: PLAN_LIMITS.free });
     assert.equal(entitlementsForPlan("pro", "manual", null).limits.postsPerWeek, 5);
     assert.equal(entitlementsForPlan("pro", "manual", null).limits.businesses, 1);
+    assert.equal(PLAN_LIMITS.free.templates, 1);
+    assert.equal(PLAN_LIMITS.pro.templates, 4);
+    assert.equal(PLAN_LIMITS.business.templates, 4);
     assert.equal(PLAN_LIMITS.free.brandVoice, false);
     assert.equal(PLAN_LIMITS.pro.brandVoice, true);
     assert.equal(PLAN_LIMITS.free.automaticPosting, false, "automatic posting is a paid feature");
@@ -330,6 +333,47 @@ async function main() {
       assert.equal(limited.status, 403);
       assert.equal((await limited.json()).code, "business_limit_reached");
       assert.equal((await c.query("SELECT count(*) n FROM businesses WHERE owner_id='api-owner'")).rows[0].n, "1");
+
+      // A Free owner cannot save a Pro design, a Pro owner can, and a downgrade keeps
+      // the saved choice while new renders fall back to the Free design.
+      const businessRoute = require("../app/api/businesses/[id]/route");
+      const patchBusiness = (body: unknown) => businessRoute.PATCH(
+        request(`/api/businesses/${apiBusiness}`, "PATCH", body),
+        { params: Promise.resolve({ id: String(apiBusiness) }) }
+      );
+      const proDesign = { primary: "#ffffff", secondary: "#111111", template: "quote-card-v2", quoteSize: "standard" };
+      const refused = await patchBusiness({ brandColors: proDesign });
+      assert.equal(refused.status, 403);
+      assert.equal((await refused.json()).code, "template_limit_reached");
+      assert.equal((await c.query("SELECT brand_colors->>'template' t FROM businesses WHERE id=$1", [apiBusiness])).rows[0].t, null, "a refused save changes nothing");
+
+      await setOwnerPlan("api-owner", "pro", { reason: "Synthetic template test" });
+      const allowed = await patchBusiness({ brandColors: proDesign });
+      assert.equal(allowed.status, 200);
+      assert.equal((await allowed.json()).business.brand_colors.template, "quote-card-v2");
+      const proRender = await renderDraftImage({
+        draftPostId: 970, businessName: "Synthetic design", quoteText: "A warm synthetic welcome",
+        brandHex: proDesign.primary, secondaryBrandHex: proDesign.secondary,
+        templateConfig: proDesign, templatesAllowed: PLAN_LIMITS.pro.templates
+      });
+      const proRenderBytes = readFileSync(proRender.fileSystemPath);
+
+      await setOwnerPlan("api-owner", "free", { reason: "Synthetic downgrade" });
+      const kept = await patchBusiness({ brandColors: { ...proDesign, primary: "#eeeeee" } });
+      assert.equal(kept.status, 200, "an unchanged saved design may still be saved after a downgrade");
+      assert.equal((await c.query("SELECT brand_colors->>'template' t FROM businesses WHERE id=$1", [apiBusiness])).rows[0].t, "quote-card-v2");
+      const fallback = await renderDraftImage({
+        draftPostId: 971, businessName: "Synthetic design", quoteText: "A warm synthetic welcome",
+        brandHex: proDesign.primary, secondaryBrandHex: proDesign.secondary,
+        templateConfig: { ...proDesign, primary: "#eeeeee" }, templatesAllowed: PLAN_LIMITS.free.templates
+      });
+      const freeDesign = await renderDraftImage({
+        draftPostId: 971, businessName: "Synthetic design", quoteText: "A warm synthetic welcome",
+        brandHex: proDesign.primary, secondaryBrandHex: proDesign.secondary,
+        templateConfig: { template: "quote-card-v1", primary: "#eeeeee", secondary: "#111111" }, templatesAllowed: PLAN_LIMITS.free.templates
+      });
+      assert.deepEqual(readFileSync(fallback.fileSystemPath), readFileSync(freeDesign.fileSystemPath), "an expired or downgraded plan renders quote-card-v1");
+      assert.deepEqual(readFileSync(proRender.fileSystemPath), proRenderBytes, "an image rendered before the downgrade does not change");
 
       // Pilot self-service upgrade: only an allowlisted email may change its own
       // plan, and repeating the request adds no second audit event.

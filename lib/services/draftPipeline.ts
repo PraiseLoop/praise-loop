@@ -1,12 +1,14 @@
 import { renderDraftImage } from "./imageRenderer";
 import { selectQuoteCandidates } from "./quoteSelector";
 import { generateCaptionVariants } from "./captions";
+import { entitlementsFor } from "./entitlements";
 import { query } from "../db";
 import type { BrandTone } from "../branding";
 
 type BusinessRow = {
   id: number;
   name: string;
+  owner_id?: string | null;
   brand_colors: Record<string, string> | null;
   logo_url: string | null;
   brand_tone: BrandTone;
@@ -47,7 +49,9 @@ type DraftPipelineDeps = {
     logoUrl?: string | null;
     brandTone?: BrandTone;
     templateConfig?: unknown;
+    templatesAllowed?: number;
   }) => Promise<{ publicPath: string }>;
+  templatesAllowedFor?: (business: BusinessRow) => Promise<number | undefined>;
   updateDraftImagePath: (draftPostId: number, imagePath: string) => Promise<void>;
   markDraftFailed: (draftPostId: number, reason: string) => Promise<void>;
 };
@@ -82,6 +86,7 @@ export function createDraftGenerationRunner(deps: DraftPipelineDeps) {
 
           const brandHex = business.brand_colors?.primary ?? null;
           const secondaryBrandHex = business.brand_colors?.secondary ?? null;
+          const templatesAllowed = deps.templatesAllowedFor ? await deps.templatesAllowedFor(business) : undefined;
           const rendered = await deps.renderDraftImage({
             draftPostId: candidate.draftPostId,
             businessName: business.name,
@@ -90,7 +95,8 @@ export function createDraftGenerationRunner(deps: DraftPipelineDeps) {
             secondaryBrandHex,
             logoUrl: business.logo_url,
             brandTone: business.brand_tone,
-            templateConfig: business.brand_colors
+            templateConfig: business.brand_colors,
+            templatesAllowed
           });
 
           await deps.updateDraftImagePath(candidate.draftPostId, rendered.publicPath);
@@ -115,12 +121,15 @@ export function createDraftGenerationRunner(deps: DraftPipelineDeps) {
 const runDraftGenerationWithDb = createDraftGenerationRunner({
   listBusinesses: async () => {
     const businesses = await query<BusinessRow>(
-      `SELECT id, name, brand_colors, logo_url, brand_tone, brand_voice
+      `SELECT id, name, owner_id, brand_colors, logo_url, brand_tone, brand_voice
        FROM businesses
        ORDER BY id ASC`
     );
     return businesses.rows;
   },
+  templatesAllowedFor: async business => business.owner_id
+    ? (await entitlementsFor(business.owner_id)).limits.templates
+    : undefined,
   selectQuoteCandidates,
   generateCaptionVariants,
   updateDraftCaption: async (draftPostId, captionText) => {

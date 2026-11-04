@@ -45,7 +45,7 @@ export function planLines(plan: Entitlements, usage: WeeklyUsage | null): string
   const lines = [
     `${planName(plan.plan)} plan`,
     `${posts(limits.postsPerWeek)} a week per business, ${limits.businesses} ${limits.businesses === 1 ? "business" : "businesses"}`,
-    `Watermark: ${limits.watermark ? "yes" : "no"}. Review sync: ${featureState(limits.reviewSync)}. AI replies: ${featureState(limits.aiReplies)}`
+    `${limits.templates} quote-card ${limits.templates === 1 ? "design" : "designs"}. Watermark: ${limits.watermark ? "yes" : "no"}. Review sync: ${featureState(limits.reviewSync)}. AI replies: ${featureState(limits.aiReplies)}`
   ];
   const note = expiryNote(plan);
   if (note) lines.push(note);

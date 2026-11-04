@@ -39,3 +39,12 @@ recognised as duplicates instead of adding rows. Limits: 1 MB, 1000 rows; see
 The "download a sample" file in the app's onboarding is separate on purpose:
 `public/onboarding-example.csv` is served by the web app, so it has to stay under
 `public/`.
+
+## Quote-card designs in the dev seed
+
+The seeder assigns one design to each demo business so all four render in the app:
+Copper Kettle Café (Pro) uses Spotlight, Copper Kettle Café Riverside (Business)
+uses Framed, Hespeler Powder Coating (Business) uses Split, and Harbour Bike Repair
+(Free) uses Classic, the only design Free includes. The Riverside business
+intentionally reuses the café reviews; nothing about it represents a real second
+location.

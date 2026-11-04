@@ -25,15 +25,15 @@ const notAvailable = "Planned — not available yet";
 // Limits with a feature that exists and is enforced on the server. A row may
 // only show a plan's value for one of these; scripts/test-plans.ts fails when a
 // limit without a feature behind it is advertised as available.
-export const SHIPPED_LIMITS = ["postsPerWeek", "watermark", "automaticPosting", "brandVoice", "businesses"] as const;
+export const SHIPPED_LIMITS = ["postsPerWeek", "templates", "watermark", "automaticPosting", "brandVoice", "businesses"] as const;
 // Limits with no feature behind them yet: they read as planned, never included.
 export const PLANNED_LIMITS = ["reviewSync", "aiReplies"] as const;
-// Kept off the comparison until the feature ships. Extra template designs do
-// not exist (and the allowance is not enforced), so #218 leaves templates out.
-export const UNLISTED_LIMITS = ["templates"] as const;
+// Kept off the comparison until the feature ships.
+export const UNLISTED_LIMITS = [] as const;
 
 export const PLAN_ROWS: PlanComparisonRow[] = [
   { key: "postsPerWeek", label: "Posts each week, per business", value: l => count(l.postsPerWeek, "post", "posts") },
+  { key: "templates", label: "Quote-card designs", value: l => count(l.templates, "design", "designs") },
   { key: "watermark", label: "Watermark on images", value: l => l.watermark ? "Small PraiseLoop watermark" : "No watermark" },
   {
     key: "automaticPosting",

@@ -87,7 +87,8 @@ export async function processGeneration(id: number, deps: GenerationDeps = defau
       const entitlements = await entitlementsFor(row.owner_id);
       const image = await deps.render({draftPostId:row.id,businessName:row.name,quoteText:row.quote_text,rating:row.rating,authorName:row.author_name,
         brandHex:row.brand_colors.primary,secondaryBrandHex:row.brand_colors.secondary,logoUrl:row.logo_url,
-        brandTone:row.brand_tone,templateConfig:row.brand_colors,watermark:entitlements.limits.watermark});
+        brandTone:row.brand_tone,templateConfig:row.brand_colors,watermark:entitlements.limits.watermark,
+        templatesAllowed:entitlements.limits.templates});
       const saved = await query("UPDATE draft_posts SET image_path=$2,updated_at=now() WHERE id=$1 AND status IN ('draft','failed') AND EXISTS(SELECT 1 FROM generation_jobs WHERE id=$3 AND lease=$4 AND state='running') RETURNING id",[row.id,image.publicPath,id,lease]);
       if (!saved.rowCount) {
         // The draft was deleted while this render was in flight (account deletion): nothing will ever

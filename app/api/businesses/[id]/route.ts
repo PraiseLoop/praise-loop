@@ -1,8 +1,9 @@
 import { validTimezone } from "../../../../lib/timezone";
 import { rasterLogo } from "../../../../lib/services/logos";
-import { ownerRoute } from "../../../../lib/authorization";
+import { ownerRoute, currentOwner } from "../../../../lib/authorization";
 import { NextRequest, NextResponse } from "next/server";
-import { parseBrandColors, parseLogoUrl, validBrandConfig, type BrandTone } from "../../../../lib/branding";
+import { parseBrandColors, parseLogoUrl, quoteOptions, templateWithinLimit, validBrandConfig, type BrandTone } from "../../../../lib/branding";
+import { entitlementsFor } from "../../../../lib/services/entitlements";
 import { query } from "../../../../lib/db";
 
 type BusinessRow = {
@@ -118,6 +119,18 @@ async function handlePATCH(req: NextRequest, context: { params: Promise<{ id: st
   let brandColors: Record<string, string> = current.brand_colors ?? {};
   if (body?.brandColors !== undefined) {
     brandColors = parseBrandColors(body.brandColors);
+    // A saved design may outlive a paid plan: keep it unless the owner is changing
+    // it to one the effective plan does not include.
+    const requestedTemplate = quoteOptions(brandColors).template;
+    if (requestedTemplate !== quoteOptions(current.brand_colors ?? {}).template) {
+      const entitlements = await entitlementsFor(currentOwner());
+      if (!templateWithinLimit(requestedTemplate, entitlements.limits.templates)) {
+        return NextResponse.json({
+          error: `Your plan includes ${entitlements.limits.templates} quote design${entitlements.limits.templates === 1 ? "" : "s"}; upgrade to choose this one.`,
+          code: "template_limit_reached"
+        }, { status: 403 });
+      }
+    }
   }
 
   const logoRaw = body?.logoUrl === undefined ? current.logo_url : body.logoUrl;

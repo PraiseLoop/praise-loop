@@ -4,15 +4,18 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { apiFetch } from "../apiFetch";
 import { useBusiness } from "../AppShell";
 import BrandPreview from "./BrandPreview";
+import TemplatePicker from "./TemplatePicker";
 import { ColorPicker, readLogo, timezones, TonePicker, type BrandTone } from "./options";
 import { usePlan } from "../ui/usePlan";
 import { planName } from "../../lib/planDisplay";
+import { isQuoteTemplate, QUOTE_TEMPLATES, QUOTE_TEMPLATE, templateWithinLimit, type QuoteTemplate } from "../../lib/branding";
 
 export default function BrandPage() {
   const { business, status, reload } = useBusiness();
   const [name, setName] = useState(""), [timezone, setTimezone] = useState("America/Toronto");
   const [primary, setPrimary] = useState("#1f2937"), [secondary, setSecondary] = useState("#374151");
   const [tone, setTone] = useState<BrandTone>("friendly"), [quoteSize, setQuoteSize] = useState<"standard" | "large">("standard");
+  const [template, setTemplate] = useState<QuoteTemplate>(QUOTE_TEMPLATE);
   const [logo, setLogo] = useState(""), [weeklyTarget, setWeeklyTarget] = useState(3);
   const [voice, setVoice] = useState(""), [voiceUrl, setVoiceUrl] = useState("");
   const [voiceBusy, setVoiceBusy] = useState(false), [voiceMessage, setVoiceMessage] = useState("");
@@ -48,6 +51,7 @@ export default function BrandPage() {
     setSecondary(business.brand_colors.secondary);
     setTone((business.brand_tone as BrandTone) ?? "friendly");
     setQuoteSize(business.brand_colors.quoteSize === "large" ? "large" : "standard");
+    setTemplate(isQuoteTemplate(business.brand_colors.template) ? business.brand_colors.template : QUOTE_TEMPLATE);
     setLogo(business.logo_url ?? "");
     setWeeklyTarget(business.weekly_target ?? 3);
     setVoice(shownVoice ?? "");
@@ -136,7 +140,7 @@ export default function BrandPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           name, timezone, logoUrl: logo.trim() || null, brandTone: tone, weeklyTarget,
-          brandColors: { primary, secondary, template: "quote-card-v1", quoteSize }
+          brandColors: { primary, secondary, template, quoteSize }
         })
       });
       const data = await response.json();
@@ -150,6 +154,10 @@ export default function BrandPage() {
 
   if (status === "loading") return <p className="pl-muted" role="status">Loading your brand…</p>;
   if (!business) return <div className="pl-empty"><h2>Set up your business first</h2><Link href="/onboarding" className="pl-btn pl-btn-primary">Get started</Link></div>;
+
+  // The saved choice stays in the form, but the preview shows what new posts
+  // will actually use while the plan does not include that design.
+  const previewTemplate = plan && !templateWithinLimit(template, plan.limits.templates) ? QUOTE_TEMPLATE : template;
 
   return (
     <>
@@ -245,6 +253,16 @@ export default function BrandPage() {
             )}
           </fieldset>
 
+          <TemplatePicker
+            value={template}
+            onChange={setTemplate}
+            primary={primary}
+            secondary={secondary}
+            quoteSize={quoteSize}
+            tone={tone}
+            allowed={plan ? plan.limits.templates : QUOTE_TEMPLATES.length}
+          />
+
           <fieldset style={{ margin: 0, padding: 0, border: 0 }}>
             <legend style={{ padding: 0, marginBottom: 10, fontSize: 14, fontWeight: 600 }}>Quote text size</legend>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
@@ -274,7 +292,7 @@ export default function BrandPage() {
 
         <aside aria-label="Preview" style={{ flex: "1 1 320px", maxWidth: 460, display: "flex", flexDirection: "column", gap: 12 }}>
           <span className="pl-eyebrow" style={{ fontSize: 13 }}>Live preview</span>
-          <BrandPreview primary={primary} secondary={secondary} quoteSize={quoteSize} tone={tone} />
+          <BrandPreview primary={primary} secondary={secondary} quoteSize={quoteSize} tone={tone} template={previewTemplate} />
         </aside>
       </div>
     </>

@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import { apiFetch } from "../apiFetch";
-export default function BrandPreview(props: { primary: string; secondary: string; quoteSize: string; tone: string }) {
+export default function BrandPreview(props: { primary: string; secondary: string; quoteSize: string; tone: string; template: string }) {
   const [src, setSrc] = useState(""), [error, setError] = useState("");
-  const { primary, secondary, quoteSize, tone } = props;
+  const { primary, secondary, quoteSize, tone, template } = props;
   useEffect(() => {
     const controller = new AbortController();
     let url = "";
@@ -11,13 +11,13 @@ export default function BrandPreview(props: { primary: string; secondary: string
       try {
         const response = await apiFetch("/api/branding/preview", { method: "POST", signal: controller.signal,
           headers: { "Content-Type": "application/json" }, body: JSON.stringify({ brandTone: tone,
-            brandColors: { primary, secondary, template: "quote-card-v1", quoteSize } }) });
+            brandColors: { primary, secondary, template, quoteSize } }) });
         if (!response.ok) throw new Error("Preview unavailable. Check settings or sign in.");
         url = URL.createObjectURL(await response.blob()); setSrc(url); setError("");
       } catch (e) { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Preview failed"); }
     }, 400);
     return () => { clearTimeout(timer); controller.abort(); if (url) URL.revokeObjectURL(url); };
-  }, [primary, secondary, quoteSize, tone]);
+  }, [primary, secondary, quoteSize, tone, template]);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ aspectRatio: "1 / 1", borderRadius: 16, overflow: "hidden", background: "var(--pl-line-soft)", display: "flex", alignItems: "center", justifyContent: "center" }}>

@@ -143,7 +143,7 @@ a plan lapses is not sent and not resubmitted: it ends `failed` with the reason
 | Any plan except `free` or `pro` makes installed phone apps throw, so this fix ships first | `mobile/src/api/entitlements.ts` | #214 |
 | The phone's limits type is missing `brandVoice` | `mobile/src/api/entitlements.ts` | #214 |
 | `free` and `pro` were hardcoded in checks, types, scripts and display helpers; the Business tier replaces that (#215) | Migration 012, `entitlements.ts`, `set-plan.ts`, display helpers | #215 |
-| Review sync, AI replies and templates have nothing enforcing them, because the features don't exist yet | `PLAN_LIMITS` | #218 |
+| Review sync and AI replies have nothing enforcing them, because the features don't exist yet | `PLAN_LIMITS` | #218 |
 | Free owners can post through Buffer | `lib/services/bufferPosting.ts`, `app/api/buffer/` | #216 |
 | The business limit is only checked at creation, so a lapsed owner keeps every business generating; #217 pauses the extra businesses and resumes them on upgrade | `lib/services/generation.ts` | #217 |
 | Deleting an account wouldn't cancel a Stripe subscription, so a deleted owner could keep being charged | `lib/services/accountDeletion.ts` | #220 |
