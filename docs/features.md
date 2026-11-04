@@ -428,6 +428,13 @@ npm run plan:set -- owner@example.com pro --reason "Pilot upgrade"
 npm run plan:set -- --business 42 pro --expires 2027-01-01
 ```
 
+Those need `ts-node`, which production images leave out. On a deployed stack, run the compiled
+script in the worker with the same arguments:
+
+```sh
+docker compose exec worker node dist-worker/scripts/set-plan.js owner@example.com pro --reason "Pilot upgrade"
+```
+
 The script resolves an email or business to the owner and records the actor,
 reason and expiry in `owner_plan_events`. Payment-provider purchases will use
 the same module from a verified webhook (#95). Migration 012 is additive;

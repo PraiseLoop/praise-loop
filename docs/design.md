@@ -14,6 +14,7 @@ Last reviewed: 2026-11-01 (master after PR #190, plus the Buffer spike decisions
 | [features.md](features.md) | One section per shipped feature (what it does, tests, rollback) |
 | [decisions.md](decisions.md) | Dated log of decisions and why (add one for anything architectural) |
 | [mobile-plan.md](mobile-plan.md) | Why the product is mobile-first, phases, plans and pricing |
+| [billing.md](billing.md) | The billing and tiers investigation, planned design and order of work (not built yet) |
 | [integrations.md](integrations.md) | Email, Buffer and Google Business Profile feasibility and status |
 | [development.md](development.md) | Running it locally, env variables, tests, hosting, backups |
 | [android-release.md](android-release.md) | Building the Android APK on a tag for Obtainium |
@@ -140,8 +141,9 @@ transactional.
   Free: 1 post/week, 1 template, watermark, 1 business. Pro: 5 posts/week, 5 templates, no watermark,
   review sync, AI replies, brand voice, 3 businesses. Expired Pro falls back to Free without deleting
   data. Plan changes are operator-only (`scripts/set-plan.ts`), except that the pilot can allow
-  self-service upgrades for a comma-separated email list in `SELF_SERVICE_UPGRADE_EMAILS`; store
-  subscriptions (#95) are not built.
+  self-service upgrades for a comma-separated email list in `SELF_SERVICE_UPGRADE_EMAILS`; Stripe web
+  billing (#225) and store subscriptions (#95) are not built. The planned design is in
+  [billing.md](billing.md).
 - **Dev sign-in** (`MOBILE_DEV_AUTH=1`, never in production): demo owners (Pro, Free, email-only) on
   the phone and the web landing page, backed by `lib/devAuth.ts` and the dev seeder.
 
@@ -235,6 +237,7 @@ Detail and sources are in the comment on #29 and in [integrations.md](integratio
 | Android APK release pipeline | merged; not yet run | #190 |
 | Real scheduler through Buffer | Connect + screen built; worker posting, image links, cancel and the off/draft/live gate built (#29 part 3); **never run live**; status display and `unknown` resolution not built | #29 |
 | Google review sync, AI review replies | blocked on access/policy | #46, #96 |
+| Stripe web billing, Business tier | planned, see [billing.md](billing.md) | #225 |
 | Store subscriptions, VPS, pilot hosting, store accounts | not started / owner tasks | #95, #98, #90, #91 |
 | Email + password | needs explicit owner approval first | #159 |
 

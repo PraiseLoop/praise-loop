@@ -164,7 +164,9 @@ before any write call.
 
 ## Plans and pricing
 
-Pricing is set after the pilot. The split, to start:
+[billing.md](billing.md) has the current plan, which replaces parts of this section once built:
+Stripe web checkout comes first, with three tiers and a working Pro price. The split below is what
+is enforced today:
 
 | Free | Pro (monthly) |
 |---|---|
@@ -174,12 +176,13 @@ Pricing is set after the pilot. The split, to start:
 | Captions | AI review replies, brand voice |
 | | More than one business |
 
-- Purchases go through App Store and Google Play subscriptions. Both take about 15%
-  from small developers. A billing service such as RevenueCat can handle both
+- Web purchases go through Stripe first (#225). The app can't link to web checkout, so it shows
+  plan status only until store purchases exist.
+- App Store and Google Play subscriptions (#95) are still needed before public App Store release.
+  Both take about 15% from small developers. A billing service such as RevenueCat can handle both
   stores and send one webhook; the choice is recorded in #95, stubbed
   first as the [contributing rules](../CONTRIBUTING.md) require.
-- A web checkout (for example Stripe) can come later for owners who sign up on the
-  web. It isn't needed for the pilot.
+- The pilot doesn't depend on any of this: it can still invoice manually and set plans by hand.
 - The public `/plans` page (#134) shows only the enforced limits, with no prices,
   until the Free/Pro prices are recorded in `docs/decisions.md`.
 
