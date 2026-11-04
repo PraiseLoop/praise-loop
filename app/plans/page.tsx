@@ -8,7 +8,7 @@ import styles from "./plans.module.css";
 
 export const metadata: Metadata = {
   title: "Plans · PraiseLoop",
-  description: "What the Free and Pro PraiseLoop plans include: posts each week, templates, watermark and businesses."
+  description: "What the Free and Pro PraiseLoop plans include: posts each week, watermark, brand voice and businesses."
 };
 
 const taglines: Record<Plan, string> = {

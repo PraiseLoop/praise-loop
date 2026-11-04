@@ -10,7 +10,9 @@ import { usePlan } from "../ui/usePlan";
 import PlanUpgrade from "./PlanUpgrade";
 
 const sources = { default: "Default plan", manual: "Set manually or with a pilot upgrade", store: "App store subscription" } as const;
-const yesNo = (value: boolean) => value ? "Included" : "Not included";
+// Review sync (#46) and AI replies (#96) have no feature behind them yet, so a
+// plan that allows them still reads as planned, never as included.
+const plannedOrNo = (value: boolean) => value ? "Planned — not available yet" : "Not included";
 
 type AuthMethod = { provider: string; email: string | null; addedAt: string | null; lastUsedAt: string | null };
 const providerNames: Record<string, string> = { google: "Google", apple: "Apple", microsoft: "Microsoft" };
@@ -106,10 +108,10 @@ export default function AccountPage() {
   const { limits } = plan;
   const rows: [string, string][] = [
     ["Posts per week, per business", String(limits.postsPerWeek)],
-    ["Templates", String(limits.templates)],
+    ["Templates", limits.templates === 1 ? "1 template" : "1 template today; more designs planned"],
     ["Watermark on images", limits.watermark ? "Yes" : "No"],
-    ["Automatic review sync", yesNo(limits.reviewSync)],
-    ["AI review replies", yesNo(limits.aiReplies)],
+    ["Automatic review sync", plannedOrNo(limits.reviewSync)],
+    ["AI review replies", plannedOrNo(limits.aiReplies)],
     ["Brand voice", limits.brandVoice ? "Learn from your website" : "Not included"],
     ["Businesses", String(limits.businesses)]
   ];

@@ -138,8 +138,9 @@ transactional.
   `OWNER_WIDE_PATHS`.
 - **Plans and entitlements** (`lib/services/entitlements.ts`): one plan per owner (`free`/`pro`),
   enforced on the server; clients read `GET /api/entitlements` and never unlock anything themselves.
-  Free: 1 post/week, 1 template, watermark, 1 business. Pro: 5 posts/week, 5 templates, no watermark,
-  review sync, AI replies, brand voice, 3 businesses. Expired Pro falls back to Free without deleting
+  Free: 1 post/week, 1 template, watermark, 1 business. Pro: 5 posts/week, no watermark, brand voice,
+  3 businesses; review sync, AI replies and extra templates are planned and are not sold until the
+  server enforces them (#218). Expired Pro falls back to Free without deleting
   data. Plan changes are operator-only (`scripts/set-plan.ts`), except that the pilot can allow
   self-service upgrades for a comma-separated email list in `SELF_SERVICE_UPGRADE_EMAILS`; Stripe web
   billing (#225) and store subscriptions (#95) are not built. The planned design is in

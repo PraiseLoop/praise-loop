@@ -50,6 +50,9 @@ describe("plan summary", () => {
     expect(lines[0]).toBe("Pro plan");
     expect(lines).toContain("2 of 5 posts this week, resets 2026-11-02 (America/Toronto)");
     expect(lines[2]).toContain("Watermark: no");
+    expect(lines[2]).toContain("Review sync: planned, not available yet");
+    expect(lines[2]).toContain("AI replies: planned, not available yet");
+    expect(planLines(plan(), null)[2]).toContain("Review sync: not included");
   });
 
   it("names the business on each usage line for the profile screen", () => {

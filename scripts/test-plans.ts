@@ -1,21 +1,31 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { PLAN_LIMITS } from "../lib/services/entitlements";
-import { PLAN_ORDER, PLAN_PRICING, PLAN_ROWS, planComparison, planNotes } from "../lib/plansDisplay";
+import { PLAN_LIMITS, type EntitlementLimits } from "../lib/services/entitlements";
+import {
+  PLAN_ORDER, PLAN_PRICING, PLAN_ROWS, PLANNED_LIMITS, SHIPPED_LIMITS, UNLISTED_LIMITS, planComparison, planNotes
+} from "../lib/plansDisplay";
 
 const root = join(__dirname, "..");
 const read = (file: string) => readFileSync(join(root, file), "utf8");
+const notAvailable = "Planned — not available yet";
+const includesKey = (limits: readonly (keyof EntitlementLimits)[], key: keyof EntitlementLimits) => limits.includes(key);
 
-// Every limit the server enforces must have a row on the public page, so a new
-// limit cannot be left out of the comparison.
-assert.deepEqual(PLAN_ROWS.map(row => row.key).sort(), Object.keys(PLAN_LIMITS.free).sort());
+// Every limit is deliberately classified: shipped and compared, planned and
+// compared as unavailable, or unlisted until its feature exists. A new limit
+// cannot become "included" without someone choosing one of these.
+assert.deepEqual(
+  [...SHIPPED_LIMITS, ...PLANNED_LIMITS, ...UNLISTED_LIMITS].sort(),
+  Object.keys(PLAN_LIMITS.free).sort(),
+  "classify every plan limit as shipped, planned or unlisted"
+);
+assert.ok(includesKey(UNLISTED_LIMITS, "templates"), "templates stay off the comparison until a second design exists and the limit is enforced (#218)");
+assert.deepEqual(PLAN_ROWS.map(row => row.key).sort(), [...SHIPPED_LIMITS, ...PLANNED_LIMITS].sort(), "only shipped and planned limits get a comparison row");
 assert.deepEqual(PLAN_ORDER, ["free", "pro"]);
 
 const rows = planComparison(PLAN_LIMITS);
 assert.deepEqual(rows.map(row => ({ label: row.label, free: row.values.free, pro: row.values.pro })), [
   { label: "Posts each week, per business", free: "1 post", pro: "5 posts" },
-  { label: "Templates", free: "1 template", pro: "Up to 5 templates" },
   { label: "Watermark on images", free: "Small PraiseLoop watermark", pro: "No watermark" },
   { label: "Automatic review sync", free: "Not included", pro: "Planned — not available yet" },
   { label: "AI review replies", free: "Not included", pro: "Planned — not available yet" },
@@ -23,18 +33,27 @@ assert.deepEqual(rows.map(row => ({ label: row.label, free: row.values.free, pro
   { label: "Businesses", free: "1 business", pro: "3 businesses" }
 ], "a plan limit changed; update the comparison wording and this expectation together");
 
+// A limit is only shown as available when it has a feature behind it. Planned
+// limits must read as unavailable, and shipped limits must show a real value.
+for (const row of rows) {
+  for (const plan of PLAN_ORDER) {
+    const value = row.values[plan];
+    if (includesKey(PLANNED_LIMITS, row.key)) {
+      assert.equal(value, PLAN_LIMITS[plan][row.key] ? notAvailable : "Not included", `${row.label} has no feature yet, so it must not read as included`);
+    } else {
+      assert.notEqual(value, notAvailable, `${row.label} is shipped, so it must not read as planned`);
+      if (PLAN_LIMITS[plan][row.key]) assert.notEqual(value, "Not included", `${row.label} is included in this plan, so it must show its value`);
+    }
+  }
+}
+
 // Unshipped features stay honest: the labels and notes must not claim they work.
 assert.deepEqual(planNotes(rows), [
-  "Only one template design exists today. The Pro allowance covers designs added later.",
   "Automatic review sync (Google reviews) is planned for Pro but is not available yet, so both plans start with a spreadsheet import.",
   "AI review replies are planned for Pro but are not available yet.",
   "Brand voice learns a short, editable profile from your own public website; nothing is scraped from social accounts."
 ]);
-for (const plan of PLAN_ORDER) {
-  for (const row of rows.filter(entry => entry.key === "reviewSync" || entry.key === "aiReplies")) {
-    if (row.values[plan] !== "Not included") assert.match(row.values[plan] ?? "", /not available yet/i, `${row.label} must say it is not available`);
-  }
-}
+assert.doesNotMatch(JSON.stringify(rows), /Up to 5 templates/, "templates must not be sold until more designs exist");
 
 // The page reads the shared limits instead of keeping its own copy.
 const page = read("app/plans/page.tsx");

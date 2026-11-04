@@ -5,6 +5,9 @@ import type { Entitlements, WeeklyUsage } from "../api/entitlements";
 const planNames: Record<string, string> = { free: "Free", pro: "Pro" };
 const planName = (plan: string) => planNames[plan] ?? `${plan.charAt(0).toUpperCase()}${plan.slice(1)}`;
 const posts = (count: number) => `${count} post${count === 1 ? "" : "s"}`;
+// Review sync (#46) and AI replies (#96) have no feature behind them yet, so a
+// plan that allows them still reads as planned, never as available.
+const featureState = (value: boolean) => value ? "planned, not available yet" : "not included";
 
 export function usageFor(plan: Entitlements | null, businessId: number | null): WeeklyUsage | null {
   return plan?.usage.find(item => item.businessId === businessId) ?? null;
@@ -32,7 +35,7 @@ export function planLines(plan: Entitlements, usage: WeeklyUsage | null): string
   const lines = [
     `${planName(plan.plan)} plan`,
     `${posts(limits.postsPerWeek)} a week per business, ${limits.businesses} ${limits.businesses === 1 ? "business" : "businesses"}`,
-    `Watermark: ${limits.watermark ? "yes" : "no"}. Review sync: ${limits.reviewSync ? "yes" : "no"}. AI replies: ${limits.aiReplies ? "yes" : "no"}`
+    `Watermark: ${limits.watermark ? "yes" : "no"}. Review sync: ${featureState(limits.reviewSync)}. AI replies: ${featureState(limits.aiReplies)}`
   ];
   const note = expiryNote(plan);
   if (note) lines.push(note);
