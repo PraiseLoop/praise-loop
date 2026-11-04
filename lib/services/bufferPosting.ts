@@ -97,11 +97,11 @@ export type PostingDeps = {
   now?: () => number;
   env?: Env;
   /** Builds the Buffer client for one owner's channel. Tests inject a fake. */
-  adapterFor?: (args: { ownerId: string; channelId: string; mode: "draft" | "live" }) => Promise<SchedulerAdapter>;
+  adapterFor?: (args: { ownerId: string; channelId: string; service?: string; mode: "draft" | "live" }) => Promise<SchedulerAdapter>;
 };
 
-async function defaultAdapterFor({ ownerId, channelId, mode }: { ownerId: string; channelId: string; mode: "draft" | "live" }) {
-  return new BufferSchedulerAdapter({ accessToken: await getBufferAccessToken(ownerId), channelId, mode });
+async function defaultAdapterFor({ ownerId, channelId, service, mode }: { ownerId: string; channelId: string; service?: string; mode: "draft" | "live" }) {
+  return new BufferSchedulerAdapter({ accessToken: await getBufferAccessToken(ownerId), channelId, service, mode });
 }
 
 /** One pass of the posting worker: expire stale work, submit what is due, then check what was sent. */
@@ -143,7 +143,7 @@ export async function postingTick(deps: PostingDeps = {}): Promise<PostingTickRe
 }
 
 type SubmitOutcome = "submitted" | "drafted" | "failed" | "unknown" | "requeued";
-type Reserved = { draftId: number; businessId: number; ownerId: string; caption: string; channelId: string; token: string };
+type Reserved = { draftId: number; businessId: number; ownerId: string; caption: string; channelId: string; service: string; token: string };
 
 async function submitNextDue(mode: "draft" | "live", now: () => number, deps: PostingDeps): Promise<SubmitOutcome | null> {
   const reserved = await transaction(async (c): Promise<Reserved | "failed" | null> => {
@@ -176,7 +176,7 @@ async function submitNextDue(mode: "draft" | "live", now: () => number, deps: Po
        WHERE draft_id=$1`,
       [draftId, mode, hashImageToken(token), new Date(now() + (mode === "draft" ? DRAFT_IMAGE_TTL_MS : LIVE_IMAGE_TTL_MS)).toISOString()]
     );
-    return { draftId, businessId: Number(row.business_id), ownerId: row.owner_id, caption: row.caption_text, channelId: channel.channel_id, token };
+    return { draftId, businessId: Number(row.business_id), ownerId: row.owner_id, caption: row.caption_text, channelId: channel.channel_id, service: String(channel.service ?? ""), token };
   });
   if (reserved === null) return null;
   if (reserved === "failed") return "failed";
@@ -187,7 +187,7 @@ async function submitNextDue(mode: "draft" | "live", now: () => number, deps: Po
     try { await transaction(async (c) => { await fn(c); }); return true; } catch { return false; }
   };
   try {
-    const adapter = await (deps.adapterFor ?? defaultAdapterFor)({ ownerId: reserved.ownerId, channelId: reserved.channelId, mode });
+    const adapter = await (deps.adapterFor ?? defaultAdapterFor)({ ownerId: reserved.ownerId, channelId: reserved.channelId, service: reserved.service, mode });
     const receipt = await adapter.submitPost({ draftPostId: reserved.draftId, businessId: reserved.businessId, captionText: reserved.caption, mediaUrl: publicImageUrl(reserved.token, deps.env)! });
     log.info("posting_submit_accepted", { draftId: reserved.draftId, mode, bufferStatus: receipt.status });
     if (mode === "draft") {

@@ -172,7 +172,10 @@ logs captions/reviews, or marks local rows scheduled. A test-only fake cannot re
 `lib/integrations/buffer.ts` is a Buffer GraphQL adapter tested only against mocked
 `fetch` (`scripts/test-buffer.ts`). `submitPost` sends `mode: shareNow` with `schedulingType: automatic`
 and the required `needsApproval: false` (found by introspecting Buffer's schema on 2026-11-02; the earlier
-adapter omitted it and would have been rejected), plus `saveToDraft: true` in draft mode. It never uses
+adapter omitted it and would have been rejected), plus `saveToDraft: true` in draft mode. For an Instagram
+channel it also sends `metadata.instagram` with `type: "post"` and `shouldShareToFeed: true`: Buffer's first
+real call (2026-11-04) was refused with "Instagram posts require a type (post, story, or reel)", and both
+fields are required by `InstagramPostMetadataInput`. Other networks get no metadata until one is tested. It never uses
 `customScheduled` or Buffer's queue. It refuses incomplete drafts before any network call, retries only 429
 (bounded, a Retry-After over 60s is surfaced instead of retried), maps 401/403, `UnauthorizedError` and
 `ChannelRefreshRequired` to an auth error, maps only Buffer's refusal types (`InvalidInputError`,
