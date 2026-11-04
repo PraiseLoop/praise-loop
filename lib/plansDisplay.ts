@@ -10,7 +10,7 @@ export const PLAN_ORDER: Plan[] = ["free", "pro"];
 export const publicPlanName: Record<Plan, string> = { free: "Free", pro: "Pro" };
 
 export type PlanComparisonRow = {
-  /** The limit this row explains; a test checks every plan limit has a row. */
+  /** The limit this row explains; a test checks every shipped or planned limit has a row. */
   key: keyof EntitlementLimits;
   label: string;
   /** Shown once under the comparison when the limit alone would overpromise. */
@@ -22,14 +22,18 @@ const count = (value: number, one: string, many: string) => `${value} ${value ==
 
 const notAvailable = "Planned — not available yet";
 
+// Limits with a feature that exists and is enforced on the server. A row may
+// only show a plan's value for one of these; scripts/test-plans.ts fails when a
+// limit without a feature behind it is advertised as available.
+export const SHIPPED_LIMITS = ["postsPerWeek", "watermark", "brandVoice", "businesses"] as const;
+// Limits with no feature behind them yet: they read as planned, never included.
+export const PLANNED_LIMITS = ["reviewSync", "aiReplies"] as const;
+// Kept off the comparison until the feature ships. Extra template designs do
+// not exist (and the allowance is not enforced), so #218 leaves templates out.
+export const UNLISTED_LIMITS = ["templates"] as const;
+
 export const PLAN_ROWS: PlanComparisonRow[] = [
   { key: "postsPerWeek", label: "Posts each week, per business", value: l => count(l.postsPerWeek, "post", "posts") },
-  {
-    key: "templates",
-    label: "Templates",
-    note: "Only one template design exists today. The Pro allowance covers designs added later.",
-    value: l => l.templates === 1 ? "1 template" : `Up to ${l.templates} templates`
-  },
   { key: "watermark", label: "Watermark on images", value: l => l.watermark ? "Small PraiseLoop watermark" : "No watermark" },
   {
     key: "reviewSync",

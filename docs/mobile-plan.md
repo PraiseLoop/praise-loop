@@ -165,14 +165,15 @@ before any write call.
 ## Plans and pricing
 
 [billing.md](billing.md) has the current plan, which replaces parts of this section once built:
-Stripe web checkout comes first, with three tiers and a working Pro price. The split below is what
+Stripe web checkout comes first, with three tiers and a working Pro price. The split below is the
+original plan and includes features that aren't built yet; `lib/services/entitlements.ts` has what
 is enforced today:
 
 | Free | Pro (monthly) |
 |---|---|
 | CSV import | Automatic Google review sync (#46) |
 | 1 post a week | 3–5 posts a week |
-| One template, small watermark | All templates, no watermark |
+| One template, small watermark | No watermark; more templates once they exist |
 | Captions | AI review replies, brand voice |
 | | More than one business |
 

@@ -367,12 +367,19 @@ the owner's plan, which is what lets the plan limit "more than one business".
 | Limit | Free | Pro |
 |---|---|---|
 | Drafts per business per week | 1 | 5 |
-| Templates | 1 | 5 |
+| Templates | 1 | 1 today; 5 planned |
 | Image watermark | Yes | No |
-| Automatic review sync | No | Yes |
-| AI review replies | No | Yes |
+| Automatic review sync | No | Planned |
+| AI review replies | No | Planned |
 | Brand voice from your website | No | Yes |
 | Owned businesses | 1 | 3 |
+
+Only limits with a feature behind them are sold as included (#218). `templates`,
+`reviewSync` and `aiReplies` stay in `PLAN_LIMITS` for later features, but extra
+templates are left off the public comparison until a second design ships and the
+allowance is enforced, and review sync/AI replies read as planned, never
+included, on the plan page, account page and phone. When #46 or #96 ships it
+must check its limit on the server as part of its acceptance criteria.
 
 The limits live in `lib/services/entitlements.ts` and are enforced on the server:
 
@@ -407,7 +414,8 @@ as read-only.
 - **Plan page** (`/account`, reached from the profile menu; #150): the plan, where it came from
   (default, manual or store), its expiry, what it includes (posts per week,
   templates, watermark, review sync, AI replies, businesses) and per-business
-  usage such as "1 of 1 post this week" with the reset date.
+  usage such as "1 of 1 post this week" with the reset date. Review sync, AI
+  replies and extra templates read as planned, never included (#218).
 - **Expired Pro** reads as Free with a note saying when Pro expired.
 - **This Week** says "You've reached this week's limit" and names the plan
   limit, instead of "All caught up", when the weekly quota is used up. It
@@ -455,8 +463,8 @@ request changes nothing.
 ### Public plans page (#134)
 
 `/plans` is public: a signed-out visitor sees the Free and Pro cards, what
-differs (posts each week per business, templates, watermark, review sync, AI
-replies, businesses) and a "Continue with Google" call to action. The landing
+differs (posts each week per business, watermark, review sync, AI replies, brand
+voice, businesses) and a "Continue with Google" call to action. The landing
 page links to it from the header and the call to action, and also offers an
 "Email me a sign-in code" option (#157) for owners without Google. When the server
 has Microsoft credentials, the landing page adds "Continue with Microsoft" too
@@ -467,14 +475,15 @@ sign-in wall does not hide it.
 - The comparison is worded in `lib/plansDisplay.ts` and rendered from
   `PLAN_LIMITS` in `lib/services/entitlements.ts`; the page keeps no copy of the
   numbers. `scripts/test-plans.ts` fails when a limit changes, when a new limit
-  has no row, or when a row stops matching the expected wording.
+  is not classified as shipped, planned or unlisted, or when a limit without a
+  feature is advertised as available.
 - Prices stay off the page (`PLAN_PRICING = null`) until the owner records the
   Free/Pro prices in `docs/decisions.md`. The test fails if a pricing decision is
   recorded without prices, or if a price appears before one is.
 - Wording is honest about what ships: Free's small watermark is stated plainly,
-  review sync and AI replies read "Planned — not available yet", and a note says
-  only one template design exists today. Nothing implies posting is connected or
-  that there is a checkout.
+  review sync and AI replies read "Planned — not available yet", and extra
+  templates are not compared until a second design exists. Nothing implies
+  posting is connected or that there is a checkout.
 - There is no payment, web checkout, promo code or plan-change control here;
   plans are still changed by operators or a store webhook (#95).
 - A 401 while signed out does not redirect off `/plans` (`lib/sessionExpiry.ts`
