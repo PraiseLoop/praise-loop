@@ -27,6 +27,7 @@ function outcomeFor(error: unknown): BufferOutcome {
   if (error instanceof BufferConnectionError) {
     if (error.code === "not_configured") return "not_configured";
     if (error.code === "expired") return "expired";
+    if (error.code === "plan_required") return "plan_required";
   }
   return "failed";
 }

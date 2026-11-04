@@ -5,6 +5,7 @@ import { BufferSchedulerAdapter, SchedulerAmbiguous, SchedulerAuthError, Schedul
 import type { SchedulerAdapter } from "../integrations/scheduler";
 import { availableImage } from "./draftLifecycle";
 import { BufferConnectionError, getBufferAccessToken } from "./bufferConnection";
+import { entitlementsFor } from "./entitlements";
 
 // Posting through Buffer (#29 part 3). The schedule lives in PraiseLoop. An owner who assigns a
 // slot is explicitly authorizing that one approved post for that time (docs/decisions.md);
@@ -160,6 +161,8 @@ async function submitNextDue(mode: "draft" | "live", now: () => number, deps: Po
 
     // Everything is re-checked now, under the claim lock: the owner may have changed their mind or their Buffer.
     if (row.draft_status !== "scheduled" || !String(row.caption_text).trim() || !(await availableImage(row.image_path))) return fail("draft_unavailable");
+    // Automatic posting is a paid feature. A lapsed plan fails the queued post closed; it is never sent or resubmitted.
+    if (!(await entitlementsFor(row.owner_id)).limits.automaticPosting) return fail("plan_required");
     const channel = (await c.query(
       `SELECT ch.channel_id,ch.service,ch.channel_type,bc.status FROM business_buffer_channels ch
        JOIN buffer_connections bc ON bc.id=ch.connection_id WHERE ch.business_id=$1 AND bc.owner_id=$2`,

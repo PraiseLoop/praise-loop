@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { query, transaction } from "../db";
 import { decryptCredential, encryptCredential, loadKey } from "../integrations/credentials";
 import { log } from "../log";
+import { entitlementsFor } from "./entitlements";
 
 // Buffer OAuth connect (#29): authorization-code flow with PKCE (S256) and a
 // confidential client. Refresh tokens are single use, so refreshing is serialized
@@ -17,9 +18,10 @@ const ORGANIZATIONS_QUERY = "query { account { organizations { id name } } }";
 
 export type BufferChannelService = "instagram" | "facebook";
 export type BufferChannel = { id: string; name: string; service: BufferChannelService; type: string };
-export type BufferOutcome = "connected" | "denied" | "expired" | "failed" | "not_configured";
+export type BufferOutcome = "connected" | "denied" | "expired" | "failed" | "not_configured" | "plan_required";
 export type BufferErrorCode =
   | "not_configured"
+  | "plan_required"
   | "expired"
   | "failed"
   | "no_organization"
@@ -168,6 +170,7 @@ async function markNeedsReconnect(ownerId: string, failedAccessToken: string): P
  * Only the state hash and the encrypted verifier are stored.
  */
 export async function startBufferConnect(ownerId: string, deps: Deps = {}): Promise<string> {
+  if (!(await entitlementsFor(ownerId)).limits.automaticPosting) throw new BufferConnectionError("plan_required", 403);
   const cfg = config();
   if (!cfg) throw new BufferConnectionError("not_configured", 503);
   const now = (deps.now ?? Date.now)();
@@ -221,6 +224,11 @@ export async function completeBufferConnect(
   );
   const row = consumed.rows[0];
   if (!row) { connectFailed("state_unknown_expired_or_other_owner"); throw new BufferConnectionError("expired", 400); }
+  // A plan can lapse between starting and finishing the flow; never contact Buffer for an owner without the limit.
+  if (!(await entitlementsFor(row.owner_id)).limits.automaticPosting) {
+    connectFailed("plan_required");
+    throw new BufferConnectionError("plan_required", 403);
+  }
 
   let verifier: string;
   try {
@@ -423,6 +431,10 @@ async function fetchBufferChannels(
   ownerId: string,
   deps: Deps = {}
 ): Promise<{ organizationId: string; channels: BufferChannel[] }> {
+  // Channel listing is part of connecting and may refresh the token, so a Free or expired
+  // plan is refused here before any Buffer request. Reads that need only local state use
+  // getBufferConnection, which catches this and returns no channels.
+  if (!(await entitlementsFor(ownerId)).limits.automaticPosting) throw new BufferConnectionError("plan_required", 403);
   const { accessToken, version } = await accessTokenWithVersion(ownerId, deps);
   const connection = await query<{ organization_id: string }>(
     "SELECT organization_id FROM buffer_connections WHERE owner_id=$1",

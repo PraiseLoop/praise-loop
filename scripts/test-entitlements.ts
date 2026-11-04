@@ -25,6 +25,9 @@ async function main() {
     assert.equal(entitlementsForPlan("pro", "manual", null).limits.businesses, 1);
     assert.equal(PLAN_LIMITS.free.brandVoice, false);
     assert.equal(PLAN_LIMITS.pro.brandVoice, true);
+    assert.equal(PLAN_LIMITS.free.automaticPosting, false, "automatic posting is a paid feature");
+    assert.equal(PLAN_LIMITS.pro.automaticPosting, true);
+    assert.equal(PLAN_LIMITS.business.automaticPosting, true);
     const businessPlan = entitlementsForPlan("business", "manual", null);
     assert.equal(businessPlan.plan, "business");
     assert.equal(businessPlan.limits.postsPerWeek, 5);
@@ -36,6 +39,7 @@ async function main() {
     assert.equal(expiredPlan.expired, true);
     assert.equal(expiredPlan.expiredPlan, "pro");
     assert.equal(expiredPlan.limits.watermark, true);
+    assert.equal(expiredPlan.limits.automaticPosting, false, "an expired plan is refused automatic posting");
     const expiredBusiness = entitlementsForPlan("business", "manual", "2020-01-01T00:00:00Z", new Date("2026-01-01T00:00:00Z"));
     assert.equal(expiredBusiness.plan, "free");
     assert.equal(expiredBusiness.expired, true);

@@ -38,9 +38,11 @@ posts are ready, a queue to approve them, and one tap to post.
 
 - Rebuilding setup in the app. Onboarding, branding and CSV import stay on the
   web until the pilot shows owners need them on the phone.
-- Automatic posting. Approval stays required ([decisions](decisions.md)).
-- Direct publishing integrations (Buffer, Meta APIs). #29 moves to a later paid
-  feature; the share sheet replaces it for the MVP.
+- Automatic posting in the phone app. It is a paid Pro and Business feature on the
+  web (#216); approval stays required and nothing auto-posts ([decisions](decisions.md)).
+- Direct publishing integrations (Buffer, Meta APIs) beyond the server-enforced
+  automatic posting that exists today. #29 moves to a later paid feature; the
+  share sheet replaces it for the MVP.
 - Offline use beyond showing the last loaded queue.
 - Teams and roles. One owner per business, as today.
 
@@ -175,6 +177,7 @@ is enforced today:
 | 1 post a week | 3–5 posts a week |
 | One template, small watermark | No watermark; more templates once they exist |
 | Captions | AI review replies, brand voice |
+| Phone share sheet and image download | Automatic posting (through Buffer, Pro and Business only) |
 | | More than one business |
 
 - Web purchases go through Stripe first (#225). The app can't link to web checkout, so it shows
@@ -252,7 +255,7 @@ by theme; [Order of work](#order-of-work) says what has to wait for what.
 
 - #97 Brand voice from the owner's website
 - #98 Move production to a VPS
-- #29 Scheduler integration, as an optional Pro feature for automatic posting
+- #29 Scheduler integration, automatic posting on Pro and Business (#216)
 - Setup screens in the app, if the pilot shows owners want them
 
 ## Order of work

@@ -131,6 +131,7 @@ Run migration 010, configure owner login ([auth.md](auth.md)), and ensure the du
 - `assignSlots` enforces ownership, draft completeness (caption + available image), version match, and slot availability.
 - Concurrent assignment to the same slot is prevented by unique claim.
 - With `BUFFER_POSTING_MODE=off` (the default) assigning returns 503 and nothing is persisted.
+- A Free or expired plan is refused with 403 and nothing is persisted; an expired plan reads as Free.
 - A missing channel, a needs-reconnect connection or a personal Instagram channel is refused with a plain reason.
 - A reserved slot makes no network call; only the worker talks to Buffer.
 
@@ -163,16 +164,27 @@ as a **draft** (`saveToDraft`), so nothing is published; the post returns to `ap
 ends as `drafted`. `live` publishes. An owner who confirms a slot is explicitly authorizing that one post
 for that time ([decisions.md](decisions.md)).
 
+**Automatic posting is paid (#216).** The `automaticPosting` plan limit is false on Free and true on Pro
+and Business; the effective plan is read through `entitlementsFor`, so an expired plan counts as Free.
+The server refuses a Free or expired owner when connecting Buffer, choosing a channel, and confirming a
+post for a slot, and the worker checks again under the claim lock immediately before it sends. A post
+already `queued` when the plan lapses is not sent and not resubmitted: it ends `error`/`failed` with
+`plan_required`, and the approval card and schedule show "Automatic posting is included in Pro and
+Business. This post wasn't sent." Free owners keep the phone share sheet and image download, and approval
+is still required on every plan.
+
 Claim states (`posting_slot_claims.state`): `queued` (waiting, nothing sent) → `submitting` (committed
 before the call) → `submitted` (Buffer accepted it; we poll) → `sent` (Buffer said so; draft becomes
-`published`). Other ends: `drafted` (draft mode), `error` (Buffer said so, rejected it, or the connection
-needs reconnecting), `missed` (the worker was down more than 2 hours past the due time; never sent late),
+`published`). Other ends: `drafted` (draft mode), `error` (Buffer said so, rejected it, the plan no longer
+includes automatic posting, or the connection needs reconnecting), `missed` (the worker was down more than
+2 hours past the due time; never sent late),
 `unknown` (outcome unproven: a timeout after sending, a crash mid-call, or no final status after 14 checks).
 **An `unknown` post is never resubmitted**, because Buffer does not deduplicate.
 
 At submit time, under the claim's lock, everything is re-checked: the draft is still scheduled with a
-valid image, the connection is active, the business still has a channel, and it is not a personal
-Instagram. A failed check ends the claim as `error` without calling Buffer.
+valid image, the owner's effective plan still includes automatic posting, the connection is active, the
+business still has a channel, and it is not a personal Instagram. A failed check ends the claim as `error`
+without calling Buffer.
 
 **Public image links.** Buffer fetches the image from a public HTTPS URL, so each submission gets
 `https://<NEXTAUTH_URL host>/api/public-media/<43-character token>.png`. The token is 256 random bits,
@@ -241,11 +253,13 @@ closed until the worker submission and reconciliation work is built.
 - **Not connected:** the page explains what Buffer is for and offers Connect.
   `POST /api/buffer/connect` returns the Buffer authorize URL; nothing is posted
   without approval. With Buffer unset on the server the route answers 503 and the
-  page says so instead of navigating.
+  page says so instead of navigating. Automatic posting is paid (#216): a Free or
+  expired plan gets 403 and a plain sentence saying it is included in Pro and
+  Business, and no OAuth state or Buffer call is made.
 - **Callback outcome:** `/connections?buffer=<code>` shows a fixed sentence for
-  `connected`, `denied`, `expired`, `failed` or `not_configured`, then removes the
-  parameter with `history.replaceState`. Unknown codes show nothing, and the text
-  never comes from the URL.
+  `connected`, `denied`, `expired`, `failed`, `not_configured` or `plan_required`,
+  then removes the parameter with `history.replaceState`. Unknown codes show
+  nothing, and the text never comes from the URL.
 - **Connected and active:** `GET /api/buffer/connection` supplies the status and
   channel list. Each business shows its saved channel from
   `GET /api/businesses/:id/buffer-channel`; changing it uses `PUT` and "No channel"
@@ -390,6 +404,7 @@ is what lets the plan limit "more than one business".
 | Drafts per business per week | 1 | 5 | 5 |
 | Templates | 1 | 1 today; 5 planned | 1 today; 5 planned |
 | Image watermark | Yes | No | No |
+| Automatic posting (through Buffer) | No | Yes | Yes |
 | Automatic review sync | No | Planned | Planned |
 | AI review replies | No | Planned | Planned |
 | Brand voice from your website | No | Yes | Yes |
@@ -423,6 +438,15 @@ The limits live in `lib/services/entitlements.ts` and are enforced on the server
   deterministic renderer. It is drawn in the bottom safe margin, so it never
   covers the quote, reviewer, business name or logo, and a plan change produces
   a new content-addressed image.
+- **Automatic posting** is the paid limit `automaticPosting` (`false` on Free,
+  `true` on Pro and Business). The server reads the effective plan through
+  `entitlementsFor`, so an expired plan counts as Free. It is enforced when
+  starting or completing a Buffer connection, choosing a Buffer channel,
+  confirming a post for a slot, and again in the worker immediately before it
+  sends. A post already queued when a plan lapses is not sent and not
+  resubmitted: it ends `error`/`failed` with the `plan_required` reason, and the
+  approval card and schedule explain why. Free owners keep the phone share sheet
+  and image download, and approval is required on every plan.
 - `POST /api/businesses` serializes creation per owner with an advisory lock and
   refuses a new business past the limit. A repeated `onboardingKey` still returns
   the original business, so a retried onboarding request cannot be blocked or
@@ -448,7 +472,7 @@ as read-only.
 
 - **Plan page** (`/account`, reached from the profile menu; #150): the plan, where it came from
   (default, manual or store), its expiry, what it includes (posts per week,
-  templates, watermark, review sync, AI replies, businesses) and per-business
+  templates, watermark, automatic posting, review sync, AI replies, businesses) and per-business
   usage such as "1 of 1 post this week" with the reset date. Review sync, AI
   replies and extra templates read as planned, never included (#218).
 - **Expired Pro or Business** reads as Free with a note saying when that plan expired.
@@ -499,7 +523,7 @@ request changes nothing.
 ### Public plans page (#134)
 
 `/plans` is public: a signed-out visitor sees the Free, Pro and Business cards, what
-differs (posts each week per business, watermark, review sync, AI replies, brand
+differs (posts each week per business, watermark, automatic posting, review sync, AI replies, brand
 voice, businesses) and a "Continue with Google" call to action. The landing
 page links to it from the header and the call to action, and also offers an
 "Email me a sign-in code" option (#157) for owners without Google. When the server

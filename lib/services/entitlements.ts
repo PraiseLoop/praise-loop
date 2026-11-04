@@ -15,6 +15,8 @@ export type EntitlementLimits = {
   aiReplies: boolean;
   /** Learn a voice profile from the owner's public website. */
   brandVoice: boolean;
+  /** Send an approved post through the posting provider (Buffer today) at its scheduled time. */
+  automaticPosting: boolean;
   /** Owned businesses, enforced when a new business is created. */
   businesses: number;
 };
@@ -33,9 +35,9 @@ export type Entitlements = {
 // Keep these limits in one place: the worker, renderer and routes all read them
 // from here, and the app only displays what GET /api/entitlements returns.
 export const PLAN_LIMITS: Record<Plan, EntitlementLimits> = {
-  free: { postsPerWeek: 1, templates: 1, watermark: true, reviewSync: false, aiReplies: false, brandVoice: false, businesses: 1 },
-  pro: { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, businesses: 1 },
-  business: { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, businesses: 5 }
+  free: { postsPerWeek: 1, templates: 1, watermark: true, reviewSync: false, aiReplies: false, brandVoice: false, automaticPosting: false, businesses: 1 },
+  pro: { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, automaticPosting: true, businesses: 1 },
+  business: { postsPerWeek: 5, templates: 5, watermark: false, reviewSync: true, aiReplies: true, brandVoice: true, automaticPosting: true, businesses: 5 }
 };
 
 type Executor = (sql: string, values: unknown[]) => Promise<{ rows: any[] }>;

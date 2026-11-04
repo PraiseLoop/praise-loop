@@ -117,6 +117,7 @@ export default function ConnectionsPage() {
       const response = await apiFetch("/api/buffer/connect", { method: "POST" });
       const data = await response.json().catch(() => null) as { url?: unknown } | null;
       if (response.status === 503) { setConnectMessage(outcomeMessage("not_configured") ?? ""); return; }
+      if (response.status === 403) { setConnectMessage(outcomeMessage("plan_required") ?? ""); return; }
       if (!response.ok || !isBufferAuthorizeUrl(data?.url)) {
         setConnectMessage("We couldn’t start the connection. Try again.");
         return;

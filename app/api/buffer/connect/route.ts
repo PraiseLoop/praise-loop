@@ -12,6 +12,9 @@ async function handlePOST() {
       log.warn("buffer_connect_not_configured", { note: "BUFFER_CLIENT_ID, BUFFER_CLIENT_SECRET, CREDENTIAL_ENCRYPTION_KEY and NEXTAUTH_URL (or BUFFER_REDIRECT_URI) must all be set on the web container" });
       return NextResponse.json({ error: "Buffer isn't configured" }, { status: 503 });
     }
+    if (error instanceof BufferConnectionError && error.code === "plan_required") {
+      return NextResponse.json({ error: "automatic_posting_required" }, { status: 403 });
+    }
     throw error;
   }
 }

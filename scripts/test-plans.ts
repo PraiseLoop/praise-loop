@@ -24,12 +24,16 @@ assert.deepEqual(PLAN_ROWS.map(row => row.key).sort(), [...SHIPPED_LIMITS, ...PL
 assert.deepEqual(PLAN_ORDER, ["free", "pro", "business"]);
 assert.equal(PLAN_LIMITS.pro.businesses, 1, "Pro keeps one business; several move to Business");
 assert.equal(PLAN_LIMITS.business.businesses, 5);
+assert.equal(PLAN_LIMITS.free.automaticPosting, false, "automatic posting is paid");
+assert.equal(PLAN_LIMITS.pro.automaticPosting, true);
+assert.equal(PLAN_LIMITS.business.automaticPosting, true);
 assert.ok(PLAN_LIMITS.business.postsPerWeek >= PLAN_LIMITS.pro.postsPerWeek, "Business has at least Pro's weekly posts");
 
 const rows = planComparison(PLAN_LIMITS);
 assert.deepEqual(rows.map(row => ({ label: row.label, free: row.values.free, pro: row.values.pro, business: row.values.business })), [
   { label: "Posts each week, per business", free: "1 post", pro: "5 posts", business: "5 posts" },
   { label: "Watermark on images", free: "Small PraiseLoop watermark", pro: "No watermark", business: "No watermark" },
+  { label: "Automatic posting", free: "Not included", pro: "Through Buffer, with your approval", business: "Through Buffer, with your approval" },
   { label: "Automatic review sync", free: "Not included", pro: "Planned — not available yet", business: "Planned — not available yet" },
   { label: "AI review replies", free: "Not included", pro: "Planned — not available yet", business: "Planned — not available yet" },
   { label: "Brand voice", free: "Not included", pro: "Learn from your website", business: "Learn from your website" },
@@ -52,6 +56,7 @@ for (const row of rows) {
 
 // Unshipped features stay honest: the labels and notes must not claim they work.
 assert.deepEqual(planNotes(rows), [
+  "Automatic posting sends an approved post to your connected Buffer account at the time you choose. You still approve every post, and nothing posts without that.",
   "Automatic review sync (Google reviews) is planned for Pro and Business but is not available yet, so every plan starts with a spreadsheet import.",
   "AI review replies are planned for Pro and Business but are not available yet.",
   "Brand voice learns a short, editable profile from your own public website; nothing is scraped from social accounts."

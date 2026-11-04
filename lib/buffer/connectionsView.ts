@@ -16,7 +16,8 @@ const OUTCOME_MESSAGES: Record<string, string> = {
   denied: "You didn’t approve the connection in Buffer. You can try again.",
   expired: "That connection attempt took too long. Please start again.",
   failed: "We couldn’t finish connecting to Buffer. Please try again.",
-  not_configured: "Buffer isn’t set up on this server yet."
+  not_configured: "Buffer isn’t set up on this server yet.",
+  plan_required: "Automatic posting is included in Pro and Business, so this plan can’t connect Buffer. Your phone share sheet and image download still work."
 };
 
 export function outcomeMessage(code: string | null | undefined): string | null {
@@ -31,6 +32,7 @@ const CHANNEL_ERRORS: Record<string, string> = {
   not_connected: "Buffer isn’t connected. Connect it again to choose a channel.",
   needs_reconnect: "Your Buffer connection stopped working. Reconnect Buffer to continue.",
   connection_changed: "Your Buffer account changed. Reload the page to see the current channels.",
+  plan_required: "Automatic posting is included in Pro and Business, so this plan can’t choose a Buffer channel.",
   unknown: "We couldn’t save that channel. Try again."
 };
 

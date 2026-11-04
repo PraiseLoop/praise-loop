@@ -141,10 +141,11 @@ transactional.
   unlock anything themselves. The manual grant stays in `owner_plans`, provider subscriptions live in
   `owner_subscriptions`, and the effective plan is the highest active grant in `PLAN_ORDER` (#219).
   Every change appends to `owner_plan_events`; a provider event only ever writes the subscription
-  tables. Free: 1 post/week, 1 template, watermark, 1 business. Pro: 5 posts/week, no watermark,
-  brand voice, 1 business; review sync, AI replies and extra templates are planned and are not sold
+  tables. Free: 1 post/week, 1 template, watermark, 1 business, no automatic posting. Pro: 5 posts/week, no
+  watermark, brand voice, automatic posting through Buffer, 1 business; review sync, AI replies and extra templates are planned and are not sold
   until the server enforces them (#218). Business: Pro's features plus 5 businesses. Expired Pro or
-  Business falls back to Free without deleting data; after any downgrade only the oldest
+  Business falls back to Free without deleting data, so automatic posting is refused and queued
+  posts fail closed; after any downgrade only the oldest
   businesses within the limit generate, and the rest are paused until an upgrade (#217). Plan
   changes are operator-only
   (`scripts/set-plan.ts`), except that the pilot can allow self-service upgrades to Pro for a
@@ -189,7 +190,7 @@ Expo Router screens: `sign-in`, `queue`, `draft/[id]`, `profile`. Design rules t
 | Expo push | "posts ready" notifications | built; needs EAS project id, APNs/FCM, a device test |
 | Google OAuth (web) | sign-in | **live and verified** |
 | Google native, Apple, Microsoft | phone sign-in; Microsoft also on web | built, tested with local keys only, never run live |
-| Buffer | automatic posting for owners with a Business/Creator Instagram or a Facebook Page (#29) | **feasibility spike done 2026-11-01**: live API key works, an app client exists; adapter and encrypted credentials built against mocks only; **Connect backend built (#29 part 1)**: OAuth, encrypted tokens, channel selection; **web Connect screen built (#29 part 2)**: connect/reconnect/disconnect and one channel per business, posting still off; phone UI, media-URL policy and worker submission **not built**; see below |
+| Buffer | automatic posting for Pro and Business owners with a Business/Creator Instagram or a Facebook Page (#29, #216) | **feasibility spike done 2026-11-01**: live API key works, an app client exists; adapter and encrypted credentials built against mocks only; **Connect backend built (#29 part 1)**: OAuth, encrypted tokens, channel selection; **web Connect screen built (#29 part 2)**: connect/reconnect/disconnect and one channel per business, posting still off; **automatic posting is now paid (#216)**: Free and expired plans are refused on every write path and the worker fails a queued post closed; phone UI, media-URL policy and worker submission **not built**; see below |
 | Google Business Profile | review sync (#46) | stubbed client; live client fails closed until access is approved |
 | Apify | owner's own Google reviews, removable stopgap (#232) | client proven with one live run; full flow tested with the fake adapter only; hidden without `APIFY_TOKEN`; Google can block scraping at any time |
 
@@ -244,7 +245,7 @@ Detail and sources are in the comment on #29 and in [integrations.md](integratio
 | Sign in with Apple | phone + server shipped; **web not built** | #92 |
 | Native Google sign-in, push notifications | shipped; **need a development build and a device** | #85, #89 |
 | Android APK release pipeline | merged; not yet run | #190 |
-| Real scheduler through Buffer | Connect + screen built; worker posting, image links, cancel and the off/draft/live gate built (#29 part 3); **never run live**; status display and `unknown` resolution not built | #29 |
+| Real scheduler through Buffer | Paid (Pro and Business) automatic posting; Connect + screen built; worker posting, image links, cancel and the off/draft/live gate built (#29 part 3); **never run live**; status display and `unknown` resolution not built | #29, #216 |
 | Google review sync, AI review replies | blocked on access/policy | #46, #96 |
 | Apify Google reviews stopgap | built; client proven with one live run, full flow not yet run live; hidden without `APIFY_TOKEN` | #232 |
 | Stripe web billing, Business tier | planned, see [billing.md](billing.md) | #225 |
@@ -338,7 +339,10 @@ Open work and blockers are tracked in GitHub issues; this table is a snapshot.
   Photos and the Instagram/Facebook share behaviour (#85–#89, #92).
 - **Buffer (#29)** has its Connect backend built (#29 part 1): OAuth with PKCE, encrypted access and
   refresh tokens, and one selected Instagram/Facebook channel per business. The web connections
-  screen is built (#29 part 2). Posting is built behind `BUFFER_POSTING_MODE` (default off, #29 part 3); there is no phone UI and no live post has been made. Two questions still need
+  screen is built (#29 part 2). Posting is built behind `BUFFER_POSTING_MODE` (default off, #29 part 3) and
+  is a paid feature (#216): the server refuses Free and expired plans at connect, channel selection,
+  slot confirmation and just before the worker sends, and a queued post fails closed when a plan lapses.
+  There is no phone UI and no live post has been made. Two questions still need
   Buffer support: who is billed for
   channels an app connects, and whether multi-customer commercial use fits the API Terms (only partly
   readable; a person should read them). No live test post has been made.

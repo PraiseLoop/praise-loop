@@ -78,6 +78,7 @@ function main() {
     buffer_error: "Buffer couldn’t post it.",
     draft_unavailable: "The caption or image changed before it was sent.",
     media_url_unavailable: "The image link couldn’t be made.",
+    plan_required: "Automatic posting is included in Pro and Business. This post wasn’t sent.",
     owner_reported_not_posted: "You told us it wasn’t posted."
   };
   for (const [code, detail] of Object.entries(errors)) {

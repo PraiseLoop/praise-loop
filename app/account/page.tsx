@@ -111,6 +111,7 @@ export default function AccountPage() {
     ["Posts per week, per business", String(limits.postsPerWeek)],
     ["Templates", limits.templates === 1 ? "1 template" : "1 template today; more designs planned"],
     ["Watermark on images", limits.watermark ? "Yes" : "No"],
+    ["Automatic posting", limits.automaticPosting ? "Through Buffer, with your approval" : "Not included"],
     ["Automatic review sync", plannedOrNo(limits.reviewSync)],
     ["AI review replies", plannedOrNo(limits.aiReplies)],
     ["Brand voice", limits.brandVoice ? "Learn from your website" : "Not included"],

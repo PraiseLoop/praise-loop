@@ -24,6 +24,7 @@ async function main(){
   const realFetch=globalThis.fetch;let networkCalls=0;globalThis.fetch=(async()=>{networkCalls++;throw new Error("no network in the slot tests");}) as typeof fetch;
   try{await databaseFixture(async c=>{
     await c.query("INSERT INTO auth_users(id,email) VALUES('slot-owner','slots@example.invalid'),('foreign-owner','foreign@example.invalid')");
+    await c.query("INSERT INTO owner_plans(owner_id,plan,source) VALUES('slot-owner','pro','manual'),('foreign-owner','pro','manual')");
     await c.query("INSERT INTO auth_sessions VALUES($1,'slot-owner',now()+interval '1 hour')",[sessionHash("slot-session")]);
     const bid=(await c.query("INSERT INTO businesses(name,timezone,owner_id) VALUES('Synthetic slots','UTC','slot-owner') RETURNING id")).rows[0].id;
     const connection=Number((await c.query("INSERT INTO buffer_connections(owner_id,organization_id,encrypted_access_token,encrypted_refresh_token,access_expires_at,scope) VALUES('slot-owner','org','a','r',now()+interval '1 hour','s') RETURNING id")).rows[0].id);
@@ -36,6 +37,16 @@ async function main(){
     assert.equal((await assign("slot-owner",a,future[0],"off"))[0].status,503);
     assert.equal(await claims(),0);
     assert.equal((await c.query("SELECT status FROM draft_posts WHERE id=$1",[a])).rows[0].status,"approved");
+    // Automatic posting is paid: Free and expired plans cannot confirm a slot, and nothing is written.
+    await c.query("UPDATE owner_plans SET plan='free',expires_at=NULL WHERE owner_id='slot-owner'");
+    const freeAttempt=await assign("slot-owner",a,future[0]);
+    assert.equal(freeAttempt[0].status,403);
+    assert.match(String(freeAttempt[0].error),/Pro and Business/);
+    assert.equal(await claims(),0);
+    await c.query("UPDATE owner_plans SET plan='pro',expires_at=now()-interval '1 day' WHERE owner_id='slot-owner'");
+    assert.equal((await assign("slot-owner",a,future[0]))[0].status,403,"an expired plan is refused");
+    assert.equal(await claims(),0);
+    await c.query("UPDATE owner_plans SET plan='pro',expires_at=NULL WHERE owner_id='slot-owner'");
     // A channel is needed first, and it must be able to post by itself.
     assert.equal((await assign("slot-owner",a,future[0]))[0].status,409);
     await channel("instagram","personal");
