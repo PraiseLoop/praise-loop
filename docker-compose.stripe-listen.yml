@@ -1,0 +1,51 @@
+# Stripe CLI webhook forwarder for the Dockhand/standalone stack (test mode only).
+#
+# Stripe cannot reach a development hostname behind the WAF, so this stack makes an
+# OUTBOUND connection to Stripe (`stripe listen`) and forwards each test-mode event to the
+# app over the shared Docker network. Nothing from Stripe has to come in through the tunnel.
+#
+# Run it as its own stack, beside docker-compose.standalone.yml, like the cloudflared stack.
+# The network must be the same one `web` joins (default `edge`, created once with
+# `docker network create edge`); `web` is reachable on it as `praiseloop-web`.
+#
+# Set the variables below in the tool's stack environment, never in this file.
+#   Required: STRIPE_SECRET_KEY  test-mode secret key (sk_test_… or a restricted rk_test_… key)
+#   Optional: EDGE_NETWORK       shared network name (default `edge`; match the main stack)
+#             STRIPE_FORWARD_TO  target URL (default http://praiseloop-web:3000/api/billing/webhook)
+#
+# One-time: read the signing secret this prints in the container log
+# ("Ready! Your webhook signing secret is whsec_…") and set it as STRIPE_WEBHOOK_SECRET in
+# the MAIN stack, then redeploy that stack. The secret stays the same across restarts while
+# the `stripe_config` volume exists and the key is unchanged. It differs from the
+# dashboard endpoint's secret, so remove the dashboard endpoint for this host or every
+# event arrives twice (once signed with each secret).
+#
+# Not for production: `stripe listen` only forwards test-mode events, and live payments need
+# a dashboard webhook endpoint instead (docs/billing.md).
+services:
+  stripe-listen:
+    image: stripe/stripe-cli:v1.19.5
+    command:
+      - listen
+      - --forward-to
+      - ${STRIPE_FORWARD_TO:-http://praiseloop-web:3000/api/billing/webhook}
+    environment:
+      # Read by the CLI itself, so the key never appears in the process list or `docker inspect` args.
+      - STRIPE_API_KEY=${STRIPE_SECRET_KEY:?set STRIPE_SECRET_KEY to a test-mode key}
+    volumes:
+      - stripe_config:/root/.config/stripe
+    networks: [edge]
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  stripe_config:
+
+networks:
+  edge:
+    name: ${EDGE_NETWORK:-edge}
+    external: true
