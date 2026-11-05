@@ -4,8 +4,8 @@ export type SchedulePayload = {
   /** Unguessable, time-limited URL the provider fetches; never the private /api/media path. */
   mediaUrl: string;
 };
-/** Buffer accepted the request. `status` is Buffer's own word for the post (draft, sending, sent, ...). */
-export type ScheduleReceipt = { provider: "buffer" | "fake"; externalId: string; status: string };
+/** A provider accepted the request. `status` is the provider's own word for the post (draft, sending, sent, ...). */
+export type ScheduleReceipt = { provider: "buffer" | "meta" | "fake"; externalId: string; status: string };
 export type PostStatusReceipt = { status: string; externalLink: string | null; sentAt: string | null; errorMessage: string | null };
 export interface SchedulerAdapter {
   submitPost(payload: SchedulePayload): Promise<ScheduleReceipt>;

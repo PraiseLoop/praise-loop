@@ -443,3 +443,194 @@ Official sync writes `source='google'` and owns its own `google_connections` row
 reconciled against the official import without touching official rows. Remove the Apify route,
 UI, provider and token setting once the official path is live. No review text, real place link or
 real business name is committed in tests or sample data.
+
+## Direct Instagram and Facebook publishing (#234) — checked 2026-11-05
+
+Status: the feasibility gate passes, with owner-side app setup still required. The stub and its
+fake adapter are built in `lib/integrations/metaPublishing.ts`; the live client, OAuth connect and
+publishing are **not built**, no Meta app or access token exists, and **no live call has been run**.
+#234 stays open. Everything below is from Meta's own documentation on 2026-11-05 (Graph API v27.0);
+vendor blogs were not used.
+
+### Decision
+
+Use **Facebook Login for Business** for both Instagram and Facebook Page publishing, behind the
+existing `SchedulerAdapter` interface (`lib/integrations/scheduler.ts`), with a fake adapter first.
+The same login yields the Page, its Page access token and the linked Instagram professional account
+in one `GET /me/accounts?fields=id,name,access_token,instagram_business_account` call, so one
+Connect flow covers both targets.
+
+Meta's overview says the **Instagram API with Unified Login** is recommended for new integrations,
+and it is the better choice for an Instagram-only product. It is not chosen here because the
+product must also publish to a Facebook Page: Facebook Login is the Page-linked setup, while
+Unified Login and Instagram Login serve Instagram professional accounts without a Page. Do not
+enable two login types: Meta's App Review page warns an app can use Facebook Login or Instagram
+Login, not both.
+
+### Account types and prerequisites
+
+- The owner needs an **Instagram professional account** (Business or Creator). Consumer accounts
+  are not accessible through the Instagram API with Facebook Login at all.
+- With Facebook Login, that account must be **connected to a Facebook Page**. The owner must be
+  able to perform the `CREATE_CONTENT` or `MANAGE` task on the Page; the Page returns the tasks it
+  grants, and the app refuses a Page that cannot create content.
+- **Page Publishing Authorization (PPA)** may be required. Meta states there is no API to detect it,
+  and publishing fails until the owner completes it in the Page settings; onboarding must tell
+  owners to check this before connecting.
+- A Page that requires **two-factor authentication** also requires the Facebook user to have
+  completed 2FA.
+- If the owner's Page role was granted through Business Manager, the content publishing guide says
+  the app may additionally need `ads_management` or `ads_read`. That is a Meta requirement to
+  confirm during App Review, not something PraiseLoop can infer.
+- The owner creates the Meta app, the Business portfolio, the products, Business Verification and
+  the App Review submission. Agents must not create accounts, accept terms or handle secrets.
+
+### Permissions
+
+Request only these, and say why in the submission:
+
+| Permission | Used for |
+| --- | --- |
+| `instagram_basic` | Read the Instagram professional account profile and media |
+| `instagram_content_publish` | Create the media container and publish it |
+| `pages_show_list` | List the owner's Pages during Connect |
+| `pages_read_engagement` | Read the Page and its linked Instagram account |
+| `pages_manage_posts` | Publish the photo to the Facebook Page |
+
+Not requested: `instagram_manage_comments`, `instagram_manage_insights`, `pages_manage_engagement`
+and `publish_video`, because the first release only publishes a single image. Meta rejects
+submissions that request permissions the app does not use.
+
+### OAuth, tokens and refresh
+
+- Facebook web login returns a short-lived **User access token** (Meta says about one to two hours).
+  Exchange it server-side with the app secret for a **long-lived User access token** (about 60
+  days). An expired token cannot be exchanged; the owner must sign in again.
+- Call `GET /me/accounts?fields=id,name,access_token,instagram_business_account` with the long-lived
+  User token. Each Page returns a **Page access token**. Meta says long-lived Page access tokens
+  have **no expiration date** and are only invalidated under the conditions it documents.
+- Store only the **encrypted Page token** and the Page/Instagram ids, using the existing
+  `lib/integrations/credentials.ts` envelope. Discard the User token after Connect. This avoids a
+  60-day refresh job; a rejected token marks the connection `needs_reconnect` and the owner
+  reconnects.
+- The documentation disagrees about the token for Instagram containers: the content publishing
+  guide names a **Facebook Page access token**, while the IG User Media reference names a User
+  access token. The live acceptance test must try the Page token first (the content publishing
+  guide names it for this exact flow); if Meta rejects it, keep the long-lived User token as well
+  and refresh by re-authenticating before it expires. Do not decide this from vendor posts.
+
+### Media
+
+- Meta fetches the image over plain HTTPS with no session, so it must be on a public server at
+  publish time. PraiseLoop already has exactly this for Buffer: the unguessable, time-limited
+  `/api/public-media/<token>` link created by `lib/services/bufferPosting.ts` and revoked after the
+  post. Reuse it; do not expose `private-media` or the owner-session `/api/media` route.
+- **Instagram accepts JPEG only.** The current renderer writes a 1080×1080 **PNG**, and the public
+  route serves `image/png`. The Meta path must produce a JPEG variant (sharp can convert without
+  changing the layout) and serve it as `image/jpeg`. 1080×1080 is inside Meta's 4:5–1.91:1 range and
+  below the 1440px maximum; the size limits are 8 MB, minimum width 320, sRGB. Extended JPEG
+  formats (MPO/JPS) are not supported.
+- Facebook Page photos also accept a public `url`, so the same hosted image works for both targets.
+  A Page post attaches the photo with `POST /<page_id>/photos` (`url`, `caption`); the `message`
+  parameter on this edge is deprecated. Text-only posts use `POST /<page_id>/feed`. Page photos
+  accept JPEG, PNG and other common formats up to 10 MB, so JPEG is only mandatory for Instagram.
+- Containers expire after 24 hours, and an Instagram account can create at most 400 containers in a
+  rolling 24 hours.
+
+### Publishing flow
+
+Instagram: create a container with `POST /<IG_ID>/media` (`image_url`, `caption`), then publish it
+with `POST /<IG_ID>/media_publish` (`creation_id`). The status can be polled at
+`GET /<container-id>?fields=status_code`; Meta recommends once a minute for no more than five
+minutes. A re-read of the published media id, not a local flag, is what proves publication.
+
+Facebook Page: `POST /<page_id>/photos` with the public `url` and `caption`. The response includes
+the photo id and the post id (`id`, `post_id`). The page post permalink is
+`https://www.facebook.com/<post_id>`.
+
+### Rate limits
+
+- Instagram Platform calls count against an app-and-app-user pair: `4800 × impressions` in a rolling
+  24 hours, with error `80002`.
+- Pages API calls made with a Page token count against `4800 × engaged users` in a rolling 24 hours,
+  with error `80001`.
+- Publishing has a separate cap. The content publishing guide says 100 API-published posts per 24
+  hours; the `content_publishing_limit` reference says `quota_total` is currently **50** per 86,400
+  seconds. Treat 50 as the real ceiling and check `GET /<IG_ID>/content_publishing_limit` before a
+  batch. PraiseLoop's paid limit is 5 posts a week per business, so this is not close to binding.
+- Rate-limit errors must not be retried blindly; surface the wait and let the existing posting state
+  machine retry without double-posting.
+
+### App Review and timing
+
+Serving owners outside the tester's Business requires **Advanced Access**, which requires **App
+Review** and **Business Verification**. The path:
+
+1. Create a Business-type Meta app and add **Facebook Login for Business**, **Instagram → API setup
+   with Facebook login**, and Webhooks.
+2. Add the production OAuth redirect URI and a privacy-policy URL, app icon (1024×1024), category
+   and business email.
+3. Connect the app to a verified Business; complete Business Verification in Business Manager.
+4. Request Advanced Access for each permission, with a written use case and a screencast showing
+   the owner granting it and the app publishing. At least one successful API call per permission
+   must be logged within 30 days of submission.
+5. Answer the data-handling questions and submit. Meta's submission guide says a decision should
+   arrive **within a week**; Business Verification has no published turnaround. Budget weeks in
+   total and keep the app in Development mode until approval.
+6. After approval, switch the app to Live. Advanced Access apps also face **Ongoing Review**, an
+   annual **Data Use Checkup**, and a rule that a permission unused for 90 days must be regranted.
+
+### Facebook Pages: same flow?
+
+Yes, with Facebook Login for Business. One login returns the Page id, Page token and
+`instagram_business_account` id. Page publishing then uses the Page token and `pages_manage_posts`;
+Instagram publishing uses the same app/user pair and the IG business account id. Unified Login and
+Instagram Login do not cover Facebook Pages, which is the reason this integration uses Facebook
+Login rather than Meta's newer recommendation.
+
+### Risks and open questions
+
+- PPA and 2FA can block publishing with no API signal; onboarding must explain both.
+- The Page-token-versus-User-token ambiguity above can only be settled by the owner-approved live
+  test.
+- Instagram accepts only JPEG while the renderer writes PNG; the JPEG variant must keep the image
+  deterministic and content-addressed.
+- The Business Manager Page-role case may drag in `ads_management`/`ads_read`; confirm with App
+  Review rather than requesting them up front.
+- Meta can change versions, limits and review rules. Re-check this page before the live test.
+- Nothing here authorises a live post: the existing off/draft/live gate, owner approval and the
+  `automaticPosting` plan limit must still apply, and the first live run is a draft/test post on the
+  owner's own account.
+
+### Owner setup list
+
+1. Create the Meta Business-type app and add the three products above.
+2. Set the OAuth redirect URI to the production callback.
+3. Connect the app to a verified Business and complete Business Verification.
+4. Submit App Review for the five permissions with screencasts.
+5. Prepare one Page with a linked Instagram professional account, complete PPA/2FA, and confirm
+   the owner can create content on the Page.
+6. Provide `META_APP_ID`, `META_APP_SECRET` and `META_REDIRECT_URI` through deployment secrets when
+   the implementation lands; never commit them.
+
+### Sources
+
+All fetched 2026-11-05:
+
+- [Instagram Platform overview](https://developers.facebook.com/documentation/instagram-platform/overview)
+- [Instagram API with Facebook Login](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-facebook-login)
+- [Facebook Login for Business — Instagram API](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-facebook-login/business-login-for-instagram)
+- [Content Publishing](https://developers.facebook.com/documentation/instagram-platform/content-publishing)
+- [IG User Media reference](https://developers.facebook.com/documentation/instagram-platform/instagram-graph-api/reference/ig-user/media)
+- [IG User Content Publishing Limit](https://developers.facebook.com/documentation/instagram-platform/instagram-graph-api/reference/ig-user/content_publishing_limit)
+- [App Review for Instagram API](https://developers.facebook.com/documentation/instagram-platform/app-review)
+- [App Review process](https://developers.facebook.com/documentation/resp-plat-initiatives/individual-processes/app-review)
+- [App Review submission walkthrough](https://developers.facebook.com/documentation/resp-plat-initiatives/individual-processes/app-review/submission-guide)
+- [Business Verification](https://developers.facebook.com/documentation/development/release/business-verification)
+- [Access Tokens for Meta Technologies](https://developers.facebook.com/documentation/facebook-login/guides/access-tokens)
+- [Long-lived access tokens](https://developers.facebook.com/documentation/facebook-login/guides/access-tokens/get-long-lived)
+- [Facebook Login for Business](https://developers.facebook.com/documentation/facebook-login/facebook-login-for-business)
+- [Pages API — Posts](https://developers.facebook.com/documentation/pages-api/posts)
+- [Page Photos reference](https://developers.facebook.com/docs/graph-api/reference/page/photos/)
+- [Permissions Reference](https://developers.facebook.com/documentation/development/permissions)
+- [Graph API rate limits](https://developers.facebook.com/docs/graph-api/overview/rate-limiting)
