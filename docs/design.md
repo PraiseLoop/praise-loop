@@ -198,7 +198,7 @@ Expo Router screens: `sign-in`, `queue`, `draft/[id]`, `profile`. Design rules t
 | Google OAuth (web) | sign-in | **live and verified** |
 | Google native, Apple, Microsoft | phone sign-in; Microsoft also on web | built, tested with local keys only, never run live |
 | Buffer | automatic posting for Pro and Business owners with a Business/Creator Instagram or a Facebook Page (#29, #216) | **feasibility spike done 2026-11-01**: live API key works, an app client exists; adapter and encrypted credentials built against mocks only; **Connect backend built (#29 part 1)**: OAuth, encrypted tokens, channel selection; **web Connect screen built (#29 part 2)**: connect/reconnect/disconnect and one channel per business, posting still off; **automatic posting is now paid (#216)**: Free and expired plans are refused on every write path and the worker fails a queued post closed; phone UI, media-URL policy and worker submission **not built**; see below |
-| Direct Meta publishing | replacement for Buffer (#234) | feasibility checked 2026-11-05; stub and fake adapter built behind the existing `SchedulerAdapter`; OAuth connect, stored Page tokens, publishing and the live test **not built**; app review and business verification are owner tasks |
+| Direct Meta publishing | replacement for Buffer (#234) | feasibility checked 2026-11-05; stub and fake adapter built behind the existing `SchedulerAdapter`; OAuth connect/disconnect, encrypted Page tokens and one target per business built; worker publishing, setup screen and live test **not built**; app review and business verification are owner tasks |
 | Google Business Profile | review sync (#46) | stubbed client; live client fails closed until access is approved |
 | Apify | owner's own Google reviews, removable stopgap (#232) | client proven with one live run; full flow tested with the fake adapter only; hidden without `APIFY_TOKEN`; Google can block scraping at any time |
 
@@ -243,9 +243,11 @@ Detail and sources are in the comment on #29 and in [integrations.md](integratio
 The owner wants Buffer gone, so #234 replaces it with direct Instagram and Facebook Page publishing
 through Facebook Login for Business. The gate passes but remains owner-blocked on a Meta app,
 Business Verification and App Review. The shared `SchedulerAdapter` is the provider seam: a
-`MetaSchedulerAdapter` and a fake adapter exist, the live client fails closed, and no OAuth route,
-database table or live call is built yet. The dated findings, permissions, token lifetimes, media
-rules, rate limits and sources are in [integrations.md](integrations.md#direct-instagram-and-facebook-publishing-234--checked-2026-11-05).
+`MetaSchedulerAdapter` and a fake adapter exist, the live client fails closed, and the OAuth
+connect/disconnect backend, encrypted Page tokens and one target per business are built. Worker
+publishing, the setup screen and a live call are not. The dated findings, permissions, token
+lifetimes, media rules, rate limits and sources are in
+[integrations.md](integrations.md#direct-instagram-and-facebook-publishing-234--checked-2026-11-05).
 Two findings shape the implementation: Instagram accepts only a public **JPEG** (the renderer writes
 PNG, so a JPEG variant is needed), and Meta's docs disagree on whether the Instagram container
 endpoints take the Page token or the User token, to be settled by the owner-approved live test.

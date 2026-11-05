@@ -217,12 +217,24 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `APIFY_REVIEW_RUN_INTERVAL_HOURS` | no | One Apify run per business per interval on every plan (default `24`). A failed or timed-out run can be retried |
 | `APIFY_MAX_CHARGE_USD` | no | Apify's `maxTotalChargeUsd` for every run (default `0.50`). This is a spend cap on the owner's own Apify account |
 | `MEDIA_ROOT` | no | Where rendered draft images are written/served (default `private-media`, the owner-protected `generated_media` volume mount in Compose; host upgrades must move existing images there as described in [auth.md](auth.md)) |
+| `CREDENTIAL_ENCRYPTION_KEY` | for provider tokens | 32 random bytes, base64. Encrypts Buffer tokens and Meta Page tokens at rest. Changing it makes stored tokens undecryptable, so owners must reconnect |
+| `META_APP_ID` / `META_APP_SECRET` | for Meta connect | Business-type Meta app credentials (#234, [integrations.md](integrations.md)). Missing either, the encryption key or a redirect base makes `POST /api/meta/connect` answer 503. Never commit the secret |
+| `META_REDIRECT_URI` | no | Optional override; defaults to `${NEXTAUTH_URL}/api/meta/callback`. Must match the Facebook app's redirect URI exactly |
+| `META_CONFIG_ID` | no | Optional Facebook Login for Business configuration id; when set it replaces the scope list with the permissions configured in the app dashboard |
+| `META_GRAPH_VERSION` | no | Graph API version used by connect (default `v27.0`); an invalid value fails closed |
 | `SELF_SERVICE_UPGRADE_EMAILS` | no | Comma-separated verified owner emails allowed to see **Upgrade to Pro** on `/account` and change their own plan to open-ended Pro (no payment). Empty or unset allows nobody. Written to `owner_plan_events` with the email as actor |
 | `BILLING_PROVIDER` | no | `fake` enables the local billing adapter and the development-only `POST /api/dev/billing` walkthrough (#219). Refused in a production process, like `MOBILE_DEV_AUTH`; no provider or payment is configured yet |
 | `REDIS_URL` | no | Reserved for future queue work; unused by the current worker |
 
 Postgres and Redis ports are bound to loopback (`127.0.0.1`) only — reachable
 from the host, not exposed to the network.
+
+Meta connect (#234) is built but publishing is not. With the Meta app credentials,
+`CREDENTIAL_ENCRYPTION_KEY` and a redirect base set, `POST /api/meta/connect` returns a Facebook
+Login URL and the callback stores encrypted Page tokens; without them the route answers 503.
+Tests use a fake Graph client and never reach Meta. See
+[integrations.md](integrations.md#direct-instagram-and-facebook-publishing-234--checked-2026-11-05)
+for the owner setup, permissions and App Review steps.
 
 ### Email in development
 
