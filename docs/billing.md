@@ -150,8 +150,13 @@ Google Play's rules weren't checked either.
   `automatic_tax[enabled]=true`, `billing_address_collection=auto`, and the success/cancel URLs
   `/account?checkout=success` and `/plans?checkout=cancelled`. It returns `{ url }`; the client
   redirects. Nothing is granted here.
-- **Success page:** `/account` shows a short “confirming” notice and reloads the plan a few times.
-  The redirect itself grants nothing; only the webhook changes the plan.
+- **Success page:** `/account` reads the real plan from `GET /api/entitlements`, not the redirect.
+  A paid plan shows “Your Pro plan is active.”; a free plan shows a short “confirming” notice while
+  the plan reloads at 1.5, 4 and 8 seconds, then replaces it with a calm “taking longer” message
+  instead of waiting forever. The redirect itself grants nothing; only the webhook changes the plan.
+  Once the notice is final the page removes `checkout` from the URL, so a reload or a later
+  downgrade cannot bring it back, and a cancellation or downgrade never shows “confirming”. The
+  cancelled redirect keeps its “Checkout cancelled. You haven’t been charged.” line.
 - **Webhook:** `app/api/billing/webhook/route.ts` is public by design and calls
   `handleStripeWebhook(rawBody, signature)`. It answers `503` without `STRIPE_WEBHOOK_SECRET`, `400`
   on a bad signature or malformed JSON, and verifies the signature before parsing. Handled types:
