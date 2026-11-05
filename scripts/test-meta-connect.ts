@@ -228,6 +228,23 @@ async function main() {
         "connected"
       );
 
+      // An expired state is refused and start cleans expired rows without touching a live one.
+      const expiredState = "expired-state-token";
+      await client.query(
+        "INSERT INTO meta_oauth_states(state_hash,owner_id,expires_at) VALUES($1,'meta-owner',now()-interval '1 minute')",
+        [sessionHash(expiredState)]
+      );
+      await assert.rejects(
+        () => completeMetaConnect({ state: expiredState, code: "code-expired", ownerId: "meta-owner" }, { fetchImpl: fakeFetch().fetchImpl }),
+        (error: unknown) => error instanceof MetaConnectionError && error.code === "expired"
+      );
+      await startMetaConnect("meta-owner");
+      assert.equal(
+        (await client.query("SELECT count(*)::int n FROM meta_oauth_states WHERE state_hash=$1", [sessionHash(expiredState)])).rows[0].n,
+        0,
+        "start removes expired states"
+      );
+
       // A provider rejection is a failed outcome, not a stored connection.
       const failedState = parseState(await startMetaConnect("meta-owner"));
       await assert.rejects(
@@ -329,6 +346,7 @@ async function main() {
       assert.equal(await disconnectMeta("meta-owner"), false);
       assert.equal((await getMetaConnection("meta-owner")).connected, false);
       assert.equal((await client.query("SELECT count(*)::int n FROM meta_pages p JOIN meta_connections c ON c.id=p.connection_id WHERE c.owner_id='meta-owner'")).rows[0].n, 0);
+      assert.equal((await client.query("SELECT count(*)::int n FROM business_meta_targets WHERE business_id=$1", [metaBusiness])).rows[0].n, 0, "disconnect removes the business target");
 
       // Other owner had no connection: selecting its business's target is a 404.
       assert.equal((await getMetaConnection("other-owner")).connected, false);
@@ -407,6 +425,26 @@ async function main() {
       assert.equal(callback.status, 302);
       assert.match(callback.headers.get("location") ?? "", /connections\?meta=connected/);
       assert.equal((await getMetaConnection("meta-owner")).connected, true);
+
+      // The business-scoped target route wires the same checks.
+      const routePage = (await getMetaConnection("meta-owner")).pages.find(page => page.pageId === "page-1")!;
+      const put = await targetRoute.PUT(
+        cookieRequest(`/api/businesses/${metaBusiness}/meta-target`, "PUT", { metaPageId: routePage.id, target: "instagram" }),
+        { params: Promise.resolve({ id: String(metaBusiness) }) }
+      );
+      assert.equal(put.status, 200);
+      assert.equal((await put.json()).target.page.pageId, "page-1");
+      const routeGet = await targetRoute.GET(
+        cookieRequest(`/api/businesses/${metaBusiness}/meta-target`, "GET"),
+        { params: Promise.resolve({ id: String(metaBusiness) }) }
+      );
+      assert.equal((await routeGet.json()).target.target, "instagram");
+      const routeDelete = await targetRoute.DELETE(
+        cookieRequest(`/api/businesses/${metaBusiness}/meta-target`, "DELETE"),
+        { params: Promise.resolve({ id: String(metaBusiness) }) }
+      );
+      assert.equal(routeDelete.status, 200);
+      assert.equal((await routeDelete.json()).target, null);
 
       // The webhook-style allow-list entry keeps the callback public but session-checked.
       const authorizationTest = require("node:fs").readFileSync(require("node:path").join(__dirname, "test-authorization.ts"), "utf8") as string;
