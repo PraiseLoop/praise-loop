@@ -23,7 +23,13 @@ export type BillingProvider = {
   checkout(input: CheckoutInput): Promise<BillingEvent>;
   renew(input: SubscriptionInput): Promise<BillingEvent>;
   failPayment(input: SubscriptionInput): Promise<BillingEvent>;
-  cancel(input: SubscriptionInput): Promise<BillingEvent>;
+  // The event a provider reports when a subscription ends. This is not the
+  // cancel call itself; the dev route uses it to walk the webhook path.
+  cancelEvent(input: SubscriptionInput): Promise<BillingEvent>;
+  // Ends billing at the provider immediately. Calling it again for a
+  // subscription that is already cancelled must succeed without another charge
+  // or side effect, because account deletion may retry after a partial failure.
+  cancel(externalId: string): Promise<void>;
 };
 
 export const BILLING_PROVIDER_ENV = "BILLING_PROVIDER";
@@ -40,6 +46,26 @@ function requireFake(env: Record<string, string | undefined> = process.env) {
   if (!fakeBillingEnabled(env)) {
     throw new Error("The fake billing provider is not available in this process");
   }
+}
+
+// The fake has no provider to call, so tests can make one cancellation fail and
+// can inspect which ids were cancelled. Both are development/test-only, like
+// the fake itself.
+const cancelledIds = new Set<string>();
+const failingIds = new Set<string>();
+
+export function failFakeBillingCancellation(externalId: string, fail = true): void {
+  if (fail) failingIds.add(externalId);
+  else failingIds.delete(externalId);
+}
+
+export function resetFakeBillingCancellations(): void {
+  cancelledIds.clear();
+  failingIds.clear();
+}
+
+export function fakeBillingCancelledIds(): string[] {
+  return [...cancelledIds];
 }
 
 function event(
@@ -96,7 +122,7 @@ export const fakeBillingProvider: BillingProvider = {
       now
     });
   },
-  async cancel(input) {
+  async cancelEvent(input) {
     requireFake();
     const now = input.now ?? new Date();
     return event("fake", "subscription.canceled", {
@@ -106,6 +132,13 @@ export const fakeBillingProvider: BillingProvider = {
       cancelAtPeriodEnd: true,
       now
     });
+  },
+  async cancel(externalId) {
+    requireFake();
+    if (!externalId) throw new Error("A subscription id is required");
+    if (failingIds.has(externalId)) throw new Error("Synthetic billing cancellation failure");
+    // A set makes the second call for the same subscription a successful no-op.
+    cancelledIds.add(externalId);
   }
 };
 

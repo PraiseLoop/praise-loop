@@ -63,6 +63,9 @@ export type ApplyBillingEventResult = {
   applied: boolean;
   duplicate: boolean;
   stale: boolean;
+  // A provider can deliver an event after the owner deleted their account. It is
+  // acknowledged but records nothing, because no local owner remains to own it.
+  ignored: boolean;
 };
 
 function validDate(value: Date | string, label: string): Date {
@@ -89,6 +92,13 @@ export async function applyBillingEvent(event: BillingEvent): Promise<ApplyBilli
   const cancelAtPeriodEnd = event.cancelAtPeriodEnd ?? false;
 
   return transaction(async client => {
+    // A late event for a deleted owner is ignored before anything is inserted.
+    // Locking the owner row also orders this against an account deletion that is
+    // already in flight, so the foreign key cannot fail afterwards. Other
+    // database errors stay errors: only a genuinely missing owner is ignored.
+    const owner = await client.query("SELECT 1 FROM auth_users WHERE id=$1 FOR KEY SHARE", [event.ownerId]);
+    if (!owner.rowCount) return { applied: false, duplicate: false, stale: false, ignored: true };
+
     const recorded = await client.query(
       `INSERT INTO billing_events(provider,event_id,owner_id,type,occurred_at)
        VALUES($1,$2,$3,$4,$5)
@@ -96,7 +106,7 @@ export async function applyBillingEvent(event: BillingEvent): Promise<ApplyBilli
        RETURNING id`,
       [event.provider, event.eventId, event.ownerId, event.type, occurredAt]
     );
-    if (!recorded.rowCount) return { applied: false, duplicate: true, stale: false };
+    if (!recorded.rowCount) return { applied: false, duplicate: true, stale: false, ignored: false };
 
     // Serialize concurrent events for one subscription, so the timestamp check
     // below cannot be raced by two deliveries that both saw no row yet.
@@ -115,7 +125,7 @@ export async function applyBillingEvent(event: BillingEvent): Promise<ApplyBilli
     // A late delivery for an older period is recorded but must not roll the
     // subscription back to a status that has already been superseded.
     if (existing?.last_event_at && occurredAt.getTime() < new Date(existing.last_event_at).getTime()) {
-      return { applied: false, duplicate: false, stale: true };
+      return { applied: false, duplicate: false, stale: true, ignored: false };
     }
 
     const changed = !existing
@@ -152,6 +162,6 @@ export async function applyBillingEvent(event: BillingEvent): Promise<ApplyBilli
       );
     }
 
-    return { applied: true, duplicate: false, stale: false };
+    return { applied: true, duplicate: false, stale: false, ignored: false };
   });
 }

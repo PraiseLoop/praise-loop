@@ -1,9 +1,56 @@
 import { readdir, rm } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { query, transaction } from "../db";
+import { billingProvider, fakeBillingEnabled, type BillingProvider } from "../integrations/billing";
 import { mediaRoot } from "./media";
 
 export const DELETE_CONFIRMATION = "DELETE";
+
+// Nothing local has been deleted when this is thrown. The route turns it into a
+// retryable response so the owner can try again without losing the session.
+export class SubscriptionCancellationError extends Error {
+  constructor() {
+    super("We couldn't cancel your subscription, so your account was not deleted. Try again.");
+    this.name = "SubscriptionCancellationError";
+  }
+}
+
+type CancellableSubscription = { provider: string; external_id: string };
+
+// The stores cannot be cancelled from here (see DELETE_ACCOUNT_SUBSCRIPTION_NOTE);
+// every other provider must be reachable in this process. Any uncertainty stops
+// the deletion rather than leaving a subscription that can still charge.
+export async function cancelOwnerSubscriptions(
+  ownerId: string,
+  providerFor: () => BillingProvider = billingProvider
+): Promise<void> {
+  const subscriptions = (await query<CancellableSubscription>(
+    `SELECT provider, external_id FROM owner_subscriptions
+     WHERE owner_id=$1 AND status NOT IN ('canceled','incomplete_expired')
+     ORDER BY id`,
+    [ownerId]
+  )).rows;
+  // A fake subscription (the seeded demo owner) can't charge anyone, so it never blocks
+  // a deletion when the fake provider isn't switched on in this process.
+  const cancellable = subscriptions.filter(row => row.provider !== "store" && (row.provider !== "fake" || fakeBillingEnabled()));
+  if (!cancellable.length) return;
+
+  let provider: BillingProvider;
+  try {
+    provider = providerFor();
+  } catch {
+    throw new SubscriptionCancellationError();
+  }
+
+  for (const subscription of cancellable) {
+    if (subscription.provider !== provider.name) throw new SubscriptionCancellationError();
+    try {
+      await provider.cancel(subscription.external_id);
+    } catch {
+      throw new SubscriptionCancellationError();
+    }
+  }
+}
 
 // Draft images and any logo stored through the media route use this shape.
 // Requiring one plain filename also rejects path traversal before the disk.
@@ -77,6 +124,10 @@ export async function deleteOwnerAccount(
   ownerId: string,
   remove: (names: string[]) => Promise<void> = removeMediaFiles
 ): Promise<{ mediaFiles: number }> {
+  // A provider call is not part of a database transaction: do it first so a
+  // failure leaves every row and session intact and can simply be retried.
+  await cancelOwnerSubscriptions(ownerId);
+
   const draftIds = new Set<string>();
   const names = await transaction(async () => {
     const locked = await query("SELECT 1 FROM auth_users WHERE id=$1 FOR UPDATE", [ownerId]);

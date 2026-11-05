@@ -152,7 +152,9 @@ transactional.
   (`scripts/set-plan.ts`), except that the pilot can allow self-service upgrades to Pro for a
   comma-separated email list in `SELF_SERVICE_UPGRADE_EMAILS`; the fake billing provider can walk a
   subscription locally but is refused in production (#219); Stripe web billing (#225) and store
-  subscriptions (#95) are not built. The planned design is in [billing.md](billing.md).
+  subscriptions (#95) are not built. Deleting an account cancels every live provider subscription
+  first, and a failed cancel leaves the account and sessions intact (#220). The planned design is
+  in [billing.md](billing.md).
 - **Dev sign-in** (`MOBILE_DEV_AUTH=1`, never in production): demo owners (Pro, Business, Free, email-only) on
   the phone and the web landing page, backed by `lib/devAuth.ts` and the dev seeder.
 
@@ -237,7 +239,7 @@ Detail and sources are in the comment on #29 and in [integrations.md](integratio
 | --- | --- | --- |
 | Weekly generation, approval, slots, branding, CSV import, onboarding | shipped | #9, #24–#28, #30, #43–#45 |
 | Plans/entitlements, plan page, public plans page | shipped (no payments) | #94, #133, #134 |
-| Subscription tables, provider interface, fake checkout | built; no real provider or payment | #219 |
+| Subscription tables, provider interface, fake checkout, cancel on deletion | built; no real provider or payment | #219, #220 |
 | Email-code, Google, linked methods, profile (web + phone), delete account | shipped | #149–#151, #156, #157, #93 |
 | Phone queue, detail, share sheet, Save to Photos, new version | shipped; device runs pending | #86, #87 |
 | Demo owner picker, dev seeder | shipped | #129, #154 |

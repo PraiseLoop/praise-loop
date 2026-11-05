@@ -8,6 +8,11 @@ import { databaseFixture } from "./db-fixture";
 import { sessionHash } from "../lib/auth-adapter";
 import { createMobileSession } from "../lib/mobileSessions";
 import { mediaFilename, removeMediaFiles } from "../lib/services/accountDeletion";
+import {
+  failFakeBillingCancellation,
+  fakeBillingCancelledIds,
+  resetFakeBillingCancellations
+} from "../lib/integrations/billing";
 
 const PERIOD = "2026-10-26";
 
@@ -44,7 +49,7 @@ async function seedOwner(client: PoolClient, owner: string, label: string, withD
   // Billing (#219): a provider subscription and the event that created it both
   // belong to the owner and must disappear with the account.
   await client.query(
-    "INSERT INTO owner_subscriptions(owner_id,provider,external_id,plan,status,current_period_end) VALUES($1,'stripe',$2,'pro','active',now()+interval '30 days')",
+    "INSERT INTO owner_subscriptions(owner_id,provider,external_id,plan,status,current_period_end) VALUES($1,'fake',$2,'pro','active',now()+interval '30 days')",
     [owner, `sub-${owner}`]
   );
   await client.query(
@@ -188,6 +193,11 @@ function bearerRequest(token: string, method = "GET", body?: unknown) {
 
 async function main() {
   process.env.NEXTAUTH_URL = "http://localhost";
+  const savedBilling = process.env.BILLING_PROVIDER;
+  const savedNodeEnv = process.env.NODE_ENV;
+  process.env.BILLING_PROVIDER = "fake";
+  (process.env as Record<string, string>).NODE_ENV = "test";
+  resetFakeBillingCancellations();
   const root = mkdtempSync(join(tmpdir(), "account-deletion-media-"));
   const outside = resolve(root, "..", "outside-delete-a.png");
   process.env.MEDIA_ROOT = root;
@@ -196,6 +206,34 @@ async function main() {
       const a = await seedOwner(client, "delete-a", "A", true);
       const b = await seedOwner(client, "delete-b", "B");
       const d = await seedOwner(client, "delete-d", "D");
+      const c = await seedOwner(client, "delete-c", "C");
+      const e = await seedOwner(client, "delete-e", "E");
+      const f = await seedOwner(client, "delete-f", "F");
+      const g = await seedOwner(client, "delete-g", "G");
+
+      // Every status that can still bill must be cancelled; a dead one must not.
+      // The active row also has cancel_at_period_end set, which must not skip it.
+      await client.query(
+        "UPDATE owner_subscriptions SET cancel_at_period_end=true WHERE owner_id=$1 AND external_id=$2",
+        [a.owner, `sub-${a.owner}`]
+      );
+      for (const status of ["past_due", "unpaid", "incomplete", "paused", "canceled", "incomplete_expired"]) {
+        await client.query(
+          "INSERT INTO owner_subscriptions(owner_id,provider,external_id,plan,status) VALUES($1,'fake',$2,'pro',$3)",
+          [a.owner, `sub-${a.owner}-${status}`, status]
+        );
+      }
+
+      // C has only a store subscription, which we cannot cancel. E has none.
+      await client.query("UPDATE owner_subscriptions SET provider='store' WHERE owner_id=$1", [c.owner]);
+      await client.query("DELETE FROM owner_subscriptions WHERE owner_id=$1", [e.owner]);
+
+      // F walks a partial failure: one fake cancel succeeds, the next fails, and
+      // a row from a provider with no adapter in this process follows.
+      await client.query(
+        "INSERT INTO owner_subscriptions(owner_id,provider,external_id,plan,status) VALUES($1,'fake',$2,'pro','active'),($1,'stripe',$3,'pro','active')",
+        [f.owner, `sub-${f.owner}-second`, `sub-${f.owner}-unknown-provider`]
+      );
 
       // Owner A's media, plus a traversal target outside MEDIA_ROOT. The directory
       // named like an image makes the real cleanup fail for one file.
@@ -247,6 +285,18 @@ async function main() {
       assert.equal((await client.query(
         "SELECT count(*) FROM draft_events WHERE draft_id = ANY($1::bigint[])", [a.draftIds]
       )).rows[0].count, "1");
+      const aSubscriptions = (await client.query<{ external_id: string; status: string }>(
+        "SELECT external_id,status FROM owner_subscriptions WHERE owner_id=$1 ORDER BY id",
+        [a.owner]
+      )).rows;
+      const aCancellable = aSubscriptions
+        .filter(row => row.status !== "canceled" && row.status !== "incomplete_expired")
+        .map(row => row.external_id);
+      const aDead = aSubscriptions
+        .filter(row => row.status === "canceled" || row.status === "incomplete_expired")
+        .map(row => row.external_id);
+      assert.equal(aCancellable.length, 5, "A has five subscriptions that can still bill");
+      assert.equal(aDead.length, 2, "A has two dead subscriptions");
 
       // A wrong or missing confirmation changes nothing, for either session kind.
       assert.equal((await route.DELETE(cookieRequest(b.webToken, "DELETE", { confirm: "delete" }))).status, 400);
@@ -273,6 +323,8 @@ async function main() {
       )).rows[0].count, "0");
       assert.equal(await codeCount(client, a.emails), 0);
       assert.equal((await route.DELETE(cookieRequest(a.webToken, "DELETE", { confirm: "DELETE" }))).status, 401);
+      for (const id of aCancellable) assert.ok(fakeBillingCancelledIds().includes(id), `${id} was cancelled before deletion`);
+      for (const id of aDead) assert.equal(fakeBillingCancelledIds().includes(id), false, `${id} was already dead and not cancelled`);
 
       // B is untouched: same rows, same code, same media, still signed in.
       assert.deepEqual(await ownershipCounts(client, b.owner, [b.businessId]), beforeB);
@@ -306,6 +358,65 @@ async function main() {
       assert.equal((await businesses(cookieRequest(d.webToken))).status, 401);
       assert.equal((await businesses(bearerRequest(d.mobileToken))).status, 401);
 
+      // A failed cancel stops the deletion and keeps the account and session. The
+      // first subscription was already cancelled, so the retry must cope with it.
+      resetFakeBillingCancellations();
+      const fSubscriptions = (await client.query<{ external_id: string }>(
+        "SELECT external_id FROM owner_subscriptions WHERE owner_id=$1 ORDER BY id",
+        [f.owner]
+      )).rows.map(row => row.external_id);
+      assert.deepEqual(fSubscriptions, [
+        `sub-${f.owner}`, `sub-${f.owner}-second`, `sub-${f.owner}-unknown-provider`
+      ]);
+      const beforeF = await ownershipCounts(client, f.owner, [f.businessId]);
+      failFakeBillingCancellation(fSubscriptions[1]);
+      const failedCancel = await route.DELETE(cookieRequest(f.webToken, "DELETE", { confirm: "DELETE" }));
+      assert.equal(failedCancel.status, 503);
+      assert.match((await failedCancel.json()).error, /not deleted.*try again/i);
+      assert.deepEqual(fakeBillingCancelledIds(), [fSubscriptions[0]], "only the first cancellation completed");
+      assert.deepEqual(await ownershipCounts(client, f.owner, [f.businessId]), beforeF);
+      assert.equal((await businesses(cookieRequest(f.webToken))).status, 200, "the session still works after a failed cancel");
+
+      // The retry cancels the previously failed row, then stops on a provider
+      // that has no adapter in this process instead of deleting and leaving it.
+      failFakeBillingCancellation(fSubscriptions[1], false);
+      const unknownProvider = await route.DELETE(cookieRequest(f.webToken, "DELETE", { confirm: "DELETE" }));
+      assert.equal(unknownProvider.status, 503);
+      assert.deepEqual(fakeBillingCancelledIds(), fSubscriptions.slice(0, 2), "the retry cancelled the previously failed row");
+      assert.deepEqual(await ownershipCounts(client, f.owner, [f.businessId]), beforeF);
+      assert.equal((await businesses(bearerRequest(f.mobileToken))).status, 200, "the bearer session still works too");
+
+      // Once that row can be cancelled, the same request deletes the account.
+      await client.query("UPDATE owner_subscriptions SET provider='fake' WHERE external_id=$1", [fSubscriptions[2]]);
+      const fDeleted = await route.DELETE(cookieRequest(f.webToken, "DELETE", { confirm: "DELETE" }));
+      assert.equal(fDeleted.status, 200);
+      assert.deepEqual(fakeBillingCancelledIds(), fSubscriptions);
+      for (const [table, count] of Object.entries(await ownershipCounts(client, f.owner, [f.businessId]))) {
+        assert.equal(count, 0, `${table} still has owner F rows`);
+      }
+      assert.equal((await businesses(cookieRequest(f.webToken))).status, 401);
+
+      // A store-only owner deletes without a billing provider: we cannot cancel
+      // the store, and the store row does not need a provider adapter here.
+      delete process.env.BILLING_PROVIDER;
+      const cStoreId = (await client.query<{ external_id: string }>(
+        "SELECT external_id FROM owner_subscriptions WHERE owner_id=$1", [c.owner]
+      )).rows[0].external_id;
+      const cDeleted = await route.DELETE(cookieRequest(c.webToken, "DELETE", { confirm: "DELETE" }));
+      assert.equal(cDeleted.status, 200);
+      assert.equal(fakeBillingCancelledIds().includes(cStoreId), false, "the store subscription was not cancelled by us");
+
+      // A fake subscription can't charge anyone, so it doesn't block a deletion when
+      // the fake provider is switched off, like the seeded demo owner in a dev stack.
+      assert.equal((await route.DELETE(bearerRequest(g.mobileToken, "DELETE", { confirm: "DELETE" }))).status, 200);
+      assert.equal((await businesses(bearerRequest(g.mobileToken))).status, 401);
+
+      // An owner with no subscriptions deletes exactly as before, still with no
+      // billing provider configured and so no provider call.
+      const eDeleted = await route.DELETE(bearerRequest(e.mobileToken, "DELETE", { confirm: "DELETE" }));
+      assert.equal(eDeleted.status, 200);
+      assert.equal((await businesses(bearerRequest(e.mobileToken))).status, 401);
+
       // The cleanup helper is idempotent and safe to retry after a half failure.
       const retryRoot = mkdtempSync(join(tmpdir(), "account-deletion-retry-"));
       const previous = process.env.MEDIA_ROOT;
@@ -335,6 +446,11 @@ async function main() {
     });
     console.log("account deletion Postgres, session, isolation and media tests passed");
   } finally {
+    resetFakeBillingCancellations();
+    if (savedBilling === undefined) delete process.env.BILLING_PROVIDER;
+    else process.env.BILLING_PROVIDER = savedBilling;
+    if (savedNodeEnv === undefined) delete (process.env as Record<string, string>).NODE_ENV;
+    else (process.env as Record<string, string>).NODE_ENV = savedNodeEnv;
     rmSync(root, { recursive: true, force: true });
     rmSync(outside, { force: true });
   }

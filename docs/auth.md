@@ -77,6 +77,26 @@ bearer requests skip the Origin check because a browser never attaches the token
 The successful response is `200 {"ok": true}`, and a cookie session also gets
 both session-cookie names expired.
 
+Before any local data is touched, `cancelOwnerSubscriptions` in
+`lib/services/accountDeletion.ts` reads the owner's `owner_subscriptions` and
+cancels every row that can still bill (any status other than `canceled` or
+`incomplete_expired`, including `past_due`, `unpaid`, `incomplete`, `paused` and
+a subscription that only cancels at the period end). This is a provider call, so
+it runs outside the deletion transaction. It uses the same `BillingProvider`
+interface as checkout, and a row whose provider has no adapter in the process
+stops the deletion rather than silently leaving it billing. App Store and Google
+Play subscriptions are the exception: we cannot cancel them, so they are skipped
+and the confirmation copy tells the owner to cancel them in the store. An owner
+with no subscriptions, or with only store subscriptions, needs no provider
+configured and makes no network call.
+
+If any cancel fails, `DELETE /api/account` returns `503` with a retry message and
+deletes nothing: the account, sessions and media all remain. Cancelling is
+idempotent, so a retry after a partial failure cancels the remaining rows and
+then deletes normally. Provider cancellation happens before the local
+transaction, so a subscription created in the short gap between the two steps is
+not covered by this change.
+
 One transaction (`lib/services/accountDeletion.ts`, using `lib/db.ts`'s
 transaction-aware `query`) locks the owner row and deletes:
 
@@ -87,7 +107,8 @@ transaction-aware `query`) locks the owner row and deletes:
 - `email_sign_in_codes` for the owner's login address and any address recorded on
   its `auth_accounts` methods;
 - `auth_users`, cascading `auth_accounts`, `auth_sessions` (web and mobile),
-  `owner_usage`, `owner_plans`, `owner_plan_events` and `device_push_tokens`.
+  `owner_usage`, `owner_plans`, `owner_plan_events`, `owner_subscriptions`,
+  `billing_events` and `device_push_tokens`.
 
 No migration was needed: every other FK either cascades from `businesses` or
 `auth_users`, or is one of the two explicit deletes above. The deleted owner's
@@ -106,12 +127,17 @@ transaction commits. Only paths of the form `/api/media/<one filename>.png` that
 resolve inside `MEDIA_ROOT` are eligible, so data URLs and path traversal are
 ignored. A missing file is fine; a file that cannot be removed is counted in one
 sanitized `account_deletion_media_cleanup_failed` log event and does not fail the
-request after the data is gone. The cleanup helper is safe to retry. Deleting the
-account does not cancel an App Store or Google Play subscription; both confirmation
-screens say so and explain where to cancel it. `scripts/test-account-deletion.ts`
-covers owner A/B isolation, every owner/business table including an
-information-schema scan, media removal and traversal, confirmation failures,
-both session kinds, immediate 401s and cleanup retry.
+request after the data is gone. The cleanup helper is safe to retry. Both
+confirmation screens say that a web subscription is cancelled for the owner and
+that an App Store or Google Play subscription is not; they explain where to
+cancel it. A provider webhook that arrives after the owner is gone is
+acknowledged with `ignored: true` and records nothing, so it cannot recreate a
+subscription or plan row. `scripts/test-account-deletion.ts` covers owner A/B
+isolation, every owner/business table including an information-schema scan, media
+removal and traversal, confirmation failures, cancelling every live status,
+store-only and no-subscription owners, a failed cancel that leaves the account
+and sessions intact, retry after a partial cancel, an unknown provider and
+immediate 401s. `scripts/test-billing.ts` covers the late event.
 
 `TEST_DATABASE_URL=postgres://... npm test` runs disposable-schema A/B ownership,
 media, limits, expiry/revocation and cross-origin tests. Anonymous tests inventory

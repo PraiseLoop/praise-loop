@@ -7,7 +7,7 @@ export const DELETE_ACCOUNT_WARNING =
   "Deleting your account permanently removes your businesses, reviews, posts, drafts, images, sign-in methods and sessions. There is no recovery period.";
 
 export const DELETE_ACCOUNT_SUBSCRIPTION_NOTE =
-  "Deleting your account does not cancel an App Store or Google Play subscription. Cancel it in the App Store (Apple ID → Subscriptions) or Google Play (Payments & subscriptions → Subscriptions) first, otherwise the store may keep charging you.";
+  "Deleting your account cancels a web subscription for you. It does not cancel an App Store or Google Play subscription. Cancel that in the App Store (Apple ID → Subscriptions) or Google Play (Payments & subscriptions → Subscriptions) first, otherwise the store may keep charging you.";
 
 export function confirmsDeletion(value: string): boolean {
   return value.trim() === DELETE_ACCOUNT_CONFIRMATION;

@@ -1,9 +1,9 @@
 # Billing and tiers
 
 The investigation behind PraiseLoop's billing plan, carried out on 2026-11-04. The
-subscription tables and provider interface are built (#219); checkout, webhooks and
-real payments are not. What exists today is in [design.md](design.md) and
-[features.md](features.md). Tracking issue: #225.
+subscription tables, provider interface and account-deletion cancellation are built
+(#219, #220); checkout, webhooks and real payments are not. What exists today is in
+[design.md](design.md) and [features.md](features.md). Tracking issue: #225.
 
 ## Decisions so far
 
@@ -41,9 +41,19 @@ Nobody can buy until #223 ships, so that PR records the price and publishes it t
   Statuses count through `subscriptionIsActive`; `past_due` keeps the plan for a short grace period.
 - **Provider interface (#219):** `lib/integrations/billing.ts` defines the provider shape, and a
   fake adapter walks checkout, renewal, failed payment and cancellation through the same
-  `applyBillingEvent` path a real webhook will use. `BILLING_PROVIDER=fake` selects it only in a
+  `applyBillingEvent` path a real webhook will use. `cancel(externalId)` ends billing at the
+  provider immediately and is safe to call twice; `cancelEvent` is the fake's simulated
+  cancellation event for that walkthrough. `BILLING_PROVIDER=fake` selects the fake only in a
   development process; a production build refuses it. `POST /api/dev/billing` is the local
   walkthrough and answers 404 without `MOBILE_DEV_AUTH`.
+- **Account deletion (#220):** before deleting any local data, the owner's
+  `owner_subscriptions` rows that can still bill are cancelled through the provider. A failed
+  cancel returns `503`, deletes nothing and keeps the sessions, so a retry is safe after a
+  partial cancel. Store subscriptions cannot be cancelled by us and keep the existing warning.
+  An owner with no subscriptions needs no provider and makes no network call. The cancellation
+  runs before the database transaction; a subscription created in the gap between the two steps
+  is a known, out-of-scope race. A provider event for a deleted owner is acknowledged with
+  `ignored: true` and writes nothing.
 - **Audit:** every plan change appends to `owner_plan_events`. Provider events never write
   `owner_plans`.
 - **Display:** `GET /api/entitlements` is read-only, and `/account`, `/plans` and the phone show what it returns.
@@ -146,7 +156,7 @@ a plan lapses is not sent and not resubmitted: it ends `failed` with the reason
 | Review sync and AI replies have nothing enforcing them, because the features don't exist yet | `PLAN_LIMITS` | #218 |
 | Free owners can post through Buffer | `lib/services/bufferPosting.ts`, `app/api/buffer/` | #216 |
 | The business limit is only checked at creation, so a lapsed owner keeps every business generating; #217 pauses the extra businesses and resumes them on upgrade | `lib/services/generation.ts` | #217 |
-| Deleting an account wouldn't cancel a Stripe subscription, so a deleted owner could keep being charged | `lib/services/accountDeletion.ts` | #220 |
+| Deleting an account would not cancel a Stripe subscription, so a deleted owner could keep being charged; now cancelled first, and a failed cancel blocks deletion | `lib/services/accountDeletion.ts` | #220 |
 | Email-code sign-in to an existing Google owner is flagged for review before billing, because of reassigned mailboxes | [design.md](design.md) | #221 |
 
 ## Changing a plan for testing
@@ -188,7 +198,7 @@ before real payments, because it unlocks Pro without paying.
 4. #217 Rule for extra businesses after a downgrade
 5. #218 Only sell limits with something behind them
 6. #219 Subscription tables, provider interface and fake adapter
-7. #220 Cancel the subscription on account deletion
+7. #220 Cancel the subscription on account deletion (built)
 8. #221 Review email-code sign-in
 9. #222 Owner: Stripe account, product and tax setup
 10. #223 Stripe checkout, webhook and portal

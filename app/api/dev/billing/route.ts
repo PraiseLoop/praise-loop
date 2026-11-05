@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       const input = { ownerId, externalId: body.externalId, plan: subscription.plan };
       event = action === "renew" ? await provider.renew(input)
         : action === "fail" ? await provider.failPayment(input)
-        : await provider.cancel(input);
+        : await provider.cancelEvent(input);
     }
 
     const result = await applyBillingEvent(event);

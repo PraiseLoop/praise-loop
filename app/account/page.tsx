@@ -220,9 +220,10 @@ export default function AccountPage() {
           cannot be restored.
         </p>
         <p className="pl-small pl-muted" style={{ margin: 0 }}>
-          Deleting your account does not cancel an App Store or Google Play subscription. Cancel it in
-          the App Store (Apple ID → Subscriptions) or Google Play (Payments &amp; subscriptions →
-          Subscriptions) first, otherwise the store may keep charging you.
+          Deleting your account cancels a web subscription for you. It does not cancel an App Store or
+          Google Play subscription. Cancel that in the App Store (Apple ID → Subscriptions) or Google
+          Play (Payments &amp; subscriptions → Subscriptions) first, otherwise the store may keep
+          charging you.
         </p>
         <label htmlFor="delete-confirm" style={{ fontWeight: 600 }}>Type DELETE to confirm</label>
         <input
