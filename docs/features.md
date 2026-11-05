@@ -527,8 +527,15 @@ open (#222), so its card says "Contact us for pricing" and has no upgrade button
 A Free owner sees **Upgrade to Pro** on `/account`, which confirms a fresh code
 with `StepUpCodeForm`, then opens Stripe Checkout. An owner whose plan came from
 Stripe sees **Manage subscription**, which opens the customer portal. The success
-redirect grants nothing; only the verified webhook changes the plan, so the page
-shows a short "confirming" notice and reloads.
+redirect grants nothing; only the verified webhook changes the plan. The page
+shows a short "confirming" notice and reloads only while the plan is still Free;
+a paid plan shows "Your Pro plan is active.", and after the last reload a Free
+plan shows "This is taking longer than usual" instead of waiting forever. The
+notice reflects the server's plan, so a cancellation or downgrade never shows
+"confirming", and the page removes `checkout` from the URL once the notice is
+final so a reload cannot bring it back. The plan card states where the plan came
+from and its paid-through date once, with a separate note only when a stored
+plan has lapsed.
 
 - **Plan page** (`/account`, reached from the profile menu; #150): the plan, where it came from
   (default, manual, store or web subscription), its expiry, what it includes (posts per week,

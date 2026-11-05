@@ -105,7 +105,9 @@ export default function AccountPage() {
   if (!plan) return <div className="pl-empty"><h2>We couldn’t load your plan</h2><p className="pl-muted">Check your connection and reload the page.</p></div>;
 
   const name = displayName(profile?.name ?? null);
-  const note = expiryNote(plan);
+  // The source line already carries an active plan's paid-through date. Keep the
+  // note only when it adds something: the stored plan that lapsed and why (#249).
+  const note = plan.expired ? expiryNote(plan) : null;
   const { limits } = plan;
   const rows: [string, string][] = [
     ["Posts per week, per business", String(limits.postsPerWeek)],
