@@ -3,7 +3,7 @@ import Link from "next/link";
 import { PLAN_LIMITS, type Plan } from "../../lib/services/entitlements";
 import { PLAN_ORDER, PLAN_PRICING, planComparison, planNotes, publicPlanName } from "../../lib/plansDisplay";
 import Icon from "../ui/Icon";
-import PlanCta from "./PlanCta";
+import PlanCta, { ProPlanCta } from "./PlanCta";
 import styles from "./plans.module.css";
 
 export const metadata: Metadata = {
@@ -47,7 +47,7 @@ export default function PlansPage() {
               <div className={styles.planHead}>
                 <h2 className={styles.planName}>{publicPlanName[plan]}</h2>
                 <p className={styles.tagline}>{taglines[plan]}</p>
-                {pricing ? <p className={styles.price}>{pricing[plan]}</p> : null}
+                <p className={styles.price}>{pricing[plan]}</p>
               </div>
               <dl className={styles.features}>
                 {rows.map(row => (
@@ -57,22 +57,16 @@ export default function PlansPage() {
                   </div>
                 ))}
               </dl>
+              {plan === "pro" ? <div className={styles.planAction}><ProPlanCta /></div> : null}
             </article>
           ))}
         </section>
-
-        {pricing ? null : (
-          <p role="note" className={styles.pricingNote}>
-            Prices are not published yet. During the pilot the plan and price are agreed directly with each
-            business, and there is no checkout on this page.
-          </p>
-        )}
 
         <section aria-labelledby="notes-h" className={styles.notes}>
           <h2 id="notes-h">Good to know</h2>
           <ul>
             {notes.map(note => <li key={note}>{note}</li>)}
-            <li>Each business has its own weekly limit. PraiseLoop support changes plans during the pilot.</li>
+            <li>Each business has its own weekly limit. Upgrade to Pro from your account page; Business is arranged with us.</li>
           </ul>
         </section>
 

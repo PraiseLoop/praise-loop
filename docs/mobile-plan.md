@@ -180,15 +180,21 @@ is enforced today:
 | Phone share sheet and image download | Automatic posting (through Buffer, Pro and Business only) |
 | | More than one business |
 
-- Web purchases go through Stripe first (#225). The app can't link to web checkout, so it shows
-  plan status only until store purchases exist.
+- Web purchases go through Stripe (#223): Pro is CA$29.99 a month plus tax, paid on
+  `/account` after a fresh-code step-up. The public `/plans` page sends a signed-in
+  owner there and never starts a checkout itself. Business pricing is still open
+  (#222), so it has no price or upgrade button.
+- The phone app shows plan status only. It has no upgrade prompt and no link to web
+  checkout, because Apple's rules outside the US do not allow one until the item is
+  also sold in-app. Store purchases (#95) are still needed before public App Store
+  release.
 - App Store and Google Play subscriptions (#95) are still needed before public App Store release.
   Both take about 15% from small developers. A billing service such as RevenueCat can handle both
   stores and send one webhook; the choice is recorded in #95, stubbed
   first as the [contributing rules](../CONTRIBUTING.md) require.
 - The pilot doesn't depend on any of this: it can still invoice manually and set plans by hand.
-- The public `/plans` page (#134) shows only the enforced limits, with no prices,
-  until the plan prices are recorded in `docs/decisions.md`.
+- The public `/plans` page (#134) shows the enforced limits and the Pro price from
+  `PLAN_PRICING`; Business says "Contact us for pricing" until #222.
 
 ## Hosting
 

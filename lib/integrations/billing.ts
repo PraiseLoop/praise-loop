@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Plan } from "../services/entitlements";
 import type { BillingEvent, SubscriptionStatus } from "../services/subscriptions";
+import { stripeGateway, stripeSecretKey } from "./stripe";
 
 // Provider adapters only translate their own events into the shared BillingEvent
 // shape; lib/services/subscriptions.ts is the one place that applies them. Stripe
@@ -18,18 +19,24 @@ export type SubscriptionInput = {
   now?: Date;
 };
 
-export type BillingProvider = {
+// Account deletion only needs to end a subscription; the fake's event methods
+// belong only to the development walkthrough. Splitting the types keeps the
+// deletion path from claiming it can simulate checkout.
+export type BillingCanceller = {
   readonly name: string;
+  // Ends billing at the provider immediately. Calling it again for a
+  // subscription that is already cancelled must succeed without another charge
+  // or side effect, because account deletion may retry after a partial failure.
+  cancel(externalId: string): Promise<void>;
+};
+
+export type BillingProvider = BillingCanceller & {
   checkout(input: CheckoutInput): Promise<BillingEvent>;
   renew(input: SubscriptionInput): Promise<BillingEvent>;
   failPayment(input: SubscriptionInput): Promise<BillingEvent>;
   // The event a provider reports when a subscription ends. This is not the
   // cancel call itself; the dev route uses it to walk the webhook path.
   cancelEvent(input: SubscriptionInput): Promise<BillingEvent>;
-  // Ends billing at the provider immediately. Calling it again for a
-  // subscription that is already cancelled must succeed without another charge
-  // or side effect, because account deletion may retry after a partial failure.
-  cancel(externalId: string): Promise<void>;
 };
 
 export const BILLING_PROVIDER_ENV = "BILLING_PROVIDER";
@@ -147,5 +154,27 @@ export function billingProvider(env: Record<string, string | undefined> = proces
     if (env.NODE_ENV === "production") throw new Error("The fake billing provider is not available in production");
     return fakeBillingProvider;
   }
+  throw new Error("No billing provider is configured");
+}
+
+// Stripe implements cancellation through the same REST client as checkout and
+// the webhook. It is selected whenever a secret key exists, so account deletion
+// keeps working for real subscriptions without loading the fake's event methods.
+function stripeCanceller(env: Record<string, string | undefined>): BillingCanceller {
+  return {
+    name: "stripe",
+    async cancel(externalId) {
+      if (!externalId) throw new Error("A subscription id is required");
+      await stripeGateway({ env }).cancelSubscription(externalId);
+    }
+  };
+}
+
+// The development fake wins when it is explicitly selected: a developer can have
+// Stripe test keys in the same .env and still delete a seeded fake owner. In
+// production the fake is refused, so Stripe is the only provider left.
+export function billingCanceller(env: Record<string, string | undefined> = process.env): BillingCanceller {
+  if (fakeBillingEnabled(env)) return fakeBillingProvider;
+  if (stripeSecretKey(env)) return stripeCanceller(env);
   throw new Error("No billing provider is configured");
 }

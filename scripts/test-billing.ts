@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { databaseFixture } from "./db-fixture";
-import { billingProvider, fakeBillingProvider } from "../lib/integrations/billing";
+import { billingCanceller, billingProvider, fakeBillingProvider } from "../lib/integrations/billing";
 import { entitlementsFor, setOwnerPlan } from "../lib/services/entitlements";
 import {
   PAST_DUE_GRACE_PERIOD_MS,
@@ -38,6 +38,13 @@ async function main() {
   assert.throws(() => billingProvider({ BILLING_PROVIDER: "fake", NODE_ENV: "production" }), /not available in production/);
   assert.equal(billingProvider({ BILLING_PROVIDER: "fake", NODE_ENV: "development" }).name, "fake");
   assert.throws(() => billingProvider({}), /No billing provider is configured/);
+
+  // Account deletion selects a canceller: Stripe when configured, otherwise the
+  // development fake, and nothing in production without a real provider.
+  assert.equal(billingCanceller({ STRIPE_SECRET_KEY: "sk_test_synthetic" }).name, "stripe");
+  assert.equal(billingCanceller({ BILLING_PROVIDER: "fake", NODE_ENV: "development" }).name, "fake");
+  assert.throws(() => billingCanceller({ BILLING_PROVIDER: "fake", NODE_ENV: "production" }), /No billing provider/);
+  assert.throws(() => billingCanceller({}), /No billing provider/);
   const saved = { BILLING_PROVIDER: process.env.BILLING_PROVIDER, NODE_ENV: process.env.NODE_ENV, MOBILE_DEV_AUTH: process.env.MOBILE_DEV_AUTH };
   process.env.BILLING_PROVIDER = "fake";
   (process.env as Record<string, string>).NODE_ENV = "test";
@@ -182,6 +189,27 @@ async function main() {
       assert.equal((await client.query("SELECT count(*)::int n FROM billing_events WHERE event_id='late-after-delete'")).rows[0].n, 0, "a late event is not recorded");
       assert.equal((await client.query("SELECT count(*)::int n FROM owner_subscriptions WHERE owner_id='late-owner'")).rows[0].n, 0, "a late event recreates no subscription");
       assert.equal((await client.query("SELECT count(*)::int n FROM owner_plan_events WHERE owner_id='late-owner'")).rows[0].n, 0, "a late event records no plan change");
+
+      // The Stripe customer id is stored once and a later event that omits it
+      // never clears it (#223).
+      await client.query("INSERT INTO auth_users(id,email) VALUES('customer-owner','customer@example.invalid')");
+      await applyBillingEvent({
+        provider: "stripe", eventId: "customer-first", type: "checkout.session.completed", ownerId: "customer-owner",
+        externalId: "sub-customer", plan: "pro", status: "active", currentPeriodEnd: at(48), customerId: "cus_synthetic", occurredAt: at(0)
+      });
+      assert.equal(
+        (await client.query("SELECT customer_id FROM owner_subscriptions WHERE external_id='sub-customer'")).rows[0].customer_id,
+        "cus_synthetic"
+      );
+      await applyBillingEvent({
+        provider: "stripe", eventId: "customer-second", type: "invoice.paid", ownerId: "customer-owner",
+        externalId: "sub-customer", plan: "pro", status: "active", currentPeriodEnd: at(72), occurredAt: at(1)
+      });
+      assert.equal(
+        (await client.query("SELECT customer_id FROM owner_subscriptions WHERE external_id='sub-customer'")).rows[0].customer_id,
+        "cus_synthetic",
+        "an event without a customer id keeps the stored one"
+      );
 
       // A local owner can walk checkout, renewal, failed payment and cancellation
       // through the dev route; it uses the same apply path as a real webhook.

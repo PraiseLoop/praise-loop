@@ -15,7 +15,8 @@
 .feature { display: flex; flex-direction: column; gap: 2px; }
 .feature dt { font-size: 13px; color: var(--pl-muted); }
 .feature dd { margin: 0; font-weight: 600; line-height: 1.4; }
-.pricingNote { margin: 0; padding: 16px 20px; border-radius: 14px; background: var(--pl-green-soft); color: #0A3D31; font-size: 15px; line-height: 1.5; }
+.planAction { margin-top: auto; }
+.planAction button { width: 100%; }
 .notes { padding: 22px 26px; border-radius: 16px; background: var(--pl-surface); border: 1px solid var(--pl-line); display: flex; flex-direction: column; gap: 12px; }
 .notes h2 { margin: 0; font-size: 20px; }
 .notes ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; color: var(--pl-ink-soft); font-size: 15px; line-height: 1.5; }

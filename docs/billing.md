@@ -1,9 +1,8 @@
 # Billing and tiers
 
 The investigation behind PraiseLoop's billing plan, carried out on 2026-11-04. The
-subscription tables, provider interface and account-deletion cancellation are built
-(#219, #220); checkout, webhooks and real payments are not. What exists today is in
-[design.md](design.md) and [features.md](features.md). Tracking issue: #225.
+subscription tables, provider interface, account-deletion cancellation, Stripe checkout,
+webhook and customer portal are built (#219, #220, #223). Tracking issue: #225.
 
 ## Decisions so far
 
@@ -13,15 +12,15 @@ subscription tables, provider interface and account-deletion cancellation are bu
 | First customers arrive through | The web, not the iOS app | Decided by the owner |
 | Tiers | Free, Pro and Business | Decided by the owner |
 | Buffer posting | Paid plans only: called automatic posting | Decided by the owner |
-| Pro price | CA$29.99 a month plus tax | Working price, formally recorded in #223 |
+| Pro price | CA$29.99 a month plus tax | Decided and published (#223) |
 | Billing period | Monthly only, to start | Decided by the owner |
 | Business price | Not decided | Open, #222 |
 | Business limits | 5 businesses, 5 posts a week per business | Decided (owner delegated the choice) |
 | Taxes, refund terms | Not decided | Open, #222 |
 
-The price is not in [decisions.md](decisions.md) yet on purpose. `scripts/test-plans.ts` requires
-`PLAN_PRICING` to be set in the same change that records a price, which publishes it on `/plans`.
-Nobody can buy until #223 ships, so that PR records the price and publishes it together.
+The Pro price is recorded in [decisions.md](decisions.md) and `PLAN_PRICING`, so `/plans`
+publishes it. Checkout is the only way to get a paid web plan; Business has no price and
+no button until #222 is settled.
 
 ## What already exists
 
@@ -39,21 +38,28 @@ Nobody can buy until #223 ships, so that PR records the price and publishes it t
   active plan and the source names the grant that won. Expired manual Pro with an active Business
   subscription reads Business, and a lapsed subscription does not remove an active manual grant.
   Statuses count through `subscriptionIsActive`; `past_due` keeps the plan for a short grace period.
-- **Provider interface (#219):** `lib/integrations/billing.ts` defines the provider shape, and a
+- **Provider interface (#219, #223):** `lib/integrations/billing.ts` defines the provider shape, and a
   fake adapter walks checkout, renewal, failed payment and cancellation through the same
-  `applyBillingEvent` path a real webhook will use. `cancel(externalId)` ends billing at the
-  provider immediately and is safe to call twice; `cancelEvent` is the fake's simulated
-  cancellation event for that walkthrough. `BILLING_PROVIDER=fake` selects the fake only in a
-  development process; a production build refuses it. `POST /api/dev/billing` is the local
-  walkthrough and answers 404 without `MOBILE_DEV_AUTH`.
-- **Account deletion (#220):** before deleting any local data, the owner's
+  `applyBillingEvent` path the real webhook uses. Account deletion only needs a canceller, so
+  `billingCanceller()` selects the development fake when `BILLING_PROVIDER=fake` and Stripe when
+  `STRIPE_SECRET_KEY` is set otherwise;
+  `billingProvider()` still exposes the fake's event methods only in development. `cancel` ends
+  billing at the provider immediately and is safe to call again; a missing subscription is success.
+  `BILLING_PROVIDER=fake` selects the fake only in a development process; a production build refuses
+  it. `POST /api/dev/billing` is the local walkthrough and answers 404 without `MOBILE_DEV_AUTH`.
+- **Stripe checkout, webhook and portal (#223):** `POST /api/billing/checkout` creates a Checkout
+  session with the price chosen from config, Stripe Tax on and the owner ids in metadata;
+  `POST /api/billing/webhook` verifies the raw body, re-reads the subscription and applies it; and
+  `POST /api/billing/portal` opens Stripe's customer portal. The routes are described below.
+- **Account deletion (#220, #223):** before deleting any local data, the owner's
   `owner_subscriptions` rows that can still bill are cancelled through the provider. A failed
   cancel returns `503`, deletes nothing and keeps the sessions, so a retry is safe after a
-  partial cancel. Store subscriptions cannot be cancelled by us and keep the existing warning.
+  partial cancel. Repeat cancels and a subscription already missing at Stripe are success.
+  Store subscriptions cannot be cancelled by us and keep the existing warning.
   An owner with no subscriptions needs no provider and makes no network call. The cancellation
   runs before the database transaction; a subscription created in the gap between the two steps
   is a known, out-of-scope race. A provider event for a deleted owner is acknowledged with
-  `ignored: true` and writes nothing.
+  `ignored: true` and writes nothing; if Stripe says it can still bill, the webhook cancels it.
 - **Audit:** every plan change appends to `owner_plan_events`. Provider events never write
   `owner_plans`.
 - **Display:** `GET /api/entitlements` is read-only, and `/account`, `/plans` and the phone show what it returns.
@@ -61,15 +67,15 @@ Nobody can buy until #223 ships, so that PR records the price and publishes it t
   (`false` on Free, `true` on Pro and Business) and is enforced on the server when
   connecting Buffer, choosing a channel, confirming a post for a slot, and in the
   worker before sending. Approval is still required, and nothing auto-posts.
-- **Step-up before sensitive actions (#221):** `requireRecentStepUp` in `lib/stepUp.ts` checks that
-  the current session confirmed a code sent to the owner's own address within ten minutes. The two
-  owner routes under `/api/account/step-up/` send and verify it, and `app/ui/StepUpCodeForm.tsx` is
-  the reusable web form. The sign-in path is unchanged and handles the reassigned-mailbox risk with
-  this pause, not with stronger protection. The billing portal and plan-change routes (#223) must
-  call the helper before acting; those routes do not exist yet, so no existing page uses it.
-- **Issues:** #94, #133 and #134 are closed. #95 covers App Store and Google Play purchases only, and
-  says "No web checkout yet". Nothing covered web checkout, more tiers or a billing data model until
-  this investigation.
+- **Step-up before sensitive actions (#221, #223):** `requireRecentStepUp` in `lib/stepUp.ts` checks
+  that the current session confirmed a code sent to the owner's own address within ten minutes. The
+  two owner routes under `/api/account/step-up/` send and verify it, and
+  `app/ui/StepUpCodeForm.tsx` is the reusable web form. The sign-in path is unchanged and handles
+  the reassigned-mailbox risk with this pause, not with stronger protection. Checkout, the portal
+  and any plan change call the helper before acting; `BillingActions` on `/account` mounts the form.
+- **Issues:** #94, #133 and #134 are closed. #95 covers App Store and Google Play purchases only.
+  Web checkout, more tiers and the billing data model are #213/#219–#225; #223 now builds the Stripe
+  checkout, webhook and portal.
 
 ## Why Stripe first
 
@@ -120,14 +126,67 @@ Google Play's rules weren't checked either.
    `CONTRIBUTING.md` requires the stub and a recorded decision first. The fake is selected by
    `BILLING_PROVIDER=fake`, refused in production, and walks checkout, renewal, failed payment and
    cancellation locally through `/api/dev/billing` without a network call.
-3. **Upgrade only from the verified webhook (#223).** The server picks the Stripe price from a plan
-   key, and the checkout success redirect grants nothing. Each event re-reads the subscription from
-   Stripe, so out-of-order delivery doesn't matter. Cancelling and card changes go through Stripe's
-   customer portal.
-4. **Register the webhook as public (#223).** It needs signature checking on the raw body and an
-   allow-list entry in `scripts/test-authorization.ts`. Unknown owners change nothing.
+3. **Upgrade only from the verified webhook (#223, built).** The server picks the Stripe price from a
+   plan key, and the checkout success redirect grants nothing. Each event re-reads the subscription
+   from Stripe, so out-of-order delivery doesn't matter. Cancelling and card changes go through
+   Stripe's customer portal.
+4. **Register the webhook as public (#223, built).** It verifies the signature over the raw body and
+   is allow-listed in `scripts/test-authorization.ts`. Unknown owners change nothing; a deleted
+   owner's still-billable subscription is cancelled so it cannot keep charging.
 5. **Keep limits in `PLAN_LIMITS`.** Stripe price IDs map to plans in config, so a later annual price
    shares the same limits.
+
+## Checkout, webhook and portal (#223)
+
+- **Checkout:** `POST /api/billing/checkout` is owner-wide and added to `OWNER_WIDE_PATHS`. The body
+  is only `{ plan: "pro" | "business" }`; the server chooses `STRIPE_PRICE_PRO` or
+  `STRIPE_PRICE_BUSINESS`, so a client cannot ask for a price. `requireRecentStepUp` runs before any
+  provider call. A missing price is `400`, an owner with a Stripe subscription that can still bill is
+  `409 subscription_exists` (use the portal), and missing Stripe config, `STRIPE_WEBHOOK_SECRET` or
+  `NEXTAUTH_URL` is `503`. Checkout refuses to sell without a verified webhook, because otherwise a
+  payment could complete and no plan would ever be granted.
+  The session uses `mode=subscription`, one line item at quantity 1, `client_reference_id` and
+  subscription metadata for the owner and plan, the owner's verified email when there is one,
+  `automatic_tax[enabled]=true`, `billing_address_collection=auto`, and the success/cancel URLs
+  `/account?checkout=success` and `/plans?checkout=cancelled`. It returns `{ url }`; the client
+  redirects. Nothing is granted here.
+- **Success page:** `/account` shows a short “confirming” notice and reloads the plan a few times.
+  The redirect itself grants nothing; only the webhook changes the plan.
+- **Webhook:** `app/api/billing/webhook/route.ts` is public by design and calls
+  `handleStripeWebhook(rawBody, signature)`. It answers `503` without `STRIPE_WEBHOOK_SECRET`, `400`
+  on a bad signature or malformed JSON, and verifies the signature before parsing. Handled types:
+  `checkout.session.completed`, `customer.subscription.created|updated|deleted`, `invoice.paid`,
+  `invoice.payment_failed`, `invoice.payment_succeeded` and `charge.refunded`. A refund is
+  acknowledged and never cancels a subscription by itself.
+- **Re-read, then apply:** the handler resolves the subscription id, fetches the subscription from
+  Stripe again and never trusts the event's status or price. The owner comes from subscription
+  metadata, then the checkout session's `client_reference_id`/metadata, then an existing
+  `owner_subscriptions` row. If no owner or no plan can be resolved, it acknowledges with
+  `ignored: true` and writes nothing (and does not cancel). Duplicate, stale and applied events all
+  return `200`; `billing_events` keeps each event once.
+- **Late checkout:** if `applyBillingEvent` returns `ignored` because the owner is gone and Stripe says
+  the subscription can still bill, the handler cancels it at Stripe. A missing or already-cancelled
+  subscription is success; a cancellation failure returns `500` so Stripe retries and the event is not
+  lost. This stops a checkout that finishes just after account deletion from charging with no account
+  behind it.
+- **Portal:** `POST /api/billing/portal` is owner-wide, step-up protected, and looks up the newest
+  `owner_subscriptions` row with `provider='stripe'` and a stored `customer_id`. No row is `400`
+  `no_subscription`; missing config is `503`. It returns the Stripe portal URL for card changes and
+  cancellation.
+- **Customer id:** migration 027 adds nullable `customer_id` to `owner_subscriptions`. An event that
+  omits it keeps the stored value through `COALESCE`, so older or partial events cannot wipe it.
+- **Price mapping and tax:** price ids live only in `STRIPE_PRICE_PRO`/`STRIPE_PRICE_BUSINESS` and
+  map back to plans; a later annual price shares the same limits. Stripe Tax is enabled at checkout,
+  so the tax shows there where the owner is registered. Business has no price until #222.
+- **Grace period:** `PAST_DUE_GRACE_PERIOD_MS` in `lib/services/subscriptions.ts` is three days. A
+  `past_due` subscription keeps the plan inside that window and reads Free afterwards; nothing is
+  deleted, so a successful retry restores it. There is no second constant.
+- **Repeat cancels:** account deletion only sends rows whose status is not `canceled` or
+  `incomplete_expired`, and Stripe's canceller treats a `404`/`resource_missing` as success. A retry
+  after a partial failure therefore cannot fail on an already-ended subscription.
+- **Stripe test mode:** a run with a test card has **not been run**. The webhook secret is not
+  configured, and checkout needs the owner's Stripe product and price ids. The fixtures in
+  `scripts/test-stripe-billing.ts` cover the code path; the live test-mode run is still an owner task.
 
 ## Tiers
 
@@ -189,12 +248,12 @@ The owner ran this on their stack on 2026-11-04 and it worked. The change applie
 **Once billing exists:** test purchases through the fake adapter locally (#219) and through Stripe
 test mode with test cards (#223). Set `BILLING_PROVIDER=fake` and `MOBILE_DEV_AUTH=1`, then use
 `POST /api/dev/billing` as described in [development.md](development.md#fake-billing-in-development).
+For real checkout, set `STRIPE_SECRET_KEY`, `STRIPE_PRICE_PRO` and `STRIPE_WEBHOOK_SECRET` and forward
+events with `stripe listen`; see the Stripe test-mode note in [development.md](development.md).
 
-**Self-service upgrades:** PR #224, requested by the owner for testing, adds a separate route that
-lets owners on the `SELF_SERVICE_UPGRADE_EMAILS` allowlist upgrade themselves to Pro. It's off unless
-configured, and `/api/entitlements` stays read-only. It's a testing aid, not part of the paid design:
-its grants are manual ones that webhooks don't touch, #215 needs to include it, and #223 removes it
-before real payments, because it unlocks Pro without paying.
+**Self-service upgrades:** removed by #223 before real payments. The route, service and
+`SELF_SERVICE_UPGRADE_EMAILS` config are gone because they unlocked Pro with no payment. Plans change
+only through an operator grant or a verified provider event.
 
 ## Order of work
 
@@ -207,7 +266,7 @@ before real payments, because it unlocks Pro without paying.
 7. #220 Cancel the subscription on account deletion (built)
 8. #221 Review email-code sign-in
 9. #222 Owner: Stripe account, product and tax setup
-10. #223 Stripe checkout, webhook and portal
+10. #223 Stripe checkout, webhook and portal (built)
 11. #95 Store subscriptions, before public App Store release
 
 ## Sources

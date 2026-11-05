@@ -68,6 +68,8 @@ assert.doesNotMatch(JSON.stringify(rows), /Up to 5 templates/, "templates must n
 const page = read("app/plans/page.tsx");
 assert.match(page, /planComparison\(PLAN_LIMITS\)/, "the plans page must render from PLAN_LIMITS");
 assert.match(page, /planNotes\(/, "the plans page must show the honesty notes");
+assert.match(page, /ProPlanCta/, "the Pro card must offer the web upgrade");
+assert.doesNotMatch(page, /Upgrade to Business/i, "Business pricing is open (#222), so it has no upgrade button");
 
 // Prices wait for a recorded decision. When docs/decisions.md records pricing, the
 // page must carry it; until then no source may print a price.
@@ -75,6 +77,12 @@ const decision = /decision:[^\n]*\b(pricing|price)\b/i.test(read("docs/decisions
 const sources = ["app/plans/page.tsx", "lib/plansDisplay.ts", "app/page.tsx"].map(read);
 if (decision) {
   assert.ok(PLAN_PRICING, "docs/decisions.md records pricing, so PLAN_PRICING must be set");
+  assert.deepEqual(PLAN_PRICING, {
+    free: "Free",
+    pro: "CA$29.99 a month, plus tax",
+    business: "Contact us for pricing"
+  }, "the recorded Pro price must match what the plans page publishes");
+  assert.doesNotMatch(PLAN_PRICING.business, /[$£€]\s?\d/, "Business pricing is still open (#222), so no number is published");
 } else {
   assert.equal(PLAN_PRICING, null, "prices may only be published after the decision is recorded");
   for (const source of sources) {

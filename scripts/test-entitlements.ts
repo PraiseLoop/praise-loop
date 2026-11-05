@@ -7,7 +7,6 @@ import sharp from "sharp";
 import { databaseFixture } from "./db-fixture";
 import { sessionHash } from "../lib/auth-adapter";
 import { PLAN_LIMITS, businessAllowance, entitlementsFor, entitlementsForPlan, setOwnerPlan } from "../lib/services/entitlements";
-import { SELF_SERVICE_UPGRADE_ENV, isSelfServiceUpgradeEmail, selfServiceUpgradeEmails } from "../lib/services/planUpgrade";
 import { expiryNote, formatLocalDate, pausedBusinessMessage, quotaMetMessage, weekLimitNotice } from "../lib/planDisplay";
 import { entitlementsWithUsage, localMidnight, weeklyUsage } from "../lib/services/planUsage";
 import { processGeneration, requestGeneration, type GenerationDeps } from "../lib/services/generation";
@@ -52,12 +51,8 @@ async function main() {
     assert.equal(unknownPlan.plan, "free");
     assert.equal(unknownPlan.expired, false, "an unknown stored plan is not reported as an expired paid plan");
 
-    // The self-service allowlist tolerates spaces, newlines and mixed case, and
-    // an empty list allows nobody.
-    assert.deepEqual(selfServiceUpgradeEmails(" A@Example.com, ,b@example.com\nc@example.com "), ["a@example.com", "b@example.com", "c@example.com"]);
-    assert.equal(isSelfServiceUpgradeEmail("B@Example.com", "a@example.com,b@example.com"), true);
-    assert.equal(isSelfServiceUpgradeEmail("b@example.com", ""), false);
-    assert.equal(isSelfServiceUpgradeEmail(null, "a@example.com"), false);
+    // The self-service allowlist was removed before real payments (#223): plans
+    // now change only through an operator grant or a verified provider event.
 
     // Week reset is local midnight Monday in the business's timezone, across daylight saving.
     assert.equal(localMidnight("2026-10-26", "UTC").toISOString(), "2026-10-26T00:00:00.000Z");
@@ -75,16 +70,12 @@ async function main() {
         ('free-owner','free@example.invalid'),('pro-owner','pro@example.invalid'),
         ('business-owner','business@example.invalid'),('expired-business-owner','expired-business@example.invalid'),
         ('expired-owner','expired@example.invalid'),('api-owner','api@example.invalid'),
-        ('upgrade-owner','upgrade@example.invalid'),('upgrade-business-owner','upgrade-business@example.invalid'),('blocked-owner','blocked@example.invalid'),
         ('over-limit-owner','over-limit@example.invalid'),
         ('mixed-business-owner','mixed-business@example.invalid'),('mixed-manual-owner','mixed-manual@example.invalid'),
         ('lapsed-subscription-owner','lapsed-subscription@example.invalid')`);
       await c.query(`INSERT INTO auth_sessions VALUES
-        ($1,'api-owner',now()+interval '1 hour'),
-        ($2,'upgrade-owner',now()+interval '1 hour'),
-        ($3,'blocked-owner',now()+interval '1 hour'),
-        ($4,'upgrade-business-owner',now()+interval '1 hour')`,
-        [sessionHash("entitlements-api-session"), sessionHash("entitlements-upgrade-session"), sessionHash("entitlements-blocked-session"), sessionHash("entitlements-upgrade-business-session")]);
+        ($1,'api-owner',now()+interval '1 hour')`,
+        [sessionHash("entitlements-api-session")]);
 
       // No row means the default free plan; nothing needs to be seeded.
       assert.equal((await entitlementsFor("free-owner")).plan, "free");
@@ -102,7 +93,6 @@ async function main() {
       assert.equal(businessEntitlements.limits.postsPerWeek, 5);
       assert.equal(businessEntitlements.limits.businesses, 5);
       assert.equal(businessEntitlements.limits.watermark, false);
-      await setOwnerPlan("upgrade-business-owner", "business", { reason: "Synthetic Business allowlist" });
 
       await setOwnerPlan("expired-owner", "pro", { expiresAt: "2020-01-01T00:00:00Z", reason: "Expired synthetic subscription" });
       const expired = await entitlementsFor("expired-owner");
@@ -374,52 +364,6 @@ async function main() {
       });
       assert.deepEqual(readFileSync(fallback.fileSystemPath), readFileSync(freeDesign.fileSystemPath), "an expired or downgraded plan renders quote-card-v1");
       assert.deepEqual(readFileSync(proRender.fileSystemPath), proRenderBytes, "an image rendered before the downgrade does not change");
-
-      // Pilot self-service upgrade: only an allowlisted email may change its own
-      // plan, and repeating the request adds no second audit event.
-      const upgradeRoute = require("../app/api/plan/upgrade/route");
-      const upgradeRequest = (session: string, method = "GET") => new NextRequest("http://localhost/api/plan/upgrade", {
-        method,
-        headers: { cookie: `next-auth.session-token=${session}`, origin: "http://localhost", "content-type": "application/json" }
-      });
-      const previousAllowlist = process.env[SELF_SERVICE_UPGRADE_ENV];
-      try {
-        delete process.env[SELF_SERVICE_UPGRADE_ENV];
-        assert.deepEqual(await (await upgradeRoute.GET(upgradeRequest("entitlements-upgrade-session"))).json(), { eligible: false, plan: "free" });
-        assert.equal((await upgradeRoute.POST(upgradeRequest("entitlements-upgrade-session", "POST"))).status, 403, "an empty allowlist refuses self-service upgrades");
-
-        process.env[SELF_SERVICE_UPGRADE_ENV] = "UPGRADE@example.invalid, upgrade-business@example.invalid, someone-else@example.invalid";
-        assert.deepEqual(await (await upgradeRoute.GET(upgradeRequest("entitlements-upgrade-session"))).json(), { eligible: true, plan: "free" });
-        const upgraded = await upgradeRoute.POST(upgradeRequest("entitlements-upgrade-session", "POST"));
-        assert.equal(upgraded.status, 200);
-        const upgradedBody = await upgraded.json();
-        assert.equal(upgradedBody.plan, "pro");
-        assert.equal(upgradedBody.changed, true);
-        assert.equal(upgradedBody.limits.postsPerWeek, 5);
-        assert.equal((await entitlementsFor("upgrade-owner")).plan, "pro");
-        assert.deepEqual((await c.query("SELECT plan,source,actor,reason FROM owner_plan_events WHERE owner_id='upgrade-owner'")).rows, [
-          { plan: "pro", source: "manual", actor: "upgrade@example.invalid", reason: "Self-service pilot upgrade" }
-        ]);
-        assert.equal((await (await upgradeRoute.POST(upgradeRequest("entitlements-upgrade-session", "POST"))).json()).changed, false, "a repeat is a no-op");
-        assert.equal((await c.query("SELECT count(*) n FROM owner_plan_events WHERE owner_id='upgrade-owner'")).rows[0].n, "1");
-
-        // The self-service helper only ever offers Pro, so an allowlisted Business
-        // owner is left alone instead of being downgraded.
-        assert.deepEqual(await (await upgradeRoute.GET(upgradeRequest("entitlements-upgrade-business-session"))).json(), { eligible: true, plan: "business" });
-        const businessUpgrade = await upgradeRoute.POST(upgradeRequest("entitlements-upgrade-business-session", "POST"));
-        assert.equal(businessUpgrade.status, 200);
-        const businessUpgradeBody = await businessUpgrade.json();
-        assert.equal(businessUpgradeBody.plan, "business");
-        assert.equal(businessUpgradeBody.changed, false);
-        assert.equal((await entitlementsFor("upgrade-business-owner")).plan, "business");
-
-        assert.equal((await upgradeRoute.POST(upgradeRequest("entitlements-blocked-session", "POST"))).status, 403, "an owner not on the allowlist is refused");
-        assert.equal((await entitlementsFor("blocked-owner")).plan, "free");
-        assert.equal((await c.query("SELECT count(*) n FROM owner_plan_events WHERE owner_id='blocked-owner'")).rows[0].n, "0");
-      } finally {
-        if (previousAllowlist === undefined) delete process.env[SELF_SERVICE_UPGRADE_ENV];
-        else process.env[SELF_SERVICE_UPGRADE_ENV] = previousAllowlist;
-      }
     });
 
     // The watermark is part of the deterministic render input and sits below

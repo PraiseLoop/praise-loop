@@ -79,7 +79,11 @@ export function planNotes(rows: ComparedRow[]): string[] {
   return [...new Set(rows.flatMap(row => row.note ? [row.note] : []))];
 }
 
-// Prices are deliberately absent until the owner records the Free/Pro/Business
-// prices in docs/decisions.md (issue #134). Fill PLAN_PRICING in the same change as that
-// decision; scripts/test-plans.ts fails when the decision and the page disagree.
-export const PLAN_PRICING: Record<Plan, string> | null = null;
+// Prices were recorded with the Stripe checkout decision (#223) and published in
+// the same change, as scripts/test-plans.ts requires. Business pricing is still
+// open (#222), so it points to a conversation rather than an invented number.
+export const PLAN_PRICING: Record<Plan, string> = {
+  free: "Free",
+  pro: "CA$29.99 a month, plus tax",
+  business: "Contact us for pricing"
+};
