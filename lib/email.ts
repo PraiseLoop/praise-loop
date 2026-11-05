@@ -378,3 +378,23 @@ export function oneTimeCodeEmail(code: string, options: { minutes?: number } = {
     ].join("\n"),
   };
 }
+
+/**
+ * A confirmation code for a sensitive step in an already signed-in session
+ * (#221). It is deliberately not a sign-in code and never says what action
+ * will follow, so an intercepted message reveals nothing about the owner's plan.
+ */
+export function stepUpCodeEmail(code: string, options: { minutes?: number } = {}): EmailTemplate {
+  if (!/^\d{6}$/.test(code)) throw invalid("a one-time code is six digits");
+  const minutes = options.minutes ?? 10;
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) throw invalid("code lifetime is 1 to 60 minutes");
+  return {
+    subject: "Your Praise Loop confirmation code",
+    text: [
+      `Your Praise Loop confirmation code is ${code}.`,
+      "",
+      `It expires in ${minutes} minute${minutes === 1 ? "" : "s"} and can be used once.`,
+      "Use it only if you started this step yourself. If you did not, you can ignore this message.",
+    ].join("\n"),
+  };
+}

@@ -61,6 +61,12 @@ Nobody can buy until #223 ships, so that PR records the price and publishes it t
   (`false` on Free, `true` on Pro and Business) and is enforced on the server when
   connecting Buffer, choosing a channel, confirming a post for a slot, and in the
   worker before sending. Approval is still required, and nothing auto-posts.
+- **Step-up before sensitive actions (#221):** `requireRecentStepUp` in `lib/stepUp.ts` checks that
+  the current session confirmed a code sent to the owner's own address within ten minutes. The two
+  owner routes under `/api/account/step-up/` send and verify it, and `app/ui/StepUpCodeForm.tsx` is
+  the reusable web form. The sign-in path is unchanged and handles the reassigned-mailbox risk with
+  this pause, not with stronger protection. The billing portal and plan-change routes (#223) must
+  call the helper before acting; those routes do not exist yet, so no existing page uses it.
 - **Issues:** #94, #133 and #134 are closed. #95 covers App Store and Google Play purchases only, and
   says "No web checkout yet". Nothing covered web checkout, more tiers or a billing data model until
   this investigation.
@@ -157,7 +163,7 @@ a plan lapses is not sent and not resubmitted: it ends `failed` with the reason
 | Free owners can post through Buffer | `lib/services/bufferPosting.ts`, `app/api/buffer/` | #216 |
 | The business limit is only checked at creation, so a lapsed owner keeps every business generating; #217 pauses the extra businesses and resumes them on upgrade | `lib/services/generation.ts` | #217 |
 | Deleting an account would not cancel a Stripe subscription, so a deleted owner could keep being charged; now cancelled first, and a failed cancel blocks deletion | `lib/services/accountDeletion.ts` | #220 |
-| Email-code sign-in to an existing Google owner is flagged for review before billing, because of reassigned mailboxes | [design.md](design.md) | #221 |
+| Email-code sign-in to an existing Google owner is flagged for review before billing, because of reassigned mailboxes | [design.md](design.md) | #221: reviewed; sign-in kept as is, with a fresh-code step-up before the portal and plan changes |
 
 ## Changing a plan for testing
 

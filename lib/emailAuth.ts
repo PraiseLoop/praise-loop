@@ -1,12 +1,14 @@
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { signInWithIdentity } from "./authLinking";
 import { query, transaction } from "./db";
-import { EmailError, getEmailTransport, oneTimeCodeEmail, sendEmail } from "./email";
+import { EmailError, getEmailTransport, oneTimeCodeEmail, sendEmail, stepUpCodeEmail } from "./email";
 
-// Sign-in by email one-time code (#157). Codes are short-lived, single use,
-// superseded by a newer request, limited in wrong guesses, and stored only as an
-// HMAC keyed with NEXTAUTH_SECRET. Responses never reveal whether an address has
+// One-time email codes (#157, #221). Sign-in and step-up codes share the same
+// generator, hashing, expiry, attempt limits and throttles; only the purpose
+// differs. A code issued for one purpose is stored with that purpose and can
+// never be consumed by the other. Responses never reveal whether an address has
 // an owner: only a malformed code or an exhausted code is rejected.
+export type EmailCodePurpose = "sign_in" | "step_up";
 export const CODE_TTL_MS = 10 * 60 * 1000;
 export const CODE_MAX_ATTEMPTS = 5;
 // Wrong guesses allowed per address across all of its codes before the address is refused for a while.
@@ -40,8 +42,16 @@ function secret(env: Record<string, string | undefined> = process.env): string |
   return value ? value : null;
 }
 
-function hashCode(email: string, code: string, key: string): string {
-  return createHmac("sha256", key).update(`${email}:${code}`).digest("hex");
+function hashCode(email: string, code: string, key: string, purpose: EmailCodePurpose): string {
+  // Sign-in keeps its original input so codes issued before this change still verify.
+  const input = purpose === "sign_in" ? `${email}:${code}` : `${purpose}:${email}:${code}`;
+  return createHmac("sha256", key).update(input).digest("hex");
+}
+
+// Sign-in keeps its existing keys; step-up has its own budget, so the two paths
+// can never throttle each other.
+function throttleKey(purpose: EmailCodePurpose, kind: "address" | "ip", value: string): string {
+  return purpose === "sign_in" ? `${kind}:${value}` : `step_up:${kind}:${value}`;
 }
 
 const requests = new Map<string, number[]>();
@@ -65,10 +75,10 @@ export type EmailCodeRequest = "sent" | "throttled";
 
 // Always resolves the same way for a valid address. A throttled request sends
 // nothing and is indistinguishable from a delivered one to the caller.
-export async function requestEmailCode(email: string, ip: string, now = Date.now()): Promise<EmailCodeRequest> {
+export async function requestEmailCode(email: string, ip: string, now = Date.now(), purpose: EmailCodePurpose = "sign_in"): Promise<EmailCodeRequest> {
   const key = secret();
   if (!key || !emailSignInConfigured()) throw new EmailSignInNotConfiguredError();
-  const addressKey = `address:${email}`, ipKey = `ip:${ip}`;
+  const addressKey = throttleKey(purpose, "address", email), ipKey = throttleKey(purpose, "ip", ip);
   const allowed = recentRequests(addressKey, now).length < REQUEST_PER_ADDRESS
     && recentRequests(ipKey, now).length < REQUEST_PER_IP;
   if (!allowed) return "throttled";
@@ -76,13 +86,16 @@ export async function requestEmailCode(email: string, ip: string, now = Date.now
   recordRequest(ipKey, now);
 
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
-  const hash = hashCode(email, code, key);
+  const hash = hashCode(email, code, key, purpose);
 
   // Send first. If the message cannot be sent (the transport's own hourly budget, a provider outage),
   // the code that was already delivered must stay valid, so nothing in the database changes. The
   // caller gets the same generic answer either way.
   try {
-    await sendEmail({ to: email, ...oneTimeCodeEmail(code, { minutes: CODE_TTL_MS / 60000 }) });
+    const template = purpose === "step_up"
+      ? stepUpCodeEmail(code, { minutes: CODE_TTL_MS / 60000 })
+      : oneTimeCodeEmail(code, { minutes: CODE_TTL_MS / 60000 });
+    await sendEmail({ to: email, ...template });
   } catch (error) {
     // Keep only a sanitized code in the log.
     const reason = error instanceof EmailError ? error.code : "email_send_failed";
@@ -91,16 +104,17 @@ export async function requestEmailCode(email: string, ip: string, now = Date.now
   }
 
   await transaction(async () => {
-    // Serialize replacement for one address. Without this, two concurrent requests
+    // Serialize replacement for one address and purpose. Without this, two concurrent requests
     // could both see no active row, insert, and leave two unsuperseded codes.
-    await query("SELECT pg_advisory_xact_lock(hashtext($1)::bigint)", [email]);
+    const lockKey = purpose === "sign_in" ? email : `${purpose}:${email}`;
+    await query("SELECT pg_advisory_xact_lock(hashtext($1)::bigint)", [lockKey]);
     await query(
-      "UPDATE email_sign_in_codes SET superseded_at=now() WHERE email=$1 AND consumed_at IS NULL AND superseded_at IS NULL",
-      [email]
+      "UPDATE email_sign_in_codes SET superseded_at=now() WHERE email=$1 AND purpose=$2 AND consumed_at IS NULL AND superseded_at IS NULL",
+      [email, purpose]
     );
     await query(
-      "INSERT INTO email_sign_in_codes(email,code_hash,expires_at) VALUES($1,$2,$3)",
-      [email, hash, new Date(now + CODE_TTL_MS)]
+      "INSERT INTO email_sign_in_codes(email,code_hash,expires_at,purpose) VALUES($1,$2,$3,$4)",
+      [email, hash, new Date(now + CODE_TTL_MS), purpose]
     );
   });
   return "sent";
@@ -112,34 +126,49 @@ export async function verifyEmailCode(email: string, code: string, now = Date.no
   const key = secret();
   if (!key || !CODE_PATTERN.test(code)) return null;
   return transaction(async () => {
-    const row = (await query<{ id: string; code_hash: string; attempts: number; expires_at: Date }>(
-      `SELECT id,code_hash,attempts,expires_at FROM email_sign_in_codes
-       WHERE email=$1 AND consumed_at IS NULL AND superseded_at IS NULL
-       ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
-      [email]
-    )).rows[0];
-    if (!row) return null;
-    // A fresh code resets its own guess count, so an attacker who keeps requesting codes would get five
-    // more guesses each time. Cap the wrong guesses across every code for this address as well. This
-    // lives in Postgres, so a restart or a second web replica does not reset it.
-    const failed = Number((await query<{ n: string }>(
-      "SELECT coalesce(sum(attempts),0) AS n FROM email_sign_in_codes WHERE email=$1 AND created_at > now() - ($2 * interval '1 minute')",
-      [email, ADDRESS_FAILURE_WINDOW_MINUTES]
-    )).rows[0].n);
-    if (failed >= ADDRESS_MAX_FAILURES) return null;
-    if (row.expires_at.getTime() <= now || row.attempts >= CODE_MAX_ATTEMPTS) {
-      await query("UPDATE email_sign_in_codes SET consumed_at=coalesce(consumed_at,now()) WHERE id=$1", [row.id]);
-      return null;
-    }
-    const expected = Buffer.from(row.code_hash, "hex");
-    const actual = Buffer.from(hashCode(email, code, key), "hex");
-    if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
-      await query("UPDATE email_sign_in_codes SET attempts=attempts+1 WHERE id=$1", [row.id]);
-      return null;
-    }
-    await query("UPDATE email_sign_in_codes SET consumed_at=now() WHERE id=$1", [row.id]);
+    if (!await consumeEmailCode(email, code, key, now, "sign_in")) return null;
     return findOrCreateEmailOwner(email);
   });
+}
+
+// A step-up code only marks the current session; it never signs anyone in or
+// creates or links an owner. Returns true when the code was valid and consumed.
+export async function verifyStepUpCode(email: string, code: string, now = Date.now()): Promise<boolean> {
+  const key = secret();
+  if (!key || !CODE_PATTERN.test(code)) return false;
+  return transaction(() => consumeEmailCode(email, code, key, now, "step_up"));
+}
+
+// The shared check for both purposes: newest active code for this address and
+// purpose, the same expiry and attempt limits, and the same per-address cap.
+async function consumeEmailCode(email: string, code: string, key: string, now: number, purpose: EmailCodePurpose): Promise<boolean> {
+  const row = (await query<{ id: string; code_hash: string; attempts: number; expires_at: Date }>(
+    `SELECT id,code_hash,attempts,expires_at FROM email_sign_in_codes
+     WHERE email=$1 AND purpose=$2 AND consumed_at IS NULL AND superseded_at IS NULL
+     ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
+    [email, purpose]
+  )).rows[0];
+  if (!row) return false;
+  // A fresh code resets its own guess count, so an attacker who keeps requesting codes would get five
+  // more guesses each time. Cap the wrong guesses across every code for this address and purpose as
+  // well. This lives in Postgres, so a restart or a second web replica does not reset it.
+  const failed = Number((await query<{ n: string }>(
+    "SELECT coalesce(sum(attempts),0) AS n FROM email_sign_in_codes WHERE email=$1 AND purpose=$2 AND created_at > now() - ($3 * interval '1 minute')",
+    [email, purpose, ADDRESS_FAILURE_WINDOW_MINUTES]
+  )).rows[0].n);
+  if (failed >= ADDRESS_MAX_FAILURES) return false;
+  if (row.expires_at.getTime() <= now || row.attempts >= CODE_MAX_ATTEMPTS) {
+    await query("UPDATE email_sign_in_codes SET consumed_at=coalesce(consumed_at,now()) WHERE id=$1", [row.id]);
+    return false;
+  }
+  const expected = Buffer.from(row.code_hash, "hex");
+  const actual = Buffer.from(hashCode(email, code, key, purpose), "hex");
+  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+    await query("UPDATE email_sign_in_codes SET attempts=attempts+1 WHERE id=$1", [row.id]);
+    return false;
+  }
+  await query("UPDATE email_sign_in_codes SET consumed_at=now() WHERE id=$1", [row.id]);
+  return true;
 }
 
 // The linking policy (#156) lives in lib/authLinking.ts and is shared with Google: a code proves

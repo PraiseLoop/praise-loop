@@ -125,8 +125,12 @@ transactional.
   never link by email; they create their own owner or are linked from a signed-in session. An owner
   already linked to a *different* subject for the same provider is rejected. The last method can't be
   unlinked. Owners are never merged automatically. Decided and accepted: an email code can sign in
-  to an existing Google owner with the same verified address (risk: a reassigned mailbox; revisit
-  before billing or a live posting connection exist). See [auth.md](auth.md).
+  to an existing Google owner with the same verified address (risk: a reassigned mailbox). Before
+  billing (#221) the owner kept that path unchanged and added a fresh-code step-up for sensitive
+  steps: the billing portal and plan changes call `requireRecentStepUp`, which needs a code sent to
+  the address on the signed-in owner's row within ten minutes (or, for owners with no address, a
+  session under ten minutes old). It pauses the action; it does not protect against whoever holds
+  the mailbox. See [auth.md](auth.md) and [decisions.md](decisions.md).
 - **Sessions**: web uses NextAuth with revocable database sessions (cookie, 8 hours); the phone uses
   hashed bearer tokens in the same `auth_sessions` table (`kind='mobile'`), stored in the keychain.
   Any 401 on the phone clears the token and returns to sign-in.

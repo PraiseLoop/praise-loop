@@ -411,6 +411,41 @@ the mailbox.
   process and fake transport only); the seeder also creates an email-only owner
   (`demo-email@praiseloop.invalid`) so the flow can be walked without a mailbox.
 
+### Step-up before sensitive steps (#221)
+
+The owner decided that email-code sign-in to an existing Google owner stays exactly as it is.
+The reassigned-mailbox risk is handled with a pause before sensitive actions (the billing portal
+and plan changes, #223), not by narrowing the documented recovery path. This is a pause, not
+strong protection: whoever holds the mailbox can also receive the step-up code.
+
+- `POST /api/account/step-up/request` and `POST /api/account/step-up/verify` are owner-wide
+  routes wrapped in `ownerRoute` and listed in `OWNER_WIDE_PATHS`. The code address is read from
+  the signed-in owner's `auth_users.email` only; an `email` in the request body is ignored and
+  never echoed.
+- Step-up codes reuse `lib/emailAuth.ts`: the same generator, HMAC keyed with `NEXTAUTH_SECRET`,
+  ten-minute code lifetime, single use, five wrong guesses, the per-address failure cap and the
+  request throttles. The rows share `email_sign_in_codes` but carry `purpose = 'step_up'`.
+  Sign-in requests are `purpose = 'sign_in'`; each purpose has its own active code, supersede
+  rule, attempt cap and throttle, so a sign-in code cannot verify a step-up and a step-up code
+  cannot sign anyone in.
+- A successful verify sets `auth_sessions.step_up_at` on that session only. `STEP_UP_TTL_MS` in
+  `lib/stepUp.ts` is the single ten-minute constant; another open session of the same owner stays
+  unmarked, a new session starts NULL, and signing out deletes the marked row with the session.
+  Migration `025_step_up.sql` adds the column. `auth_sessions` already had `created_at`
+  (migration 012), so no new timestamp was needed; existing rows have `step_up_at = NULL`.
+- `requireRecentStepUp()` in `lib/stepUp.ts` returns `null` when the session is fresh enough, or a
+  ready-made `403` response: `{ "error": "step_up_required" }` when the step-up is missing or
+  older than ten minutes. A route uses it in one line:
+  `const denied = await requireRecentStepUp(); if (denied) return denied;`
+- Owners with no `auth_users.email` (for example Apple or Microsoft owners) cannot receive a
+  code. They pass only while their session's `created_at` is under ten minutes old; otherwise
+  the request route and helper answer `403 { "error": "sign_in_again" }`, and verify does too.
+- The reusable web form is `app/ui/StepUpCodeForm.tsx`; no page uses it yet. Neither the code nor
+  the address is logged. `scripts/test-step-up.ts` covers correct, wrong, expired and exhausted
+  codes, throttling, another owner's code, the two purposes not being interchangeable, the
+  ten-minute expiry, another session not being marked, sign-out, the no-address fallback and
+  anonymous requests.
+
 Push tokens (#88): `POST /api/mobile/push-tokens` (`{token, platform}`) registers or refreshes
 the signed-in owner's Expo push token and `DELETE` (`{token}`) removes it on sign-out; a
 token can only be removed by its owner. When a business's weekly generation period has
