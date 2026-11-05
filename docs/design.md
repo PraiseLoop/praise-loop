@@ -4,7 +4,7 @@
 who are about to change it. It summarises and links; the detailed, authoritative text lives in the
 other docs. When you change behaviour, update the detailed doc and the matching line here.
 
-Last reviewed: 2026-11-05 (direct Meta publishing feasibility, #234).
+Last reviewed: 2026-11-05 (Stripe checkout, webhook and portal, #223; direct Meta publishing, #234).
 
 | Doc | What it is the source of truth for |
 | --- | --- |
@@ -14,7 +14,7 @@ Last reviewed: 2026-11-05 (direct Meta publishing feasibility, #234).
 | [features.md](features.md) | One section per shipped feature (what it does, tests, rollback) |
 | [decisions.md](decisions.md) | Dated log of decisions and why (add one for anything architectural) |
 | [mobile-plan.md](mobile-plan.md) | Why the product is mobile-first, phases, plans and pricing |
-| [billing.md](billing.md) | The billing and tiers investigation, subscription data model and order of work (payments not built) |
+| [billing.md](billing.md) | The billing and tiers investigation, subscription data model, Stripe checkout/webhook/portal and order of work |
 | [integrations.md](integrations.md) | Email, Buffer, direct Meta publishing and Google Business Profile feasibility and status |
 | [development.md](development.md) | Running it locally, env variables, tests, hosting, backups |
 | [android-release.md](android-release.md) | Building the Android APK on a tag for Obtainium |
@@ -152,13 +152,12 @@ transactional.
   posts fail closed, and a saved Pro design stays saved but new images render the Classic design.
   After any downgrade only the oldest
   businesses within the limit generate, and the rest are paused until an upgrade (#217). Plan
-  changes are operator-only
-  (`scripts/set-plan.ts`), except that the pilot can allow self-service upgrades to Pro for a
-  comma-separated email list in `SELF_SERVICE_UPGRADE_EMAILS`; the fake billing provider can walk a
-  subscription locally but is refused in production (#219); Stripe web billing (#225) and store
-  subscriptions (#95) are not built. Deleting an account cancels every live provider subscription
-  first, and a failed cancel leaves the account and sessions intact (#220). The planned design is
-  in [billing.md](billing.md).
+  changes are operator grants, or a verified Stripe webhook from a checkout or the customer portal
+  (#223); there is no self-service upgrade outside payment. The fake billing provider can walk a
+  subscription locally but is refused in production (#219); Stripe web billing (#225) is built and
+  store subscriptions (#95) are not. Deleting an account cancels every live provider subscription
+  first, and a failed cancel leaves the account and sessions intact (#220). The design is in
+  [billing.md](billing.md).
 - **Dev sign-in** (`MOBILE_DEV_AUTH=1`, never in production): demo owners (Pro, Business, Free, email-only) on
   the phone and the web landing page, backed by `lib/devAuth.ts` and the dev seeder.
 
@@ -257,8 +256,9 @@ endpoints take the Page token or the User token, to be settled by the owner-appr
 | Area | State | Issues |
 | --- | --- | --- |
 | Weekly generation, approval, slots, branding, CSV import, onboarding | shipped | #9, #24–#28, #30, #43–#45 |
-| Plans/entitlements, plan page, public plans page | shipped (no payments) | #94, #133, #134 |
-| Subscription tables, provider interface, fake checkout, cancel on deletion | built; no real provider or payment | #219, #220 |
+| Plans/entitlements, plan page, public plans page | shipped; paid web plans through Stripe checkout | #94, #133, #134, #223 |
+| Subscription tables, provider interface, fake checkout, cancel on deletion | built; no real provider event in tests beyond fixtures | #219, #220 |
+| Stripe web checkout, webhook and customer portal | built; Stripe test-mode run **not run** (webhook secret not configured) | #223 |
 | Email-code, Google, linked methods, profile (web + phone), delete account | shipped | #149–#151, #156, #157, #93 |
 | Phone queue, detail, share sheet, Save to Photos, new version | shipped; device runs pending | #86, #87 |
 | Demo owner picker, dev seeder | shipped | #129, #154 |
@@ -270,7 +270,7 @@ endpoints take the Page token or the User token, to be settled by the owner-appr
 | Real scheduler through Buffer | Paid (Pro and Business) automatic posting; Connect + screen built; worker posting, image links, cancel and the off/draft/live gate built (#29 part 3); **never run live**; status display and `unknown` resolution not built | #29, #216 |
 | Google review sync, AI review replies | blocked on access/policy | #46, #96 |
 | Apify Google reviews stopgap | built; client proven with one live run, full flow not yet run live; hidden without `APIFY_TOKEN` | #232 |
-| Stripe web billing, Business tier | planned, see [billing.md](billing.md) | #225 |
+| Business tier | planned, see [billing.md](billing.md) | #222, #225 |
 | Store subscriptions, VPS, pilot hosting, store accounts | not started / owner tasks | #95, #98, #90, #91 |
 | Email + password | needs explicit owner approval first | #159 |
 
@@ -354,8 +354,8 @@ Open work and blockers are tracked in GitHub issues; this table is a snapshot.
 - **Apple-only owners** can't set up a business: the web has no Apple sign-in and the phone has no
   setup flow. They must link Google first. A phone-to-web session handoff (or web Apple sign-in) is
   the proper fix.
-- **Store subscriptions** (#95) and a VPS (#98) are not started; plans can only be changed by an
-  operator.
+- **Store subscriptions** (#95) and a VPS (#98) are not started; paid web plans come from Stripe
+  checkout (#223) and Business pricing is still open (#222).
 - **Replies to Google reviews** (#96) need a decision on the write API before any code posts.
 - **Manual checks never run on hardware**: native Google/Apple/Microsoft sign-in, push, Save to
   Photos and the Instagram/Facebook share behaviour (#85–#89, #92).

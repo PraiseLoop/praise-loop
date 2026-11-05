@@ -176,10 +176,32 @@ curl -s http://localhost:3000/api/dev/billing -H 'Content-Type: application/json
   -d '{"action":"checkout","owner":"pro","plan":"business"}'
 ```
 
-Every action goes through the same `applyBillingEvent` path a real webhook will
-use (#223), so duplicates, out-of-order deliveries and the owner's plan read the
+Every action goes through the same `applyBillingEvent` path the Stripe webhook
+uses (#223), so duplicates, out-of-order deliveries and the owner's plan read the
 same as production. `GET /api/entitlements` stays read-only. The fake adapter is
 refused by a production build and no payment or network call is made.
+
+### Stripe test mode
+
+Checkout and the portal need `STRIPE_SECRET_KEY`, `STRIPE_PRICE_PRO` (and
+`STRIPE_PRICE_BUSINESS` when #222 settles a price) plus `NEXTAUTH_URL`. Checkout
+also needs `STRIPE_WEBHOOK_SECRET`, because it refuses to sell when it could not
+receive the event that grants the plan. Use Stripe test-mode keys and test cards
+only; no live charge runs in development.
+
+Webhooks need `STRIPE_WEBHOOK_SECRET` and a forwarder:
+
+```sh
+stripe listen --forward-to localhost:3000/api/billing/webhook
+```
+
+Copy the `whsec_…` secret it prints into `.env`. Checkout returns a Stripe URL;
+the plan changes only when the webhook arrives and re-reads the subscription.
+The account page shows a short "confirming" notice and reloads the plan, but the
+success redirect itself grants nothing. Business has no price or button until
+#222, and the App Store / Google Play purchases remain out of scope (#95). A
+test-mode run with a test card has not been recorded yet: the webhook secret is
+not configured for this repository.
 
 ## Quickstart — all containers (production-style)
 
@@ -217,13 +239,15 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `APIFY_REVIEW_RUN_INTERVAL_HOURS` | no | One Apify run per business per interval on every plan (default `24`). A failed or timed-out run can be retried |
 | `APIFY_MAX_CHARGE_USD` | no | Apify's `maxTotalChargeUsd` for every run (default `0.50`). This is a spend cap on the owner's own Apify account |
 | `MEDIA_ROOT` | no | Where rendered draft images are written/served (default `private-media`, the owner-protected `generated_media` volume mount in Compose; host upgrades must move existing images there as described in [auth.md](auth.md)) |
-| `CREDENTIAL_ENCRYPTION_KEY` | for provider tokens | 32 random bytes, base64. Encrypts Buffer tokens and Meta Page tokens at rest. Changing it makes stored tokens undecryptable, so owners must reconnect |
+| `CREDENTIAL_ENCRYPTION_KEY` | for provider tokens | 32 random bytes, base64. Encrypts Buffer tokens, Meta Page tokens and the Buffer PKCE verifier at rest. Changing it makes stored tokens undecryptable, so owners must reconnect |
 | `META_APP_ID` / `META_APP_SECRET` | for Meta connect | Business-type Meta app credentials (#234, [integrations.md](integrations.md)). Missing either, the encryption key or a redirect base makes `POST /api/meta/connect` answer 503. Never commit the secret |
 | `META_REDIRECT_URI` | no | Optional override; defaults to `${NEXTAUTH_URL}/api/meta/callback`. Must match the Facebook app's redirect URI exactly |
 | `META_CONFIG_ID` | no | Optional Facebook Login for Business configuration id; when set it replaces the scope list with the permissions configured in the app dashboard |
 | `META_GRAPH_VERSION` | no | Graph API version used by connect (default `v27.0`); an invalid value fails closed |
-| `SELF_SERVICE_UPGRADE_EMAILS` | no | Comma-separated verified owner emails allowed to see **Upgrade to Pro** on `/account` and change their own plan to open-ended Pro (no payment). Empty or unset allows nobody. Written to `owner_plan_events` with the email as actor |
-| `BILLING_PROVIDER` | no | `fake` enables the local billing adapter and the development-only `POST /api/dev/billing` walkthrough (#219). Refused in a production process, like `MOBILE_DEV_AUTH`; no provider or payment is configured yet |
+| `STRIPE_SECRET_KEY` | for checkout | Stripe secret key (#223). Missing it hides checkout and the portal (503) and no plan can be bought. Development uses a test-mode key |
+| `STRIPE_WEBHOOK_SECRET` | for webhooks | Signing secret from the Stripe dashboard or `stripe listen`. Missing it makes `/api/billing/webhook` answer 503, so no event is trusted |
+| `STRIPE_PRICE_PRO` / `STRIPE_PRICE_BUSINESS` | per paid plan | Recurring monthly price ids. A plan without a price cannot be checked out; Business stays unset until #222 |
+| `BILLING_PROVIDER` | no | `fake` enables the local billing adapter and the development-only `POST /api/dev/billing` walkthrough (#219). Refused in a production process, like `MOBILE_DEV_AUTH`; Stripe is selected instead when its keys are set |
 | `REDIS_URL` | no | Reserved for future queue work; unused by the current worker |
 
 Postgres and Redis ports are bound to loopback (`127.0.0.1`) only — reachable

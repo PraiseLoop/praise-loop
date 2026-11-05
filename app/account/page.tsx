@@ -8,9 +8,9 @@ import { useCallback, useEffect, useState } from "react";
 import { ADD_NAME_HINT, ADD_NAME_PROMPT, displayName } from "../../lib/profileDisplay";
 import { expiryNote, formatLocalDate, pausedBusinessMessage, planName, quotaMetMessage } from "../../lib/planDisplay";
 import { usePlan } from "../ui/usePlan";
-import PlanUpgrade from "./PlanUpgrade";
+import BillingActions from "./BillingActions";
 
-const sources = { default: "Default plan", manual: "Set manually or with a pilot upgrade", store: "App store subscription", stripe: "Web subscription" } as const;
+const sources = { default: "Default plan", manual: "Set manually or by our team", store: "App store subscription", stripe: "Web subscription" } as const;
 // Review sync (#46) and AI replies (#96) have no feature behind them yet, so a
 // plan that allows them still reads as planned, never as included.
 const plannedOrNo = (value: boolean) => value ? "Planned — not available yet" : "Not included";
@@ -21,9 +21,9 @@ const methodName = (provider: string) => providerNames[provider] ?? provider;
 const methodAdded = (addedAt: string | null) => addedAt ? `Added ${addedAt.slice(0, 10)}` : "Added before we tracked method dates";
 
 // The full profile and plan page (#150), reached from the profile menu. The name is
-// the only editable part; email is the verified sign-in address. Plans are changed
-// by operators, a verified store webhook, or a pilot self-service upgrade whose
-// email allowlist the server checks.
+// the only editable part; email is the verified sign-in address. Plans change only
+// from an operator grant or a verified provider event; checkout and the portal
+// live in BillingActions and grant nothing by themselves.
 export default function AccountPage() {
   const { status } = useBusiness();
   const { profile, loaded } = useProfile();
@@ -165,7 +165,7 @@ export default function AccountPage() {
             <div key={label}><dt className="pl-small pl-muted">{label}</dt><dd style={{ margin: 0, fontWeight: 600 }}>{value}</dd></div>
           ))}
         </dl>
-        <PlanUpgrade plan={plan.plan} onUpgraded={() => void reloadPlan()} />
+        <BillingActions plan={plan.plan} source={plan.source} onReload={reloadPlan} />
       </section>
 
       <section aria-labelledby="usage-h" style={{ display: "flex", flexDirection: "column", gap: 16 }}>

@@ -33,7 +33,7 @@ export async function chargeGeneration(owner: string, amount = 1, kind = "genera
   return !!(await query(`INSERT INTO owner_usage(owner_id,day,kind,calls) VALUES($1,(now() AT TIME ZONE 'UTC')::date,$2,$3)
     ON CONFLICT(owner_id,day,kind) DO UPDATE SET calls=owner_usage.calls+$3 WHERE owner_usage.calls+$3<=$4 RETURNING calls`, [owner,kind,amount,limit])).rowCount;
 }
-const OWNER_WIDE_PATHS = ["/api/businesses", "/api/branding/preview", "/api/drafts/bulk", "/api/onboarding", "/api/mobile/session/revoke", "/api/entitlements", "/api/plan/upgrade", "/api/mobile/push-tokens", "/api/profile", "/api/account", "/api/account/methods", "/api/account/step-up/request", "/api/account/step-up/verify", "/api/buffer/connect", "/api/buffer/connection", "/api/meta/connect", "/api/meta/connection"];
+const OWNER_WIDE_PATHS = ["/api/businesses", "/api/branding/preview", "/api/drafts/bulk", "/api/onboarding", "/api/mobile/session/revoke", "/api/entitlements", "/api/billing/checkout", "/api/billing/portal", "/api/mobile/push-tokens", "/api/profile", "/api/account", "/api/account/methods", "/api/account/step-up/request", "/api/account/step-up/verify", "/api/buffer/connect", "/api/buffer/connection", "/api/meta/connect", "/api/meta/connection"];
 export function ownerRoute(handler: (req: NextRequest, context: any) => Promise<Response>) {
   return async (req: NextRequest, context?: any) => {
     const started = Date.now();

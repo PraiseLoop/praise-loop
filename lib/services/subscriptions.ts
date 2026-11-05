@@ -56,6 +56,10 @@ export type BillingEvent = {
   status: string;
   currentPeriodEnd: Date | string | null;
   cancelAtPeriodEnd?: boolean;
+  // The provider's customer id, when the event carries one. Optional so the fake
+  // adapter and older callers stay unchanged; a missing value never clears a
+  // stored one.
+  customerId?: string | null;
   occurredAt: Date | string;
 };
 
@@ -113,7 +117,7 @@ export async function applyBillingEvent(event: BillingEvent): Promise<ApplyBilli
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`${event.provider}:${event.externalId}`]);
 
     const existing = (await client.query(
-      `SELECT owner_id,plan,status,current_period_end,cancel_at_period_end,last_event_at
+      `SELECT owner_id,plan,status,current_period_end,cancel_at_period_end,last_event_at,customer_id
        FROM owner_subscriptions WHERE provider=$1 AND external_id=$2 FOR UPDATE`,
       [event.provider, event.externalId]
     )).rows[0];
@@ -135,16 +139,27 @@ export async function applyBillingEvent(event: BillingEvent): Promise<ApplyBilli
       || existing.cancel_at_period_end !== cancelAtPeriodEnd;
 
     await client.query(
-      `INSERT INTO owner_subscriptions(owner_id,provider,external_id,plan,status,current_period_end,cancel_at_period_end,last_event_at,updated_at)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,now())
+      `INSERT INTO owner_subscriptions(owner_id,provider,external_id,plan,status,current_period_end,cancel_at_period_end,last_event_at,customer_id,updated_at)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,now())
        ON CONFLICT(provider,external_id) DO UPDATE SET
          plan=EXCLUDED.plan,
          status=EXCLUDED.status,
          current_period_end=EXCLUDED.current_period_end,
          cancel_at_period_end=EXCLUDED.cancel_at_period_end,
          last_event_at=EXCLUDED.last_event_at,
+         customer_id=COALESCE(EXCLUDED.customer_id, owner_subscriptions.customer_id),
          updated_at=now()`,
-      [event.ownerId, event.provider, event.externalId, event.plan, event.status, currentPeriodEnd, cancelAtPeriodEnd, occurredAt]
+      [
+        event.ownerId,
+        event.provider,
+        event.externalId,
+        event.plan,
+        event.status,
+        currentPeriodEnd,
+        cancelAtPeriodEnd,
+        occurredAt,
+        event.customerId ?? null
+      ]
     );
 
     if (changed) {

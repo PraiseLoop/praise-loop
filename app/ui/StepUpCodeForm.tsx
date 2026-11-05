@@ -3,9 +3,9 @@ import { useId, useState } from "react";
 import { apiFetch } from "../apiFetch";
 
 // Reusable fresh-code check for a sensitive step (#221). It sends a code to the
-// signed-in owner's own address and reports when that code is accepted. Billing
-// and plan-change screens (#223) mount it before opening the portal; no page uses
-// it yet. It never shows or stores the address or the code.
+// signed-in owner's own address and reports when that code is accepted.
+// BillingActions mounts it before checkout or the billing portal (#223). It never
+// shows or stores the address or the code.
 export default function StepUpCodeForm({ onVerified, title = "Confirm it’s you" }: { onVerified?: () => void; title?: string }) {
   const [stage, setStage] = useState<"idle" | "sent" | "verified">("idle");
   const [code, setCode] = useState("");

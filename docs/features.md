@@ -516,18 +516,22 @@ The limits live in `lib/services/entitlements.ts` and are enforced on the server
   instant). Usage reads `generation_periods` and `generationWeek`, so it never
   disagrees with what the generator enforces. `expired` is true when a stored
   Pro or Business plan has lapsed and is read as Free, and `expiredPlan` names
-  the stored plan for the expiry copy. Apart from the allowlisted pilot
-  upgrade below, no route lets an owner change their own plan.
+  the stored plan for the expiry copy. No route lets an owner change their plan
+  to a paid tier without paying: checkout and the customer portal go through
+  Stripe and the webhook is the only writer (#223).
 
 ### Plan page and limit messages (#133)
 
-Plans show no prices (pricing is decided after the pilot; see
-`docs/mobile-plan.md`). During the pilot an owner whose verified email is on the
-server's allowlist sees an **Upgrade to Pro** button; everyone else sees the plan
-as read-only.
+Plans are published: Pro is CA$29.99 a month, plus tax; Business pricing is still
+open (#222), so its card says "Contact us for pricing" and has no upgrade button.
+A Free owner sees **Upgrade to Pro** on `/account`, which confirms a fresh code
+with `StepUpCodeForm`, then opens Stripe Checkout. An owner whose plan came from
+Stripe sees **Manage subscription**, which opens the customer portal. The success
+redirect grants nothing; only the verified webhook changes the plan, so the page
+shows a short "confirming" notice and reloads.
 
 - **Plan page** (`/account`, reached from the profile menu; #150): the plan, where it came from
-  (default, manual or store), its expiry, what it includes (posts per week,
+  (default, manual, store or web subscription), its expiry, what it includes (posts per week,
   quote-card designs, watermark, automatic posting, review sync, AI replies, businesses) and
   per-business usage such as "1 of 1 post this week" with the reset date. Review
   sync and AI replies read as planned, never included (#218).
@@ -538,7 +542,9 @@ as read-only.
 - **Brand settings** shows the plan's weekly allowance beside "Posts per week",
   and says how many will be made when the target is higher.
 - **Phone app**: the queue screen shows the same limit message; the plan details
-  themselves moved to the Profile screen (#151) and read the same endpoint.
+  themselves moved to the Profile screen (#151) and read the same endpoint. The
+  phone shows status only: no upgrade prompt and no link to web checkout, because
+  Apple's rules outside the US do not allow it until store purchases exist (#95).
   Wording lives in `lib/planDisplay.ts` (web) and
   `mobile/src/queue/planSummary.ts` (phone) and both are covered by tests.
   An installed app accepts any non-empty plan name the server sends, so a new
@@ -547,7 +553,7 @@ as read-only.
 - Onboarding does not yet mention the limit; that is a follow-up.
 
 Expired Pro or Business falls back to Free at read time without deleting the stored plan, so
-a renewal restores it. Operators set plans with:
+a renewal restores it. Operators can still set plans with:
 
 ```sh
 npm run plan:set -- owner@example.com pro --reason "Pilot upgrade"
@@ -562,25 +568,40 @@ docker compose exec worker node dist-worker/scripts/set-plan.js owner@example.co
 ```
 
 The script resolves an email or business to the owner and records the actor,
-reason and expiry in `owner_plan_events`. Payment-provider purchases will use
-the same module from a verified webhook (#95); the subscription tables and fake
-adapter are built (#219) but no real provider is connected. Migration 012 is additive;
+reason and expiry in `owner_plan_events`. Stripe purchases use the same
+subscription tables from the verified webhook (#223). Migration 012 is additive;
 rollback can leave the plan tables in place while reverting the checks.
 
-For the pilot, `SELF_SERVICE_UPGRADE_EMAILS` can hold a comma-separated list of
-verified owner emails. A listed owner sees **Upgrade to Pro** on `/account`;
-`GET /api/plan/upgrade` reports whether the button should appear, and
-`POST /api/plan/upgrade` sets an open-ended manual Pro plan (no payment). The
-change is recorded in `owner_plan_events` with the owner's email as actor and
-reason "Self-service pilot upgrade". An empty or unset list refuses every owner,
-so deployments that do not opt in keep plan changes operator-only. Repeating the
-request changes nothing.
+### Web checkout, webhook and portal (#223)
+
+`POST /api/billing/checkout` creates a Stripe Checkout session after
+`requireRecentStepUp`; the client sends only a plan key and the server picks the
+price. A plan with no configured price is a `400`, an owner with a live Stripe
+subscription is a `409` pointed at the portal, and missing config is a `503`.
+`automatic_tax[enabled]=true` shows tax at checkout. `POST /api/billing/portal`
+looks up the stored customer id and returns Stripe's portal URL for card changes
+or cancellation.
+
+`app/api/billing/webhook/route.ts` is public and verifies the Stripe signature on
+the raw body before parsing. It handles checkout, subscription created/updated/
+deleted, invoice paid/failed/succeeded and `charge.refunded`, always re-reads the
+subscription from Stripe, and applies it through `applyBillingEvent`. A refund is
+acknowledged and does not cancel a subscription. Unknown owners write nothing; a
+still-billable subscription for a deleted owner is cancelled at Stripe so a late
+checkout cannot keep charging. Repeat cancels and a missing subscription are
+success. The three-day `past_due` grace lives in `PAST_DUE_GRACE_PERIOD_MS`.
+`customer_id` is stored by migration 027 and never cleared by an event that omits
+it. The full fixtures are in `scripts/test-stripe-billing.ts`; a Stripe test-mode
+run with a test card has **not** been run because the webhook secret is not
+configured.
 
 ### Public plans page (#134)
 
 `/plans` is public: a signed-out visitor sees the Free, Pro and Business cards, what
 differs (posts each week per business, watermark, automatic posting, review sync, AI replies, brand
-voice, businesses) and a "Continue with Google" call to action. The landing
+voice, businesses) and a "Continue with Google" call to action. Pro shows
+CA$29.99 a month plus tax and an **Upgrade to Pro** button; Business says
+"Contact us for pricing" and has no button because #222 is open. The landing
 page links to it from the header and the call to action, and also offers an
 "Email me a sign-in code" option (#157) for owners without Google. When the server
 has Microsoft credentials, the landing page adds "Continue with Microsoft" too
@@ -593,15 +614,16 @@ sign-in wall does not hide it.
   numbers. `scripts/test-plans.ts` fails when a limit changes, when a new limit
   is not classified as shipped, planned or unlisted, or when a limit without a
   feature is advertised as available.
-- Prices stay off the page (`PLAN_PRICING = null`) until the owner records the
-  Free/Pro/Business prices in `docs/decisions.md`. The test fails if a pricing decision is
-  recorded without prices, or if a price appears before one is.
+- Prices come from `PLAN_PRICING`, recorded in `docs/decisions.md` in the same
+  change. The test fails if a pricing decision is recorded without prices, if a
+  price appears before the decision, or if the Pro price differs. Business has no
+  number until #222.
 - Wording is honest about what ships: Free's small watermark is stated plainly,
   the four quote-card designs are compared, and review sync and AI replies read
-  "Planned — not available yet". Nothing implies posting is connected or that
-  there is a checkout.
-- There is no payment, web checkout, promo code or plan-change control here;
-  plans are still changed by operators or a store webhook (#95).
+  "Planned — not available yet". Nothing implies posting is connected.
+- The page never starts a checkout. Its Pro button uses the session: a signed-in
+  owner goes to `/account?plan=pro`, and a signed-out visitor signs in with
+  Google first. Checkout, step-up and the portal live only on `/account` (#223).
 - A 401 while signed out does not redirect off `/plans` (`lib/sessionExpiry.ts`
   treats `/` and `/plans` as public pages), so a visitor can read the plans and
   then choose "Continue with Google".
@@ -829,9 +851,11 @@ phone copy has no purchase link or prompt.
   bill is cancelled through the provider (store subscriptions are skipped because
   we cannot cancel them). A failed cancel returns `503` with a retry message and
   deletes nothing, so the owner stays signed in and a retry is safe even if an
-  earlier attempt cancelled only some rows. An owner with no subscriptions needs
-  no billing provider and makes no network call. A provider event that arrives
-  after the owner is gone is acknowledged and records nothing (#220).
+  earlier attempt cancelled only some rows; a second cancel and a subscription
+  already missing at Stripe are success (#223). An owner with no subscriptions
+  needs no billing provider and makes no network call. A provider event that
+  arrives after the owner is gone is acknowledged and records nothing, and a
+  still-billable subscription is cancelled at Stripe (#220, #223).
 - The deletion, cascade list, media cleanup and the "nothing is kept today"
   policy are documented in [auth.md](auth.md#deleting-an-account-93). There is no
   soft delete or recovery period.
@@ -843,7 +867,8 @@ phone copy has no purchase link or prompt.
   `mobile/src/api/account.ts`. `scripts/test-account-deletion.ts` runs against a
   disposable database (owner A deleted, owner B untouched, media and sessions
   checked, live subscriptions cancelled, a failed cancel and a retry) and is in
-  the `npm test` chain. `scripts/test-billing.ts` covers the late event.
+  the `npm test` chain. `scripts/test-billing.ts` covers the late event and
+  `scripts/test-stripe-billing.ts` covers Stripe cancels and repeat attempts.
 - Rollback: no schema change is involved. Restoring a deleted account is not
   possible; stop deploying the route to disable the feature.
 

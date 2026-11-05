@@ -1,7 +1,7 @@
 import { readdir, rm } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { query, transaction } from "../db";
-import { billingProvider, fakeBillingEnabled, type BillingProvider } from "../integrations/billing";
+import { billingCanceller, fakeBillingEnabled, type BillingCanceller } from "../integrations/billing";
 import { mediaRoot } from "./media";
 
 export const DELETE_CONFIRMATION = "DELETE";
@@ -22,7 +22,7 @@ type CancellableSubscription = { provider: string; external_id: string };
 // the deletion rather than leaving a subscription that can still charge.
 export async function cancelOwnerSubscriptions(
   ownerId: string,
-  providerFor: () => BillingProvider = billingProvider
+  providerFor: () => BillingCanceller = billingCanceller
 ): Promise<void> {
   const subscriptions = (await query<CancellableSubscription>(
     `SELECT provider, external_id FROM owner_subscriptions
@@ -35,7 +35,7 @@ export async function cancelOwnerSubscriptions(
   const cancellable = subscriptions.filter(row => row.provider !== "store" && (row.provider !== "fake" || fakeBillingEnabled()));
   if (!cancellable.length) return;
 
-  let provider: BillingProvider;
+  let provider: BillingCanceller;
   try {
     provider = providerFor();
   } catch {
