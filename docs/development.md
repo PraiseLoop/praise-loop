@@ -203,6 +203,25 @@ success redirect itself grants nothing. Business has no price or button until
 test-mode run with a test card has not been recorded yet: the webhook secret is
 not configured for this repository.
 
+**Stripe CLI as a stack (Dockhand and other single-file tools).** `docker-compose.stripe-listen.yml`
+runs `stripe listen` as its own stack, next to `docker-compose.standalone.yml` and joined to the same
+`edge` network. It connects out to Stripe and forwards test-mode events to
+`http://praiseloop-web:3000/api/billing/webhook`, so Stripe never has to pass the WAF that guards a
+development hostname. Variables, set in the tool's stack environment:
+
+| Variable | Required | Meaning |
+| --- | --- | --- |
+| `STRIPE_SECRET_KEY` | yes | Test-mode key (`sk_test_…` or restricted `rk_test_…`). The stack refuses to start without it |
+| `EDGE_NETWORK` | no | Shared network name; must match the main stack (default `edge`) |
+| `STRIPE_FORWARD_TO` | no | Target URL; the default is the `web` alias on `edge` |
+
+Read the `whsec_…` the container logs on start ("Ready! Your webhook signing secret is …") and set it as
+`STRIPE_WEBHOOK_SECRET` in the **main** stack, then redeploy that stack. The value is stable while the
+`stripe_config` volume and the key stay the same. It is not the dashboard endpoint's secret: remove that
+endpoint for the same host, or each event is delivered twice. This is for test mode only; real payments
+need a dashboard webhook endpoint. The container shares `edge` with `web`, which trusts client-IP headers
+from that network, so run only this container and cloudflared on it.
+
 ## Quickstart — all containers (production-style)
 
 ```bash

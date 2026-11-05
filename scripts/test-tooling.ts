@@ -129,4 +129,12 @@ assert.match(mobileEntry, /REACT_NATIVE_PACKAGER_HOSTNAME/, "the packager hostna
 assert.match(mobileEntry, /EXPO_PUBLIC_API_BASE_URL/, "the app must be pointed at the LAN address");
 assert.match(mobileEntry, /^set -eu$/m, "the entrypoint must fail fast");
 assert.match(read("mobile/tsconfig.json"), /\.expo\/types/, "Expo adds this include on start; keep it committed so it does not rewrite the file");
+// The Stripe CLI forwarder is its own test-mode stack on the shared edge network, like the tunnel.
+const stripeListen = read("docker-compose.stripe-listen.yml");
+assert.match(stripeListen, /image: stripe\/stripe-cli:v\d+\.\d+\.\d+\n/, "the Stripe CLI image must be pinned to a version");
+assert.match(stripeListen, /STRIPE_API_KEY=\$\{STRIPE_SECRET_KEY:\?/, "the key must be required and reach the CLI through its environment, not the command line");
+assert.doesNotMatch(stripeListen, /--api-key|^\s+(build|ports):/m, "the forwarder takes no key argument, build or published port");
+assert.match(stripeListen, /http:\/\/praiseloop-web:3000\/api\/billing\/webhook/, "events go to web over the edge alias");
+assert.match(stripeListen, /name: \$\{EDGE_NETWORK:-edge\}\n {4}external: true/, "it joins the shared external edge network");
+assert.doesNotMatch(stripeListen, /sk_(live|test)_[A-Za-z0-9]{8,}/, "no Stripe key in the repo");
 console.log("tooling regression tests passed");
