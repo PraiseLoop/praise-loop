@@ -56,6 +56,12 @@ services:
       - BUFFER_REDIRECT_URI=${BUFFER_REDIRECT_URI:-}
       - CREDENTIAL_ENCRYPTION_KEY=${CREDENTIAL_ENCRYPTION_KEY:-}
       - BUFFER_POSTING_MODE=${BUFFER_POSTING_MODE:-off}
+      # Direct Meta connect (#234); empty leaves connect answering 503.
+      - META_APP_ID=${META_APP_ID:-}
+      - META_APP_SECRET=${META_APP_SECRET:-}
+      - META_REDIRECT_URI=${META_REDIRECT_URI:-}
+      - META_CONFIG_ID=${META_CONFIG_ID:-}
+      - META_GRAPH_VERSION=${META_GRAPH_VERSION:-v27.0}
       # Apify Google reviews stopgap (#232); empty hides the feature.
       - APIFY_TOKEN=${APIFY_TOKEN:-}
       - APIFY_REVIEW_LIMIT_FREE=${APIFY_REVIEW_LIMIT_FREE:-5}

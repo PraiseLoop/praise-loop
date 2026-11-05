@@ -446,11 +446,12 @@ real business name is committed in tests or sample data.
 
 ## Direct Instagram and Facebook publishing (#234) — checked 2026-11-05
 
-Status: the feasibility gate passes, with owner-side app setup still required. The stub and its
-fake adapter are built in `lib/integrations/metaPublishing.ts`; the live client, OAuth connect and
-publishing are **not built**, no Meta app or access token exists, and **no live call has been run**.
-#234 stays open. Everything below is from Meta's own documentation on 2026-11-05 (Graph API v27.0);
-vendor blogs were not used.
+Status: the feasibility gate passed (#244). The stub and its fake adapter are in
+`lib/integrations/metaPublishing.ts`, and the OAuth connect/disconnect backend is in
+`lib/services/metaConnection.ts`; the live client, worker publishing and the setup UI are **not
+built**, no Meta app or access token exists, and **no live call has been run**. #234 stays open.
+Everything below is from Meta's own documentation on 2026-11-05 (Graph API v27.0); vendor blogs
+were not used.
 
 ### Decision
 
@@ -467,7 +468,41 @@ Unified Login and Instagram Login serve Instagram professional accounts without 
 enable two login types: Meta's App Review page warns an app can use Facebook Login or Instagram
 Login, not both.
 
-### Account types and prerequisites
+### Connect (#234, built)
+
+The backend and API exist; there is no setup screen or worker publishing yet.
+
+- **Routes.** `POST /api/meta/connect` (owner-wide) returns the Facebook Login URL.
+  `GET /api/meta/callback` is public to the route guard but requires the signed-in owner.
+  `GET`/`DELETE /api/meta/connection` return the Page list or remove the connection, and
+  `GET`/`PUT`/`DELETE /api/businesses/:id/meta-target` read or choose one target.
+- **State.** A 32-byte random state is stored only as its SHA-256 hash, expires after ten minutes,
+  is single use, and is bound to the owner who started the flow. The callback also checks the
+  browser's session, so a state alone cannot attach a victim's Meta account to an attacker's
+  PraiseLoop account (login CSRF).
+- **Tokens.** The callback exchanges the code for a short-lived User token, exchanges that for a
+  ~60-day token, reads `/me/accounts`, and stores only each Page's token, encrypted with
+  AES-256-GCM using `CREDENTIAL_ENCRYPTION_KEY`. The associated data is
+  `meta:page:<owner>:<page-id>`, so a ciphertext cannot be replayed onto another owner or Page.
+  The User token is discarded. A rejected Page token marks that Page `needs_reconnect`; the next
+  connect replaces it.
+- **Storage.** `meta_connections` (one per owner), `meta_pages` (one per Page, with the encrypted
+  token, linked Instagram id and tasks) and `business_meta_targets` (one target per business:
+  `instagram` or `facebook`). The tables are migration 026.
+- **Reconnect.** Pages that Meta no longer returns are deleted, and their business selections
+  cascade away. If a Page's linked Instagram account changes, an existing Instagram target is
+  dropped instead of silently publishing to a different account. An empty Page list returns
+  `no_pages` and leaves a previously working connection alone.
+- **Selection.** A target must belong to the signed-in owner's business and connection, the Page
+  must be able to create content (`CREATE_CONTENT`/`MANAGE` or the `PROFILE_PLUS_*` equivalents),
+  and an Instagram target needs a linked professional account. Another owner's business or Page is
+  a 404. Automatic posting is paid, so a Free or expired plan is refused at start, completion and
+  selection.
+- **Tests.** `scripts/test-meta-connect.ts` covers the state hash and single use, owner binding,
+  the token exchanges with a fake Graph, encrypted storage and decryption, no tokens in views,
+  target selection and isolation, reconnect shrinking, needs-reconnect, disconnect, cascades,
+  pagination (and refusing a foreign paging URL), and the routes. No test can reach Meta.
+
 
 - The owner needs an **Instagram professional account** (Business or Creator). Consumer accounts
   are not accessible through the Instagram API with Facebook Login at all.
@@ -604,14 +639,20 @@ Login rather than Meta's newer recommendation.
 
 ### Owner setup list
 
-1. Create the Meta Business-type app and add the three products above.
+1. Create the Meta Business-type app and add the three products above. If using a Facebook Login
+   for Business configuration for `META_CONFIG_ID`, choose a **User access token** configuration,
+   not a system-user one, and include the five permissions.
 2. Set the OAuth redirect URI to the production callback.
 3. Connect the app to a verified Business and complete Business Verification.
 4. Submit App Review for the five permissions with screencasts.
 5. Prepare one Page with a linked Instagram professional account, complete PPA/2FA, and confirm
    the owner can create content on the Page.
-6. Provide `META_APP_ID`, `META_APP_SECRET` and `META_REDIRECT_URI` through deployment secrets when
-   the implementation lands; never commit them.
+6. Set `META_APP_ID`, `META_APP_SECRET`, `CREDENTIAL_ENCRYPTION_KEY` and either `NEXTAUTH_URL` or
+   `META_REDIRECT_URI` through deployment secrets; never commit them. `META_CONFIG_ID` is optional
+   (it replaces the scope list with the permissions in a Login for Business configuration), and
+   `META_GRAPH_VERSION` defaults to `v27.0`.
+7. The connect backend is built; after approval, run it with the owner's own Page and record the
+   result. Publishing, the setup screen and the live test are still to come.
 
 ### Sources
 

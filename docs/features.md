@@ -289,6 +289,45 @@ Rollback: stop using the screen and leave `buffer_connections` and
 this part. Removing the profile menu entry hides the page, and disconnecting from
 the page deletes only PraiseLoop's stored tokens.
 
+## Meta publishing connection (backend, #234)
+
+The OAuth connect/disconnect backend for direct Instagram and Facebook Page publishing exists, but
+it does **not** post, schedule or render a setup screen yet. Buffer remains the posting provider.
+The feasibility findings, permissions, token lifetimes and owner setup are in
+[integrations.md](integrations.md#direct-instagram-and-facebook-publishing-234--checked-2026-11-05);
+the decision is in [decisions.md](decisions.md).
+
+- **Connect.** `POST /api/meta/connect` (owner-wide) stores a hashed, ten-minute, single-use state
+  bound to the owner and returns the Facebook Login URL. `GET /api/meta/callback` is public to the
+  route guard but still needs the same owner's session, which prevents login CSRF. The callback
+  exchanges the code for a short-lived User token, then a ~60-day token, and reads
+  `/me/accounts?fields=id,name,access_token,instagram_business_account,tasks`.
+- **Storage.** Migration 026 adds `meta_connections`, `meta_pages` and `business_meta_targets`.
+  Only each Page's long-lived token is stored, encrypted with `CREDENTIAL_ENCRYPTION_KEY` and
+  bound to the owner and Page; the User token is discarded. `GET /api/meta/connection` returns the
+  Page list without tokens, and `DELETE` removes the connection and cascades its Pages and
+  selections.
+- **Selection.** `GET`/`PUT`/`DELETE /api/businesses/:id/meta-target` picks one target per business,
+  `instagram` or `facebook`. The server re-checks the business and Page ownership, the Page's
+  create-content task, and a linked Instagram account for an Instagram target. Selecting a Page
+  that belongs to another owner, or a business the caller does not own, is a 404. Automatic
+  posting stays paid: a Free or expired plan is refused at start, completion and selection.
+- **Reconnect.** Pages Meta no longer returns are deleted and their selections cascade away. A
+  changed linked Instagram account drops an existing Instagram target rather than publishing to a
+  different account. A reconnect that returns no Pages reports `no_pages` and leaves a working
+  connection alone. A rejected Page token marks that Page `needs_reconnect`.
+- **Not built:** the setup screen, the worker call that publishes through Meta, the JPEG variant of
+  the rendered image, and the owner-approved live test. The callback redirects to
+  `/connections?meta=<outcome>` for the screen that will land with those slices.
+- **Tests.** `scripts/test-meta-connect.ts` runs against a disposable database and a fake Graph
+  client: state hashing and single use, owner binding, encrypted storage and decryption, no tokens
+  in views, target selection and owner isolation, reconnect shrinking, needs-reconnect, disconnect
+  and cascades, pagination and refusing a foreign paging URL, plus the routes. `scripts/test-meta.ts`
+  covers the stub/fake publishing adapter. Both are in `npm test`; no test can reach Meta.
+- **Rollback:** stop calling the routes and leave the tables in place; they hold no active
+  publishing path. Disconnecting deletes only PraiseLoop's stored Meta tokens. Removing the app in
+  Facebook settings is the owner's side.
+
 ## Quote-card rendering
 
 Quote-card rendering uses Sharp/Pango measured wrapping with Bricolage Grotesque, loaded
