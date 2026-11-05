@@ -68,7 +68,7 @@ export function ownerRoute(handler: (req: NextRequest, context: any) => Promise<
         }
       }
       let businessId: unknown, draftId: unknown;
-      const businessPath = /^\/api\/businesses\/(\d+)(?:\/(?:brand-voice|buffer-channel|posting-setup|apify-reviews))?$/.exec(path);
+      const businessPath = /^\/api\/businesses\/(\d+)(?:\/(?:brand-voice|buffer-channel|meta-target|posting-setup|apify-reviews))?$/.exec(path);
       if (OWNER_WIDE_PATHS.includes(path)) { /* owner-wide operations */ }
       else if (businessPath) businessId = businessPath[1];
       else if (["/api/reviews", "/api/drafts", "/api/generation", "/api/posting-slots"].includes(path)) businessId = mutation ? input.businessId : req.nextUrl.searchParams.get("businessId");
