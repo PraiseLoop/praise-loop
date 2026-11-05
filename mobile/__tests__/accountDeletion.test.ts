@@ -55,10 +55,11 @@ describe("account deletion", () => {
     expect(deletionErrorMessage(new ApiError("http", 500))).toBe("That didn’t work. Try again.");
   });
 
-  it("states what is deleted and that store subscriptions survive", () => {
+  it("states what is deleted, that a web subscription is cancelled, and that store subscriptions must be cancelled in their store", () => {
     expect(DELETE_ACCOUNT_WARNING).toMatch(/businesses, reviews, posts, drafts, images/i);
     expect(DELETE_ACCOUNT_WARNING).toMatch(/cannot|no recovery/i);
-    expect(DELETE_ACCOUNT_SUBSCRIPTION_NOTE).toMatch(/does not cancel/i);
+    expect(DELETE_ACCOUNT_SUBSCRIPTION_NOTE).toMatch(/cancels a web subscription for you/i);
+    expect(DELETE_ACCOUNT_SUBSCRIPTION_NOTE).toMatch(/does not cancel an App Store or Google Play/i);
     expect(DELETE_ACCOUNT_SUBSCRIPTION_NOTE).toMatch(/App Store/);
     expect(DELETE_ACCOUNT_SUBSCRIPTION_NOTE).toMatch(/Google Play/);
   });

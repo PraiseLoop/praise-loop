@@ -47,6 +47,9 @@ async function main() {
     assert.equal(checkout.provider, "fake");
     assert.match(checkout.externalId, /^fake_sub_/);
     assert.equal(checkout.status, "active");
+    // The cancel call is immediate and a second call for the same id is a no-op.
+    await fakeBillingProvider.cancel(checkout.externalId);
+    await fakeBillingProvider.cancel(checkout.externalId);
 
     await databaseFixture(async client => {
       await client.query(`INSERT INTO auth_users(id,email) VALUES
@@ -59,7 +62,7 @@ async function main() {
       // Checkout records the event, upserts the subscription and appends the audit
       // row together. It never creates or changes the manual owner_plans row.
       const started = await fakeBillingProvider.checkout({ ownerId: "sub-owner", plan: "pro", now: at(-3) });
-      assert.deepEqual(await applyBillingEvent(started), { applied: true, duplicate: false, stale: false });
+      assert.deepEqual(await applyBillingEvent(started), { applied: true, duplicate: false, stale: false, ignored: false });
       let subEntitlements = await entitlementsFor("sub-owner");
       assert.equal(subEntitlements.plan, "pro");
       assert.equal(subEntitlements.source, "stripe", "the reported source is the winning subscription");
@@ -72,24 +75,24 @@ async function main() {
       assert.equal((await client.query("SELECT count(*)::int n FROM owner_plans WHERE owner_id='sub-owner'")).rows[0].n, 0, "a webhook never writes owner_plans");
 
       // A duplicate provider event id is recorded once and changes nothing.
-      assert.deepEqual(await applyBillingEvent(started), { applied: false, duplicate: true, stale: false });
+      assert.deepEqual(await applyBillingEvent(started), { applied: false, duplicate: true, stale: false, ignored: false });
       assert.equal((await client.query("SELECT count(*)::int n FROM billing_events WHERE owner_id='sub-owner'")).rows[0].n, 1);
       assert.equal((await client.query("SELECT count(*)::int n FROM owner_plan_events WHERE owner_id='sub-owner'")).rows[0].n, 1);
       assert.equal((await client.query("SELECT status FROM owner_subscriptions WHERE owner_id='sub-owner'")).rows[0].status, "active");
 
       // A later event for an older period is recorded but does not overwrite newer state.
       const renewed = await fakeBillingProvider.renew({ ownerId: "sub-owner", externalId: started.externalId, plan: "pro", now: at(-1) });
-      assert.deepEqual(await applyBillingEvent(renewed), { applied: true, duplicate: false, stale: false });
-      const lateCancel = await fakeBillingProvider.cancel({ ownerId: "sub-owner", externalId: started.externalId, plan: "pro", now: at(-2) });
-      assert.deepEqual(await applyBillingEvent(lateCancel), { applied: false, duplicate: false, stale: true });
+      assert.deepEqual(await applyBillingEvent(renewed), { applied: true, duplicate: false, stale: false, ignored: false });
+      const lateCancel = await fakeBillingProvider.cancelEvent({ ownerId: "sub-owner", externalId: started.externalId, plan: "pro", now: at(-2) });
+      assert.deepEqual(await applyBillingEvent(lateCancel), { applied: false, duplicate: false, stale: true, ignored: false });
       assert.equal((await client.query("SELECT status FROM owner_subscriptions WHERE owner_id='sub-owner'")).rows[0].status, "active");
       assert.equal((await entitlementsFor("sub-owner")).plan, "pro", "a late cancellation does not undo a renewal");
       assert.equal((await client.query("SELECT count(*)::int n FROM billing_events WHERE owner_id='sub-owner'")).rows[0].n, 3, "even a stale event is recorded");
       assert.equal((await client.query("SELECT count(*)::int n FROM owner_plan_events WHERE owner_id='sub-owner'")).rows[0].n, 2, "only the applied changes are audited");
 
       // A cancellation gives up the subscription but keeps its row; expiry reads Free.
-      const cancellation = await fakeBillingProvider.cancel({ ownerId: "sub-owner", externalId: started.externalId, plan: "pro", now: at(1) });
-      assert.deepEqual(await applyBillingEvent(cancellation), { applied: true, duplicate: false, stale: false });
+      const cancellation = await fakeBillingProvider.cancelEvent({ ownerId: "sub-owner", externalId: started.externalId, plan: "pro", now: at(1) });
+      assert.deepEqual(await applyBillingEvent(cancellation), { applied: true, duplicate: false, stale: false, ignored: false });
       subEntitlements = await entitlementsFor("sub-owner", undefined, at(2));
       assert.equal(subEntitlements.plan, "free");
       assert.equal(subEntitlements.expired, true);
@@ -102,7 +105,7 @@ async function main() {
       const manualCheckout = await fakeBillingProvider.checkout({ ownerId: "manual-owner", plan: "business", now: at(-2) });
       await applyBillingEvent(manualCheckout);
       assert.equal((await entitlementsFor("manual-owner")).plan, "business", "the higher subscription wins while active");
-      const manualCancel = await fakeBillingProvider.cancel({ ownerId: "manual-owner", externalId: manualCheckout.externalId, plan: "business", now: at(1) });
+      const manualCancel = await fakeBillingProvider.cancelEvent({ ownerId: "manual-owner", externalId: manualCheckout.externalId, plan: "business", now: at(1) });
       await applyBillingEvent(manualCancel);
       const kept = await entitlementsFor("manual-owner", undefined, at(2));
       assert.equal(kept.plan, "pro");
@@ -164,6 +167,21 @@ async function main() {
       assert.equal((await client.query("SELECT owner_id FROM owner_subscriptions WHERE external_id=$1", [started.externalId])).rows[0].owner_id, "sub-owner");
       assert.equal((await entitlementsFor("thief-owner")).plan, "free");
       assert.equal((await client.query("SELECT count(*)::int n FROM billing_events WHERE event_id='steal-1'")).rows[0].n, 0, "a refused event isn't recorded as handled");
+
+      // A provider can deliver an event after the owner deleted their account.
+      // It is acknowledged and recorded nowhere, and no subscription is recreated.
+      await client.query("INSERT INTO auth_users(id,email) VALUES('late-owner','late@example.invalid')");
+      const lateCheckout = await fakeBillingProvider.checkout({ ownerId: "late-owner", plan: "pro", now: at(-1) });
+      await applyBillingEvent(lateCheckout);
+      await client.query("DELETE FROM auth_users WHERE id='late-owner'");
+      const late = await applyBillingEvent({
+        provider: "fake", eventId: "late-after-delete", type: "subscription.renewed", ownerId: "late-owner",
+        externalId: lateCheckout.externalId, plan: "pro", status: "active", currentPeriodEnd: at(24 * 30), occurredAt: at(1)
+      });
+      assert.deepEqual(late, { applied: false, duplicate: false, stale: false, ignored: true });
+      assert.equal((await client.query("SELECT count(*)::int n FROM billing_events WHERE event_id='late-after-delete'")).rows[0].n, 0, "a late event is not recorded");
+      assert.equal((await client.query("SELECT count(*)::int n FROM owner_subscriptions WHERE owner_id='late-owner'")).rows[0].n, 0, "a late event recreates no subscription");
+      assert.equal((await client.query("SELECT count(*)::int n FROM owner_plan_events WHERE owner_id='late-owner'")).rows[0].n, 0, "a late event records no plan change");
 
       // A local owner can walk checkout, renewal, failed payment and cancellation
       // through the dev route; it uses the same apply path as a real webhook.

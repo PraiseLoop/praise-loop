@@ -777,14 +777,22 @@ and says the post changed somewhere else, like the web queue.
 ## Delete account (#93)
 
 An owner can delete their account from the web profile page (`/account`) or the
-phone profile screen. Both show what is removed, state that an App Store or
-Google Play subscription is not cancelled and where to cancel it, and require
-typing `DELETE` before the button works.
+phone profile screen. Both show what is removed, say that a web subscription is
+cancelled for them, state that an App Store or Google Play subscription must be
+cancelled in its store, and require typing `DELETE` before the button works. The
+phone copy has no purchase link or prompt.
 
 - `DELETE /api/account` takes `{"confirm": "DELETE"}` and is owner-wide, so the
   phone's bearer session works as well as the web cookie. Anything else is a
   `400` with no changes. The session cookie is cleared on a successful cookie
   request.
+- Before local data is deleted, every `owner_subscriptions` row that can still
+  bill is cancelled through the provider (store subscriptions are skipped because
+  we cannot cancel them). A failed cancel returns `503` with a retry message and
+  deletes nothing, so the owner stays signed in and a retry is safe even if an
+  earlier attempt cancelled only some rows. An owner with no subscriptions needs
+  no billing provider and makes no network call. A provider event that arrives
+  after the owner is gone is acknowledged and records nothing (#220).
 - The deletion, cascade list, media cleanup and the "nothing is kept today"
   policy are documented in [auth.md](auth.md#deleting-an-account-93). There is no
   soft delete or recovery period.
@@ -795,7 +803,8 @@ typing `DELETE` before the button works.
   with `mobile/__tests__/accountDeletion.test.ts`; the API call is
   `mobile/src/api/account.ts`. `scripts/test-account-deletion.ts` runs against a
   disposable database (owner A deleted, owner B untouched, media and sessions
-  checked) and is in the `npm test` chain.
+  checked, live subscriptions cancelled, a failed cancel and a retry) and is in
+  the `npm test` chain. `scripts/test-billing.ts` covers the late event.
 - Rollback: no schema change is involved. Restoring a deleted account is not
   possible; stop deploying the route to disable the feature.
 
