@@ -13,8 +13,18 @@ export function draftImageFilename(draftPostId: number, digest?: string): string
   return `draft-${draftPostId}${digest ? `-${digest}` : ""}.png`;
 }
 
+// The deterministic JPEG variant Instagram needs. The digest is over the JPEG
+// bytes, not the PNG's, so the filename always names the exact stored file.
+export function draftJpegFilename(draftPostId: number, digest?: string): string {
+  return `draft-${draftPostId}${digest ? `-${digest}` : ""}.jpg`;
+}
+
 // URL the web runtime serves the artifact from. Stored in draft_posts.image_path
 // so browsers fetch images through the Next server (never a bare filesystem path).
 export function draftImageUrl(draftPostId: number, digest?: string): string {
   return `/api/media/${draftImageFilename(draftPostId, digest)}`;
+}
+
+export function draftJpegUrl(draftPostId: number, digest?: string): string {
+  return `/api/media/${draftJpegFilename(draftPostId, digest)}`;
 }

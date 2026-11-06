@@ -201,7 +201,7 @@ Google Play's rules weren't checked either.
 | Businesses | 1 | 1 | 5 |
 | Watermark | Yes | No | No |
 | Brand voice | No | Yes | Yes |
-| Automatic posting (through Buffer) | No | Yes | Yes |
+| Automatic posting (Buffer or direct Instagram/Facebook) | No | Yes | Yes |
 | Review sync, AI replies (once built) | No | Yes | Yes |
 
 This moves the multi-business limit from Pro to Business. The app isn't in production, so no live
@@ -211,10 +211,11 @@ The paid feature and its `PLAN_LIMITS` entry are called **automatic posting**
 (`automaticPosting`), not Buffer posting, so the plan does not change when direct
 publishing (#234) replaces Buffer. Buffer is only the first provider it applies to.
 Free owners keep the phone share sheet and image download. The server refuses a Free
-or expired plan when connecting Buffer, choosing a channel, confirming a post for a
-slot, and again in the worker immediately before it sends. A post already queued when
-a plan lapses is not sent and not resubmitted: it ends `failed` with the reason
-`plan_required`, and the owner sees why on the approval card and schedule.
+or expired plan when connecting a provider, choosing a channel or target, confirming a
+post for a slot, and again in the worker immediately before it sends. Direct Meta
+publishing (#234) checks the same `automaticPosting` limit as Buffer. A post already
+queued when a plan lapses is not sent and not resubmitted: it ends `failed` with the
+reason `plan_required`, and the owner sees why on the approval card and schedule.
 
 ## Problems found
 

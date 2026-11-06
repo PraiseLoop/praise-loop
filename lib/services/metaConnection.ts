@@ -394,6 +394,22 @@ export async function disconnectMeta(ownerId: string): Promise<boolean> {
 }
 
 /**
+ * Mark a Page for reconnect after the worker saw Meta reject its token. The
+ * owner-scoped Page id is enough; a Page that no longer belongs to the owner (or
+ * was replaced by a reconnect) is left untouched and returns false.
+ */
+export async function markMetaTargetNeedsReconnect(ownerId: string, metaPageId: number): Promise<boolean> {
+  if (!Number.isSafeInteger(metaPageId) || metaPageId <= 0) return false;
+  const updated = await query(
+    `UPDATE meta_pages p SET status='needs_reconnect', updated_at=now()
+     FROM meta_connections c
+     WHERE p.connection_id=c.id AND c.owner_id=$1 AND p.id=$2 AND p.status='active'`,
+    [ownerId, metaPageId]
+  );
+  return !!updated.rowCount;
+}
+
+/**
  * Mark a Page for reconnect only if it still holds the token that failed. A
  * reconnect between the failed request and this update leaves the new token alone.
  */

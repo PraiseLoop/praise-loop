@@ -33,6 +33,9 @@ async function main() {
   // Verification are complete. It must never look like a successful fake.
   const live = liveMetaClient();
   await rejection(() => live.listPages("user-token"), MetaAccessNotApproved);
+  await rejection(() => live.createInstagramContainer(PAGE, INPUT), MetaAccessNotApproved);
+  await rejection(() => live.publishInstagramContainer(PAGE, "container"), MetaAccessNotApproved);
+  await rejection(() => live.getContainerStatus(PAGE, "container"), MetaAccessNotApproved);
   await rejection(() => live.publishInstagramImage(PAGE, INPUT), MetaAccessNotApproved);
   await rejection(() => live.publishPagePhoto(PAGE, INPUT), MetaAccessNotApproved);
   await rejection(() => live.getPostStatus("post", PAGE), MetaAccessNotApproved);
@@ -50,6 +53,21 @@ async function main() {
   assert.deepEqual(igReceipt, { provider: "meta", externalId: "fake_ig_1", status: "published" });
   assert.deepEqual(instagram.calls, [{ method: "instagram", pageId: PAGE.id }]);
   assert.equal(instagram.calls[0].pageId, PAGE.id, "the selected Page is the one published to");
+
+  // The two-step flow is explicit for the worker: a container is created first
+  // and publishing it twice returns the same post, never a second one.
+  const twoStep = new FakeMetaPublishingClient();
+  const { containerId } = await twoStep.createInstagramContainer(PAGE, INPUT);
+  assert.match(containerId, /^fake_container_/);
+  assert.deepEqual(twoStep.calls, [], "creating a container is not a post");
+  assert.equal((await twoStep.getContainerStatus(PAGE, containerId)).status, "finished");
+  const published = await twoStep.publishInstagramContainer(PAGE, containerId);
+  assert.deepEqual(await twoStep.publishInstagramContainer(PAGE, containerId), published, "publishing is idempotent by container");
+  assert.deepEqual(await twoStep.getContainerStatus(PAGE, containerId), {
+    status: "published", externalId: published.externalId, externalLink: null
+  });
+  assert.deepEqual(twoStep.calls, [{ method: "instagram", pageId: PAGE.id }]);
+  await rejection(() => twoStep.publishInstagramContainer(PAGE, "missing-container"), MetaRejected);
 
   // Facebook Page photo uses the same input and a Page post id.
   const facebook = new FakeMetaPublishingClient({ pages: [PAGE] });

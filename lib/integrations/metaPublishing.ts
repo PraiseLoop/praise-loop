@@ -25,7 +25,29 @@ export type MetaPublishInput = {
   imageUrl: string;
 };
 
-export type MetaPublishReceipt = ScheduleReceipt & { provider: "meta" };
+export type MetaPublishReceipt = ScheduleReceipt & { provider: "meta"; externalLink?: string | null };
+
+// Instagram's published caption limit is 2,200 characters and 30 hashtags; a
+// Facebook Page post allows 63,206 characters. Refuse instead of cutting a
+// caption silently, so the owner sees why nothing was sent.
+export const INSTAGRAM_CAPTION_LIMIT = 2200;
+export const INSTAGRAM_HASHTAG_LIMIT = 30;
+export const FACEBOOK_CAPTION_LIMIT = 63206;
+
+export type MetaCaptionProblem = "caption_too_long" | "too_many_hashtags" | null;
+
+export function metaCaptionProblem(target: MetaTarget, caption: string): MetaCaptionProblem {
+  if (!caption.trim()) return "caption_too_long";
+  if (target === "instagram") {
+    // Spread by code point so an emoji counts once, like Meta's limit.
+    if ([...caption].length > INSTAGRAM_CAPTION_LIMIT) return "caption_too_long";
+    const hashtags = caption.match(/(^|\s)#[^\s#]+/g)?.length ?? 0;
+    if (hashtags > INSTAGRAM_HASHTAG_LIMIT) return "too_many_hashtags";
+  } else if (caption.length > FACEBOOK_CAPTION_LIMIT) {
+    return "caption_too_long";
+  }
+  return null;
+}
 
 export class MetaAccessNotApproved extends Error {
   constructor() {
@@ -64,9 +86,30 @@ export class MetaAmbiguous extends Error {
   }
 }
 
+export type MetaContainerStatusCode = "in_progress" | "finished" | "published" | "error" | "expired";
+export type MetaContainerStatusReceipt = {
+  status: MetaContainerStatusCode;
+  /** Present only once the container was published. */
+  externalId: string | null;
+  externalLink: string | null;
+};
+
 export interface MetaPublishingClient {
   /** Connect step: exchange a long-lived User token for the owner's Pages and linked Instagram accounts. */
   listPages(userAccessToken: string): Promise<MetaPage[]>;
+  /**
+   * Step 1 of the Instagram flow. Creating a container never publishes it, so a
+   * retry after a lost response cannot create a second post.
+   */
+  createInstagramContainer(page: MetaPage, input: MetaPublishInput): Promise<{ containerId: string }>;
+  /**
+   * Step 2. Publishing the same container twice must never create a second post;
+   * resume uses the recorded container id instead of a new container.
+   */
+  publishInstagramContainer(page: MetaPage, containerId: string): Promise<MetaPublishReceipt>;
+  /** Read-only check used to resume after a crash between the two steps. */
+  getContainerStatus(page: MetaPage, containerId: string): Promise<MetaContainerStatusReceipt>;
+  /** Convenience for callers that want both steps in one call. */
   publishInstagramImage(page: MetaPage, input: MetaPublishInput): Promise<MetaPublishReceipt>;
   publishPagePhoto(page: MetaPage, input: MetaPublishInput): Promise<MetaPublishReceipt>;
   getPostStatus(externalId: string, page: MetaPage): Promise<PostStatusReceipt>;
@@ -81,6 +124,9 @@ export function liveMetaClient(): MetaPublishingClient {
   const unavailable = async (): Promise<never> => { throw new MetaAccessNotApproved(); };
   return {
     listPages: unavailable,
+    createInstagramContainer: unavailable,
+    publishInstagramContainer: unavailable,
+    getContainerStatus: unavailable,
     publishInstagramImage: unavailable,
     publishPagePhoto: unavailable,
     getPostStatus: unavailable
@@ -112,7 +158,7 @@ function validPublishInput(input: MetaPublishInput): void {
 // The connection layer checks this too; the adapter must not rely on the UI.
 // Older tokens report CREATE_CONTENT/MANAGE, newer Page settings report the
 // PROFILE_PLUS_* names, so accept both.
-const CREATE_TASKS = new Set([
+export const META_CREATE_TASKS = new Set([
   "CREATE_CONTENT",
   "MANAGE",
   "PROFILE_PLUS_CREATE_CONTENT",
@@ -120,7 +166,7 @@ const CREATE_TASKS = new Set([
 ]);
 
 function assertCanCreate(page: MetaPage): void {
-  if (!page.tasks.some(task => CREATE_TASKS.has(task))) {
+  if (!page.tasks.some(task => META_CREATE_TASKS.has(task))) {
     throw new MetaRejected("the connected user cannot create content on this Page");
   }
 }
@@ -129,7 +175,9 @@ function assertCanCreate(page: MetaPage): void {
 export class FakeMetaPublishingClient implements MetaPublishingClient {
   readonly calls: FakeCall[] = [];
   private sequence = 0;
+  private containerSequence = 0;
   private failure: FakeMetaFailure;
+  private readonly containers = new Map<string, { externalId: string | null; externalLink: string | null }>();
 
   constructor(private readonly options: FakeMetaOptions = {}) {
     this.failure = options.failure ?? null;
@@ -156,14 +204,41 @@ export class FakeMetaPublishingClient implements MetaPublishingClient {
     return this.options.pages ?? [];
   }
 
-  async publishInstagramImage(page: MetaPage, input: MetaPublishInput): Promise<MetaPublishReceipt> {
+  async createInstagramContainer(page: MetaPage, input: MetaPublishInput): Promise<{ containerId: string }> {
     validPublishInput(input);
     assertCanCreate(page);
     if (!page.instagramBusinessAccountId) throw new MetaRejected("the Page has no linked Instagram professional account");
     this.assertAuth(page);
-    this.calls.push({ method: "instagram", pageId: page.id });
+    this.containerSequence += 1;
+    const containerId = `fake_container_${this.containerSequence}`;
+    this.containers.set(containerId, { externalId: null, externalLink: null });
+    return { containerId };
+  }
+
+  async publishInstagramContainer(page: MetaPage, containerId: string): Promise<MetaPublishReceipt> {
+    const container = this.containers.get(containerId);
+    if (!container) throw new MetaRejected("unknown Instagram container");
+    // Publishing an already-published container returns the first post, never a
+    // second one; the worker relies on this when resuming.
+    if (container.externalId) return { provider: "meta", externalId: container.externalId, status: "published" };
+    this.assertAuth(page);
     this.sequence += 1;
-    return { provider: "meta", externalId: `fake_ig_${this.sequence}`, status: "published" };
+    container.externalId = `fake_ig_${this.sequence}`;
+    this.calls.push({ method: "instagram", pageId: page.id });
+    return { provider: "meta", externalId: container.externalId, status: "published" };
+  }
+
+  async getContainerStatus(_page: MetaPage, containerId: string): Promise<MetaContainerStatusReceipt> {
+    const container = this.containers.get(containerId);
+    if (!container) throw new MetaRejected("unknown Instagram container");
+    return container.externalId
+      ? { status: "published", externalId: container.externalId, externalLink: container.externalLink }
+      : { status: "finished", externalId: null, externalLink: null };
+  }
+
+  async publishInstagramImage(page: MetaPage, input: MetaPublishInput): Promise<MetaPublishReceipt> {
+    const { containerId } = await this.createInstagramContainer(page, input);
+    return this.publishInstagramContainer(page, containerId);
   }
 
   async publishPagePhoto(page: MetaPage, input: MetaPublishInput): Promise<MetaPublishReceipt> {
@@ -205,6 +280,21 @@ export class MetaSchedulerAdapter implements SchedulerAdapter {
     return this.options.target === "instagram"
       ? this.options.client.publishInstagramImage(this.options.page, input)
       : this.options.client.publishPagePhoto(this.options.page, input);
+  }
+
+  async createInstagramContainer(input: MetaPublishInput): Promise<{ containerId: string }> {
+    if (this.options.target !== "instagram") throw new MetaRejected("this target is not Instagram");
+    return this.options.client.createInstagramContainer(this.options.page, input);
+  }
+
+  async publishInstagramContainer(containerId: string): Promise<MetaPublishReceipt> {
+    if (this.options.target !== "instagram") throw new MetaRejected("this target is not Instagram");
+    return this.options.client.publishInstagramContainer(this.options.page, containerId);
+  }
+
+  async getContainerStatus(containerId: string): Promise<MetaContainerStatusReceipt> {
+    if (this.options.target !== "instagram") throw new MetaRejected("this target is not Instagram");
+    return this.options.client.getContainerStatus(this.options.page, containerId);
   }
 
   async getPostStatus(externalId: string): Promise<PostStatusReceipt> {

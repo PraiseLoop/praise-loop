@@ -54,7 +54,7 @@ export async function cancelOwnerSubscriptions(
 
 // Draft images and any logo stored through the media route use this shape.
 // Requiring one plain filename also rejects path traversal before the disk.
-const MEDIA_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*\.png$/;
+const MEDIA_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*\.(?:png|jpe?g)$/;
 
 export function mediaFilename(path: string | null | undefined): string | null {
   if (!path || !path.startsWith("/api/media/")) return null;
@@ -88,7 +88,7 @@ export async function removeMediaFiles(
   if (failed) console.error("account_deletion_media_cleanup_failed", { files: failed });
 }
 
-const DRAFT_IMAGE = /^draft-(\d+)(?:-[0-9a-f]+)?\.png$/;
+const DRAFT_IMAGE = /^draft-(\d+)(?:-[0-9a-f]+)?\.(?:png|jpe?g)$/;
 
 // Files in MEDIA_ROOT named for any of these draft ids, including superseded versions.
 export async function olderImageVersions(draftIds: Set<string>, root = mediaRoot()): Promise<string[]> {

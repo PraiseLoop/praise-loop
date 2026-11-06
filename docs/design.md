@@ -91,11 +91,13 @@ owner shares from the phone and confirms "I posted it" (`shared`).
 Statuses: `draft`, `approved`, `shared` (owner-reported, never shown as verified), `scheduled`,
 `published` (both reserved for a real scheduler, #29), `failed`, `archived`.
 
-All changes go through `draftMutation` in `lib/services/draftLifecycle.ts`: an optimistic `version`
-check (409 when stale), blocked while generation is active or provider scheduling exists, and every
-transition writes an append-only `draft_events` row (a database trigger records the actor and
-reason). "Make a new version" clears the caption and image and re-queues generation. Scheduling
-fails closed. Nothing auto-posts.
+All owner changes go through `draftMutation` in `lib/services/draftLifecycle.ts`: an optimistic
+`version` check (409 when stale), blocked while generation is active or provider scheduling exists,
+and every transition writes an append-only `draft_events` row (a database trigger records the actor
+and reason). The posting worker uses `providerDraftTransition` from the same module, so its
+scheduled → published/failed moves follow the same lock, expected-status and version rules; the
+trigger appends the event with actor `worker`. "Make a new version" clears the caption and image and
+re-queues generation. Scheduling fails closed. Nothing auto-posts.
 
 ### Data model (Postgres; migrations in `db/migrations/NNN_name.sql`, forward-only)
 
@@ -204,8 +206,8 @@ Expo Router screens: `sign-in`, `queue`, `draft/[id]`, `profile`. Design rules t
 | Expo push | "posts ready" notifications | built; needs EAS project id, APNs/FCM, a device test |
 | Google OAuth (web) | sign-in | **live and verified** |
 | Google native, Apple, Microsoft | phone sign-in; Microsoft also on web | built, tested with local keys only, never run live |
-| Buffer | automatic posting for Pro and Business owners with a Business/Creator Instagram or a Facebook Page (#29, #216) | **feasibility spike done 2026-11-01**: live API key works, an app client exists; adapter and encrypted credentials built against mocks only; **Connect backend built (#29 part 1)**: OAuth, encrypted tokens, channel selection; **web Connect screen built (#29 part 2)**: connect/reconnect/disconnect and one channel per business, posting still off; **automatic posting is now paid (#216)**: Free and expired plans are refused on every write path and the worker fails a queued post closed; phone UI, media-URL policy and worker submission **not built**; see below |
-| Direct Meta publishing | replacement for Buffer (#234) | feasibility checked 2026-11-05; stub and fake adapter built behind the existing `SchedulerAdapter`; OAuth connect/disconnect, encrypted Page tokens and one target per business built; worker publishing, setup screen and live test **not built**; app review and business verification are owner tasks |
+| Buffer | automatic posting for Pro and Business owners with a Business/Creator Instagram or a Facebook Page (#29, #216) | **feasibility spike done 2026-11-01**: live API key works, an app client exists; adapter and encrypted credentials built against mocks only; **Connect backend built (#29 part 1)**: OAuth, encrypted tokens, channel selection; **web Connect screen built (#29 part 2)**: connect/reconnect/disconnect and one channel per business, posting still off; **automatic posting is now paid (#216)**: Free and expired plans are refused on every write path and the worker fails a queued post closed; **worker submission, media-URL policy and the off/draft/live gate built (#29 part 3)**; phone UI **not built**; never run live; see below |
+| Direct Meta publishing | replacement for Buffer (#234) | feasibility checked 2026-11-05; stub and fake adapter built behind the existing `SchedulerAdapter`; OAuth connect/disconnect, encrypted Page tokens and one target per business built; **worker publishing and the JPEG variant built and tested with a fake client**; live Graph client, setup screen and live test **not built**; app review and business verification are owner tasks |
 | Google Business Profile | review sync (#46) | stubbed client; live client fails closed until access is approved |
 | Apify | owner's own Google reviews, removable stopgap (#232) | client proven with one live run; full flow tested with the fake adapter only; hidden without `APIFY_TOKEN`; Google can block scraping at any time |
 
@@ -252,9 +254,14 @@ through Facebook Login for Business. The gate passes but remains owner-blocked o
 Business Verification and App Review. The shared `SchedulerAdapter` is the provider seam: a
 `MetaSchedulerAdapter` and a fake adapter exist, the live client fails closed, and the OAuth
 connect/disconnect backend, encrypted Page tokens and one target per business are built. Worker
-publishing, the setup screen and a live call are not. The dated findings, permissions, token
-lifetimes, media rules, rate limits and sources are in
-[integrations.md](integrations.md#direct-instagram-and-facebook-publishing-234--checked-2026-11-05).
+publishing is built in the shared provider worker (`bufferPosting.ts`): the gate is still
+`BUFFER_POSTING_MODE`, the provider is fixed on the claim when the owner schedules (Meta wins over
+Buffer for a business with both), plan, ownership and target state are re-checked under the claim
+lock, and Instagram's create-container → commit-id → publish flow resumes from the container id
+instead of double-posting. The deterministic JPEG variant lives in `imageRenderer.ts` and is served
+by the tokenized public route as `.jpg`. The live Graph client, the setup screen and a live call are
+not built. The dated findings, permissions, token lifetimes, media rules, rate limits and sources are
+in [integrations.md](integrations.md#direct-instagram-and-facebook-publishing-234--checked-2026-11-05).
 Two findings shape the implementation: Instagram accepts only a public **JPEG** (the renderer writes
 PNG, so a JPEG variant is needed), and Meta's docs disagree on whether the Instagram container
 endpoints take the Page token or the User token, to be settled by the owner-approved live test.
@@ -277,6 +284,7 @@ endpoints take the Page token or the User token, to be settled by the owner-appr
 | Native Google sign-in, push notifications | shipped; **need a development build and a device** | #85, #89 |
 | Android APK release pipeline | merged; not yet run | #190 |
 | Real scheduler through Buffer | Paid (Pro and Business) automatic posting; Connect + screen built; worker posting, image links, cancel and the off/draft/live gate built (#29 part 3); **never run live**; status display and `unknown` resolution not built | #29, #216 |
+| Direct Instagram/Facebook publishing | Worker publishing, provider choice, idempotent container resume, JPEG variant and owner status built; Connect backend built; **live client and setup UI not built, never run live** | #234, #244 |
 | Google review sync, AI review replies | blocked on access/policy | #46, #96 |
 | Apify Google reviews stopgap | built; client proven with one live run, full flow not yet run live; hidden without `APIFY_TOKEN` | #232 |
 | Business tier | planned, see [billing.md](billing.md) | #222, #225 |

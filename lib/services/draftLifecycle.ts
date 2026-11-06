@@ -16,6 +16,26 @@ export async function availableImage(path: string | null) {
     return metadata.format==="png" && metadata.width===1080 && metadata.height===1080;
   } catch { return false; }
 }
+type TransitionClient = { query: (sql: string, params?: unknown[]) => Promise<{ rowCount: number | null; rows: any[] }> };
+
+/**
+ * A provider/worker transition on a draft, following the same rules as
+ * draftMutation without an HTTP request: the row is locked, the move happens only
+ * from the expected status and only for the version read a moment ago, and the
+ * draft_events trigger appends one row for the change. Returning false means a
+ * concurrent owner edit won, so the caller must not claim the transition.
+ */
+export async function providerDraftTransition(c: TransitionClient, draftId: number, toStatus: string, fromStatus?: string): Promise<boolean> {
+  const current = (await c.query("SELECT version,status FROM draft_posts WHERE id=$1 FOR UPDATE", [draftId])).rows[0];
+  if (!current) return false;
+  if (fromStatus && current.status !== fromStatus) return false;
+  const updated = await c.query(
+    "UPDATE draft_posts SET status=$2,updated_at=now() WHERE id=$1 AND version=$3 RETURNING id",
+    [draftId, toStatus, current.version]
+  );
+  return !!updated.rowCount;
+}
+
 export function draftMutation(action: string, work: (req: NextRequest, context: any)=>Promise<Response>) {
   return async (req: NextRequest, context?: any) => transaction(async c=>{
     const body=await req.clone().json(), owner=currentOwner();

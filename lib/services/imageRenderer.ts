@@ -1,10 +1,10 @@
 import { rasterLogo } from "./logos";
-import { existsSync, mkdirSync, writeFileSync, renameSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import sharp, { type OverlayOptions } from "sharp";
 import { quoteOptions, templateForLimit, type BrandTone, type QuoteOptions } from "../branding";
-import { draftImageFilename, draftImageUrl, mediaRoot } from "./media";
+import { draftImageFilename, draftImageUrl, draftJpegFilename, mediaRoot } from "./media";
 
 const escapeMarkup = (text: string) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 export function foreground(hex: string): string {
@@ -180,4 +180,79 @@ export async function renderDraftImage(params: RenderParams) {
   writeFileSync(temp, png);
   renameSync(temp, outPath);
   return { fileSystemPath: outPath, publicPath: draftImageUrl(params.draftPostId, digest) };
+}
+
+// Direct Meta publishing (#234) needs a deterministic JPEG derived from the stored
+// PNG. Instagram accepts only JPEG, up to 8 MB, in a 4:5-1.91:1 frame; Facebook
+// Page photos also accept the same public URL. Fixed encoder settings and a
+// content-addressed name mean the same PNG always yields the same bytes.
+export const META_JPEG_QUALITY = 90;
+export const META_JPEG_MAX_BYTES = 8 * 1024 * 1024;
+export const INSTAGRAM_MIN_ASPECT = 4 / 5;
+export const INSTAGRAM_MAX_ASPECT = 1.91;
+const DRAFT_PNG = /^\/api\/media\/(draft-(\d+)(?:-[a-f0-9]+)?\.png)$/;
+
+export async function renderJpegVariant(png: Buffer): Promise<Buffer> {
+  const metadata = await sharp(png, { limitInputPixels: 2_000_000 }).metadata();
+  if (!metadata.width || !metadata.height) throw new Error("Image has no dimensions");
+  let pipeline = sharp(png, { limitInputPixels: 2_000_000 }).flatten({ background: "#ffffff" });
+  const ratio = metadata.width / metadata.height;
+  if (ratio < INSTAGRAM_MIN_ASPECT) {
+    // Taller than 4:5: crop the height, centred, down to the narrowest allowed frame.
+    const height = Math.max(1, Math.round(metadata.width / INSTAGRAM_MIN_ASPECT));
+    pipeline = pipeline.extract({
+      left: 0,
+      top: Math.floor((metadata.height - Math.min(height, metadata.height)) / 2),
+      width: metadata.width,
+      height: Math.min(height, metadata.height)
+    });
+  } else if (ratio > INSTAGRAM_MAX_ASPECT) {
+    // Wider than 1.91:1: crop the width, centred, down to the widest allowed frame.
+    const width = Math.max(1, Math.round(metadata.height * INSTAGRAM_MAX_ASPECT));
+    pipeline = pipeline.extract({
+      left: Math.floor((metadata.width - Math.min(width, metadata.width)) / 2),
+      top: 0,
+      width: Math.min(width, metadata.width),
+      height: metadata.height
+    });
+  }
+  const jpeg = await pipeline
+    .jpeg({ quality: META_JPEG_QUALITY, chromaSubsampling: "4:2:0", mozjpeg: false, progressive: false })
+    .toBuffer();
+  const output = await sharp(jpeg).metadata();
+  if (!output.width || !output.height) throw new Error("Image has no dimensions");
+  const outRatio = output.width / output.height;
+  if (outRatio < INSTAGRAM_MIN_ASPECT - 0.001 || outRatio > INSTAGRAM_MAX_ASPECT + 0.001) {
+    throw new Error("Image aspect ratio is outside Instagram's 4:5 to 1.91:1 range");
+  }
+  if (jpeg.length > META_JPEG_MAX_BYTES) throw new Error("JPEG exceeds Meta's 8 MB image limit");
+  return jpeg;
+}
+
+/**
+ * The stored, content-addressed JPEG for a draft's PNG, generated once on demand.
+ * Returns null (so nothing is sent) when the image is missing or cannot be made
+ * into a Meta-safe JPEG. Only the derived filename is returned; no path escapes.
+ */
+export async function ensureDraftJpeg(imagePath: string | null): Promise<{ name: string; size: number } | null> {
+  const match = imagePath ? DRAFT_PNG.exec(imagePath) : null;
+  if (!match) return null;
+  try {
+    const root = mediaRoot();
+    const png = readFileSync(join(root, match[1]));
+    if (png.length > 5_000_000) return null;
+    const jpeg = await renderJpegVariant(png);
+    const digest = createHash("sha256").update(jpeg).digest("hex").slice(0,20);
+    const name = draftJpegFilename(Number(match[2]), digest);
+    const outPath = join(root, name);
+    if (!existsSync(outPath)) {
+      mkdirSync(root, { recursive: true });
+      const temp = `${outPath}.${randomUUID()}.tmp`;
+      writeFileSync(temp, jpeg);
+      renameSync(temp, outPath);
+    }
+    return { name, size: jpeg.length };
+  } catch {
+    return null;
+  }
 }
