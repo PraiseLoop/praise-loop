@@ -8,6 +8,7 @@ import { appleSignInAvailable, isAppleSignInCancelled, signInWithApple } from ".
 import { googleSignInAvailable, isGoogleSignInCancelled, signInWithGoogle } from "../auth/google";
 import { isMicrosoftSignInCancelled, microsoftSignInAvailable, signInWithMicrosoft } from "../auth/microsoft";
 import { useSession } from "../auth/SessionProvider";
+import { INVITE_ONLY_MESSAGE, isInviteOnly } from "../auth/inviteOnly";
 import { DEMO_OWNERS, type DemoOwnerKey } from "../auth/demoOwners";
 import { appConfig } from "../config";
 import { Banner, Button } from "../ui/components";
@@ -93,9 +94,11 @@ export default function SignInScreen() {
       await signInEmail(email.trim(), code.trim());
       router.replace("/queue");
     } catch (cause) {
-      setError(cause instanceof ApiError && cause.status === 429
-        ? "Too many attempts. Try again later."
-        : cause instanceof Error ? cause.message : "That code is invalid or has expired.");
+      setError(isInviteOnly(cause)
+        ? INVITE_ONLY_MESSAGE
+        : cause instanceof ApiError && cause.status === 429
+          ? "Too many attempts. Try again later."
+          : cause instanceof Error ? cause.message : "That code is invalid or has expired.");
     } finally {
       setBusy(false);
     }
@@ -114,9 +117,11 @@ export default function SignInScreen() {
     } catch (cause) {
       // Cancelling the Google sheet is a no-op, not an error.
       if (isGoogleSignInCancelled(cause)) return;
-      setError(cause instanceof ApiError && cause.kind === "signedOut"
-        ? "That Google account couldn’t sign in. Try a different one."
-        : cause instanceof Error ? cause.message : "Google sign-in failed. Try again.");
+      setError(isInviteOnly(cause)
+        ? INVITE_ONLY_MESSAGE
+        : cause instanceof ApiError && cause.kind === "signedOut"
+          ? "That Google account couldn’t sign in. Try a different one."
+          : cause instanceof Error ? cause.message : "Google sign-in failed. Try again.");
     } finally {
       setBusy(false);
     }
@@ -132,9 +137,11 @@ export default function SignInScreen() {
     } catch (cause) {
       // Cancelling the Apple sheet is a no-op, not an error.
       if (isAppleSignInCancelled(cause)) return;
-      setError(cause instanceof ApiError && cause.kind === "signedOut"
-        ? "That Apple account couldn’t sign in. Try a different one."
-        : cause instanceof Error ? cause.message : "Apple sign-in failed. Try again.");
+      setError(isInviteOnly(cause)
+        ? INVITE_ONLY_MESSAGE
+        : cause instanceof ApiError && cause.kind === "signedOut"
+          ? "That Apple account couldn’t sign in. Try a different one."
+          : cause instanceof Error ? cause.message : "Apple sign-in failed. Try again.");
     } finally {
       setBusy(false);
     }
@@ -150,9 +157,11 @@ export default function SignInScreen() {
     } catch (cause) {
       // Closing the Microsoft browser is a no-op, not an error.
       if (isMicrosoftSignInCancelled(cause)) return;
-      setError(cause instanceof ApiError && cause.kind === "signedOut"
-        ? "That Microsoft account couldn’t sign in. Try a different one."
-        : cause instanceof Error ? cause.message : "Microsoft sign-in failed. Try again.");
+      setError(isInviteOnly(cause)
+        ? INVITE_ONLY_MESSAGE
+        : cause instanceof ApiError && cause.kind === "signedOut"
+          ? "That Microsoft account couldn’t sign in. Try a different one."
+          : cause instanceof Error ? cause.message : "Microsoft sign-in failed. Try again.");
     } finally {
       setBusy(false);
     }

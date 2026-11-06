@@ -3,6 +3,7 @@ import { emailSignInConfigured, verifyEmailCode } from "../../../../../lib/email
 import { recordFailure, tooManyFailures } from "../../../../../lib/mobileSignIn";
 import { createMobileSession } from "../../../../../lib/mobileSessions";
 import { clientIp } from "../../../../../lib/requestIp";
+import { INVITE_ONLY_MESSAGE } from "../../../../../lib/signupMessages";
 
 // Public by design: the phone half of email sign-in. Returns a bearer session for
 // the owner a verified address belongs to; no Google account is involved.
@@ -33,11 +34,12 @@ export async function POST(req: NextRequest) {
 
   let body: { email?: unknown; code?: unknown };
   try { body = JSON.parse(await readLimited(req, 4096)) ?? {}; } catch { return reply(400, { error: "That code is invalid or has expired" }); }
-  const owner = await verifyEmailCode(String(body.email ?? "").trim().toLowerCase(), String(body.code ?? "").trim());
-  if (!owner) {
+  const result = await verifyEmailCode(String(body.email ?? "").trim().toLowerCase(), String(body.code ?? "").trim());
+  if (!result.ok) {
+    if (result.reason === "invite_only") return reply(403, { error: "invite_only", message: INVITE_ONLY_MESSAGE });
     recordFailure(client);
     return reply(400, { error: "That code is invalid or has expired" });
   }
-  const session = await createMobileSession(owner);
+  const session = await createMobileSession(result.ownerId);
   return reply(200, { token: session.token, expires: session.expires });
 }

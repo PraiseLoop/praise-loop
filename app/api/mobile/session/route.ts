@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyGoogleIdToken } from "../../../../lib/googleIdToken";
-import { findOrCreateGoogleOwner, recordFailure, tooManyFailures } from "../../../../lib/mobileSignIn";
+import { recordFailure, signInGoogleIdentity, tooManyFailures } from "../../../../lib/mobileSignIn";
 import { createMobileSession } from "../../../../lib/mobileSessions";
 import { clientIp } from "../../../../lib/requestIp";
+import { INVITE_ONLY_MESSAGE } from "../../../../lib/signupMessages";
 
 // Reads at most `max` bytes of the stream, so a missing or false Content-Length cannot make us buffer more.
 async function readLimited(req: NextRequest, max: number) {
@@ -31,9 +32,13 @@ export async function POST(req: NextRequest) {
     try { idToken = JSON.parse(await readLimited(req, 8192))?.idToken; } catch { /* handled below */ }
     const identity = typeof idToken === "string" ? await verifyGoogleIdToken(idToken) : null;
     if (!identity) { recordFailure(client); return reply(401, { error: "Invalid Google sign-in" }); }
-    const owner = await findOrCreateGoogleOwner(identity);
-    if (!owner) { recordFailure(client); return reply(401, { error: "Invalid Google sign-in" }); }
-    const session = await createMobileSession(owner);
+    const result = await signInGoogleIdentity(identity);
+    if (!result.ok) {
+      if (result.reason === "invite_only") return reply(403, { error: "invite_only", message: INVITE_ONLY_MESSAGE });
+      recordFailure(client);
+      return reply(401, { error: "Invalid Google sign-in" });
+    }
+    const session = await createMobileSession(result.ownerId);
     return reply(200, { token: session.token, expires: session.expires });
   } catch { return reply(500, { error: "Sign-in failed; retry" }); }
 }

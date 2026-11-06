@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyMicrosoftIdToken } from "../../../../../lib/microsoftIdToken";
-import { findOrCreateMicrosoftOwner, recordFailure, tooManyFailures } from "../../../../../lib/mobileSignIn";
+import { recordFailure, signInMicrosoftIdentity, tooManyFailures } from "../../../../../lib/mobileSignIn";
 import { createMobileSession } from "../../../../../lib/mobileSessions";
 import { clientIp } from "../../../../../lib/requestIp";
+import { INVITE_ONLY_MESSAGE } from "../../../../../lib/signupMessages";
 
 // Reads at most `max` bytes of the stream, so a missing or false Content-Length cannot make us buffer more.
 async function readLimited(req: NextRequest, max: number) {
@@ -31,9 +32,13 @@ export async function POST(req: NextRequest) {
     try { body = JSON.parse(await readLimited(req, 8192)); } catch { /* handled below */ }
     const identity = typeof body?.idToken === "string" ? await verifyMicrosoftIdToken(body.idToken) : null;
     if (!identity) { recordFailure(client); return reply(401, { error: "Invalid Microsoft sign-in" }); }
-    const owner = await findOrCreateMicrosoftOwner(identity);
-    if (!owner) { recordFailure(client); return reply(401, { error: "Invalid Microsoft sign-in" }); }
-    const session = await createMobileSession(owner);
+    const result = await signInMicrosoftIdentity(identity);
+    if (!result.ok) {
+      if (result.reason === "invite_only") return reply(403, { error: "invite_only", message: INVITE_ONLY_MESSAGE });
+      recordFailure(client);
+      return reply(401, { error: "Invalid Microsoft sign-in" });
+    }
+    const session = await createMobileSession(result.ownerId);
     return reply(200, { token: session.token, expires: session.expires });
   } catch { return reply(500, { error: "Sign-in failed; retry" }); }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { emailSignInConfigured, verifyEmailCode } from "../../../../../lib/emailAuth";
 import { recordFailure, tooManyFailures } from "../../../../../lib/mobileSignIn";
 import { clientIp } from "../../../../../lib/requestIp";
+import { INVITE_ONLY_MESSAGE } from "../../../../../lib/signupMessages";
 import { createWebSession, webSessionCookie } from "../../../../../lib/webSessions";
 
 // Public by design: the web half of email sign-in. On success it sets the same
@@ -41,12 +42,15 @@ export async function POST(req: NextRequest) {
 
   let body: { email?: unknown; code?: unknown };
   try { body = JSON.parse(await readLimited(req, 4096)) ?? {}; } catch { return reply(400, { error: "That code is invalid or has expired" }); }
-  const owner = await verifyEmailCode(String(body.email ?? "").trim().toLowerCase(), String(body.code ?? "").trim());
-  if (!owner) {
+  const result = await verifyEmailCode(String(body.email ?? "").trim().toLowerCase(), String(body.code ?? "").trim());
+  if (!result.ok) {
+    // A valid code for a brand-new uninvited address is the only place the gate
+    // surfaces; it says so plainly and counts nothing as a failed guess (#195).
+    if (result.reason === "invite_only") return reply(403, { error: "invite_only", message: INVITE_ONLY_MESSAGE });
     recordFailure(client);
     return reply(400, { error: "That code is invalid or has expired" });
   }
-  const session = await createWebSession(owner);
+  const session = await createWebSession(result.ownerId);
   const response = reply(200, { ok: true });
   response.cookies.set(webSessionCookie(session.token, session.expires));
   return response;

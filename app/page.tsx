@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { getProviders, signIn } from "next-auth/react";
 import { useEffect, useState, type FormEvent } from "react";
 import { landingNotice } from "../lib/sessionExpiry";
+import { INVITE_ONLY_MESSAGE } from "../lib/signupMessages";
 import { useBusiness } from "./AppShell";
 import Icon from "./ui/Icon";
 import styles from "./landing.module.css";
@@ -18,8 +19,13 @@ type DemoOwnerOption = { key: string; label: string };
 
 async function postJson(path: string, body: object) {
   const response = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  const data = await response.json().catch(() => null) as { error?: unknown } | null;
-  return { ok: response.ok, status: response.status, error: typeof data?.error === "string" ? data.error : null };
+  const data = await response.json().catch(() => null) as { error?: unknown; message?: unknown } | null;
+  return {
+    ok: response.ok,
+    status: response.status,
+    error: typeof data?.error === "string" ? data.error : null,
+    message: typeof data?.message === "string" ? data.message : null
+  };
 }
 
 export default function HomePage() {
@@ -27,7 +33,12 @@ export default function HomePage() {
   const { status, businesses } = useBusiness();
   // Sent here by apiFetch when the session ended: say so, and return to the same page after sign-in.
   const [notice, setNotice] = useState<ReturnType<typeof landingNotice>>({ message: null, callbackUrl: null });
-  useEffect(() => { setNotice(landingNotice(window.location.search)); }, []);
+  useEffect(() => {
+    const fromSession = landingNotice(window.location.search);
+    // A refused new sign-up comes back from NextAuth with our machine code (#195).
+    const inviteOnly = new URLSearchParams(window.location.search).get("error") === "invite_only";
+    setNotice({ message: inviteOnly ? INVITE_ONLY_MESSAGE : fromSession.message, callbackUrl: fromSession.callbackUrl });
+  }, []);
   // Microsoft is optional like Google: only offer it when the server has its
   // client configured, which NextAuth reports in its provider list.
   const [microsoftReady, setMicrosoftReady] = useState(false);
@@ -104,7 +115,7 @@ export default function HomePage() {
     try {
       const result = await postJson("/api/auth/email/verify", { email: email.trim(), code: code.trim() });
       if (!result.ok) {
-        setEmailError(result.status === 429 ? "Too many attempts. Try again later." : result.error ?? "That code is invalid or has expired.");
+        setEmailError(result.status === 429 ? "Too many attempts. Try again later." : result.message ?? result.error ?? "That code is invalid or has expired.");
         return;
       }
       // Reload so AppShell sees the new cookie and runs the existing, validated

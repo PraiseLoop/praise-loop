@@ -4,7 +4,7 @@
 who are about to change it. It summarises and links; the detailed, authoritative text lives in the
 other docs. When you change behaviour, update the detailed doc and the matching line here.
 
-Last reviewed: 2026-11-05 (Stripe checkout, webhook and portal, #223; direct Meta publishing, #234).
+Last reviewed: 2026-11-05 (Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195).
 
 | Doc | What it is the source of truth for |
 | --- | --- |
@@ -131,6 +131,14 @@ transactional.
   the address on the signed-in owner's row within ten minutes (or, for owners with no address, a
   session under ten minutes old). It pauses the action; it does not protect against whoever holds
   the mailbox. See [auth.md](auth.md) and [decisions.md](decisions.md).
+- **Pilot sign-up gate** (#195): `SIGNUP_MODE` is `open` (default) or `invite`, and `INVITED_EMAILS`
+  is a comma/whitespace allow-list compared case-insensitively. The gate lives in
+  `lib/signupPolicy.ts` and is consulted by `signInWithIdentity` only when it would create a new
+  owner, so returning identities, existing owners and linking a method to a signed-in owner are
+  never blocked. An invalid mode fails closed to `invite` with one warning. A refusal on the phone
+  is `403 {error:"invite_only"}`; on the web it returns to `/?error=invite_only`; the email request
+  route does not reveal invitation or ownership. Apple's private-relay or missing address must
+  itself be invited, and invite codes for Apple are the follow-up. No schema change.
 - **Sessions**: web uses NextAuth with revocable database sessions (cookie, 8 hours); the phone uses
   hashed bearer tokens in the same `auth_sessions` table (`kind='mobile'`), stored in the keychain.
   Any 401 on the phone clears the token and returns to sign-in.
@@ -260,6 +268,7 @@ endpoints take the Page token or the User token, to be settled by the owner-appr
 | Subscription tables, provider interface, fake checkout, cancel on deletion | built; no real provider event in tests beyond fixtures | #219, #220 |
 | Stripe web checkout, webhook and customer portal | built; Stripe test-mode run **not run** (webhook secret not configured) | #223 |
 | Email-code, Google, linked methods, profile (web + phone), delete account | shipped | #149–#151, #156, #157, #93 |
+| Invite-only sign-up (pilot gate) | shipped; production sets `SIGNUP_MODE=invite` | #195 |
 | Phone queue, detail, share sheet, Save to Photos, new version | shipped; device runs pending | #86, #87 |
 | Demo owner picker, dev seeder | shipped | #129, #154 |
 | Brand voice from a website (Pro) | shipped | #97 |

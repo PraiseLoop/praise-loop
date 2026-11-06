@@ -66,6 +66,56 @@ MEDIA_ROOT) before restarting. Migration 007 rewrites legacy DB URLs to /api/med
 Do not expose the media directory through a reverse proxy. #29 supplies deliberate
 provider-fetchable media; guessing draft IDs never grants publication access.
 
+## Invite-only sign-up for the pilot (#195)
+
+Before the paid pilot, creating an owner can be closed to invited people without changing
+any provider. Two environment variables on the web service control it:
+
+- `SIGNUP_MODE=open|invite`. The default (unset or blank) is `open`, so local development,
+  tests and existing deployments behave exactly as before. `invite` refuses a brand-new owner
+  whose address is not on the list. Any other value fails closed as `invite` and logs one
+  `signup_mode_invalid` warning per process. Production sets `invite`.
+- `INVITED_EMAILS` is a comma and/or whitespace separated list of addresses, compared
+  case-insensitively after trimming and lower-casing. The operator adds or removes someone by
+  editing the variable and restarting the web service; no redeploy or database change is
+  needed. The list itself is never logged.
+
+The rule applies only when a **new owner would be created**. A returning identity
+(`auth_accounts` provider + subject), an email that already belongs to an owner, and linking
+an additional method to a signed-in owner are all outside the gate and always work, even if
+that owner is not on the list. The decision lives in `lib/signupPolicy.ts` and is called from
+the one creation path, `signInWithIdentity` in `lib/authLinking.ts`, so the web NextAuth
+callback and the phone token routes enforce the same rule.
+
+- Google, email code and Microsoft use the address the provider reported. Google must already
+  be verified before it reaches the policy, and an email code proves the mailbox. Microsoft's
+  address is used for the invite check even though it is still never trusted for linking.
+- Sign in with Apple may return an `@privaterelay.appleid.com` address or no address at all.
+  In `invite` mode a new Apple identity is refused unless its verified address is on the list,
+  so a private-relay address must itself be invited. Invite codes that Apple's flow can carry
+  are the planned follow-up; the list is the pilot's answer.
+- A refusal is a `403` on the phone routes with the stable machine code
+  `{"error":"invite_only","message":"PraiseLoop is invite-only right now. Ask us for an invite."}`;
+  the phone app maps `invite_only` to that message. The web Google/Microsoft callback redirects
+  to `/?error=invite_only`, and the landing page shows the same message. Email verify answers
+  the same `invite_only` code on both clients.
+- `POST /api/auth/email/request` deliberately does **not** consult the list. It answers the same
+  body and status for an invited, uninvited or existing address, sends the same message and does
+  the same work, so the request route cannot be used to probe who is invited or who already has
+  an owner. The refusal can only appear at verify/sign-in time, after a valid code.
+- A refused attempt creates no `auth_users`, `auth_accounts`, `auth_sessions`, business or
+  `owner_usage` row. The trusted-email upsert is the one branch that writes before deciding
+  (it is what serializes two subjects racing for an address); when the new row is refused it is
+  deleted and no method is attached, all inside the same transaction. The other providers check
+  before inserting anything.
+- Refusals are logged as `signup_refused` with the provider and a 12-character SHA-256 prefix of
+  the normalised address (or no address for Apple), never the address, and never the allow-list.
+
+`scripts/test-invite-signup.ts` covers invited and uninvited Google, email and Microsoft
+creation, Apple with a listed address, a relay address and no address, an existing unlisted
+owner and a second linked method, open mode, an invalid mode, identical email-request replies
+and the logs. There is no schema change.
+
 ## Deleting an account (#93)
 
 `DELETE /api/account` is owner-wide (listed in `OWNER_WIDE_PATHS`, not

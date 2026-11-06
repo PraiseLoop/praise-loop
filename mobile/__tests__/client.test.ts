@@ -80,6 +80,18 @@ describe("api client", () => {
     expect(error.kind).toBe("http");
     expect(error.status).toBe(400);
     expect(error.message).toBe("valid draftPostId is required");
+    expect(error.code).toBe("valid draftPostId is required");
+  });
+
+  it("keeps the machine code and the human message separate", async () => {
+    const error = await failure(client((async () => response(403, {
+      error: "invite_only",
+      message: "PraiseLoop is invite-only right now. Ask us for an invite."
+    })) as typeof fetch).request("/api/auth/email/verify"));
+    expect(error.kind).toBe("http");
+    expect(error.status).toBe(403);
+    expect(error.code).toBe("invite_only");
+    expect(error.message).toMatch(/invite-only/);
   });
 
   it("maps transport failures and timeouts without leaking the token", async () => {

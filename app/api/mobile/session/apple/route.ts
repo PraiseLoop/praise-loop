@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAppleIdToken } from "../../../../../lib/appleIdToken";
-import { findOrCreateAppleOwner, recordFailure, tooManyFailures } from "../../../../../lib/mobileSignIn";
+import { recordFailure, signInAppleIdentity, tooManyFailures } from "../../../../../lib/mobileSignIn";
 import { createMobileSession } from "../../../../../lib/mobileSessions";
 import { clientIp } from "../../../../../lib/requestIp";
+import { INVITE_ONLY_MESSAGE } from "../../../../../lib/signupMessages";
 import { NAME_MAX_LENGTH } from "../../../../../lib/services/profile";
 
 // Reads at most `max` bytes of the stream, so a missing or false Content-Length cannot make us buffer more.
@@ -41,9 +42,13 @@ export async function POST(req: NextRequest) {
     try { body = JSON.parse(await readLimited(req, 8192)); } catch { /* handled below */ }
     const identity = typeof body?.idToken === "string" ? await verifyAppleIdToken(body.idToken) : null;
     if (!identity) { recordFailure(client); return reply(401, { error: "Invalid Apple sign-in" }); }
-    const owner = await findOrCreateAppleOwner(identity, cleanFullName(body?.fullName));
-    if (!owner) { recordFailure(client); return reply(401, { error: "Invalid Apple sign-in" }); }
-    const session = await createMobileSession(owner);
+    const result = await signInAppleIdentity(identity, cleanFullName(body?.fullName));
+    if (!result.ok) {
+      if (result.reason === "invite_only") return reply(403, { error: "invite_only", message: INVITE_ONLY_MESSAGE });
+      recordFailure(client);
+      return reply(401, { error: "Invalid Apple sign-in" });
+    }
+    const session = await createMobileSession(result.ownerId);
     return reply(200, { token: session.token, expires: session.expires });
   } catch { return reply(500, { error: "Sign-in failed; retry" }); }
 }
