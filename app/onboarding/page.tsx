@@ -256,6 +256,16 @@ export default function Onboarding() {
                 </article>
               ))}
             </div>
+            {/* Optional: onboarding never requires a posting connection. Posts wait in
+                the approval queue until the owner connects Instagram, Facebook or Buffer. */}
+            <section className="pl-panel" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+              <strong>Want us to publish for you?</strong>
+              <span className="pl-muted">
+                You can connect Instagram or Facebook now, but it’s optional. Until you do, your
+                approved posts stay in the approval queue and you can post them from your phone.
+              </span>
+              <Link href="/connections" className="pl-btn" style={{ alignSelf: "flex-start" }}>Connect Instagram or Facebook</Link>
+            </section>
           </div>
         ) : null}
       </main>

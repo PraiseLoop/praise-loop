@@ -48,6 +48,12 @@ async function main(){
         const more=page.waitForResponse(r=>r.url().endsWith("/api/quotes/select"));await page.getByRole("button",{name:"Make my first 3 posts"}).click();assert.equal((await more).status(),202);
         const pending=(await c.query("SELECT id FROM generation_jobs WHERE state='pending' ORDER BY id")).rows;for(const job of pending)assert.equal(await processGeneration(Number(job.id),deps),true);
         await page.getByRole("heading",{name:"Your first 3 posts are ready"}).waitFor();
+        // Connecting a poster is optional: onboarding finishes with no posting
+        // connection, and the optional step links to the Meta section.
+        await page.getByText("Want us to publish for you?").waitFor();
+        const connect=page.getByRole("link",{name:"Connect Instagram or Facebook"});
+        assert.equal(await connect.getAttribute("href"),"/connections");
+        assert.equal(await page.getByText(/Buffer is required/i).count(),0,"onboarding never requires Buffer");
         const images=page.getByRole("img",{name:/Onboarding draft/});assert.equal(await images.count(),3);for(const image of await images.all())assert.equal(await image.evaluate(e=>(e as HTMLImageElement).naturalWidth),1080);
         const seconds=Number(((Date.now()-started)/1000).toFixed(2));
         await page.getByRole("link",{name:"Review & approve"}).click();await page.getByRole("heading",{name:/need your OK/}).waitFor();await page.getByLabel(/^Caption for draft /).first().waitFor();

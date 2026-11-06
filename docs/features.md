@@ -9,7 +9,9 @@ worker/Redis ([Durable weekly generation](#durable-weekly-generation-43)). Signi
 four-step wizard (brand → reviews → making posts → first posts) that resumes where
 you left off. “+ Add a business” in the sidebar opens `/onboarding?new=1`, which
 starts a fresh setup with its own idempotency key. No Google connection, billing,
-automatic approval or publishing is required.
+automatic approval or publishing is required. The final step offers an optional
+“Connect Instagram or Facebook” link to `/connections`; onboarding finishes without
+it and approved posts wait in the approval queue.
 
 1. Sign in, enter business name (1–120 characters), IANA timezone, colors and tone.
    Optional PNG/JPEG/WebP logo is validated before saving (256 KB / 4 MP); remote
@@ -28,7 +30,9 @@ automatic approval or publishing is required.
    Save & exit opens the approval queue instead of resuming the wizard.
 4. Open the actual owner-protected images and captions. “Usable previews” appears
    only after each image loads. Review in approval selects the saved business;
-   the owner decides what to edit/approve. Real publishing still depends on #29.
+   the owner decides what to edit/approve. An optional card links to Connections
+   to connect Instagram/Facebook; real publishing needs a Meta target or a Buffer
+   channel (#234/#29), but onboarding never requires either.
 
 Saved steps resume from owner-scoped database records and the business URL. A
 sessionStorage UUID only deduplicates initial business creation; no review text,
@@ -216,11 +220,12 @@ allows 1,000 requests per channel per month), and stop at `sent` or `error`.
 
 The same worker and gate can publish an approved, scheduled post straight to the Instagram
 professional account or Facebook Page the owner selected, instead of Buffer. The Connect backend,
-encrypted Page token and one target per business are described in
+encrypted Page token, one target per business and the `/connections` setup screen are described in
 [integrations.md](integrations.md#direct-instagram-and-facebook-publishing-234--checked-2026-11-05).
-The live Graph client and the setup screen are **not built**; the production client fails closed
-with `MetaAccessNotApproved`, no live call has been run, and nothing below has been exercised
-against Meta.
+The live Graph client is **not built**; the production client fails closed with
+`MetaAccessNotApproved`, no live call has been run, and nothing below has been exercised against
+Meta. The posting banner and schedule page use the provider-neutral connected-state rule so a Meta
+target counts exactly like a Buffer connection.
 
 - **Gate and plan.** `BUFFER_POSTING_MODE` is still the shared gate (`off`/`draft`/`live`, default
   `off`), exposed provider-neutrally as `automaticPostingMode`. Scheduling and the worker both check
@@ -275,11 +280,15 @@ those drafts back to `approved` first.
 
 ### The "is posting set up?" banner (#205)
 
-The Approval and Schedule pages ask `GET /api/businesses/<id>/posting-setup` (database only, never calls
-Buffer) and show one banner for the business: posting switched off, Buffer not connected, needs reconnecting,
-no channel chosen, or a personal Instagram account. Each fixable state links to Connections. In `draft` mode a
-ready business shows "Test mode: posts are saved as drafts"; in `live` mode a ready business shows nothing.
-The wording lives in `lib/posting/postingSetup.ts`.
+The Approval and Schedule pages ask `GET /api/businesses/<id>/posting-setup` (database only, never calls a
+provider) and show one provider-neutral banner for the business: posting switched off, no posting connection
+yet, needs reconnecting, no target chosen, a personal Buffer Instagram account, or a Facebook Page that cannot
+publish. A business with a Meta target **or** a Buffer connection counts as posting-connected, so the page
+never says "nothing connected" when either exists. The provider is chosen with the same
+`selectPostingProvider` helper the scheduler and worker use (Meta wins when both exist), so the banner cannot
+disagree with who would receive a post. Each fixable state links to Connections. In `draft` mode a ready
+business says it is a test (Buffer drafts are saved in Buffer; Meta publishes nothing); in `live` mode a ready
+business shows nothing. The wording lives in `lib/posting/postingSetup.ts`.
 
 ### Not built yet
 
@@ -338,10 +347,13 @@ Rollback: stop using the screen and leave `buffer_connections` and
 this part. Removing the profile menu entry hides the page, and disconnecting from
 the page deletes only PraiseLoop's stored tokens.
 
-## Meta publishing connection (backend, #234)
+## Meta publishing setup and direct publishing (#234)
 
-The OAuth connect/disconnect backend for direct Instagram and Facebook Page publishing exists, but
-it does **not** post, schedule or render a setup screen yet. Buffer remains the posting provider.
+The OAuth connect/disconnect backend for direct Instagram and Facebook Page publishing exists, and
+worker publishing is built and tested with a fake client. The setup screen is built on `/connections`;
+Buffer stays available and keeps working unchanged. The live Graph client and the owner-approved live
+connect/publish test are **not built/run** — they need the owner's approved Meta app, Business
+Verification and App Review. No Meta request is possible in tests or browser fixtures.
 The feasibility findings, permissions, token lifetimes and owner setup are in
 [integrations.md](integrations.md#direct-instagram-and-facebook-publishing-234--checked-2026-11-05);
 the decision is in [decisions.md](decisions.md).
@@ -365,17 +377,32 @@ the decision is in [decisions.md](decisions.md).
   changed linked Instagram account drops an existing Instagram target rather than publishing to a
   different account. A reconnect that returns no Pages reports `no_pages` and leaves a working
   connection alone. A rejected Page token marks that Page `needs_reconnect`.
-- **Not built:** the setup screen, the worker call that publishes through Meta, the JPEG variant of
-  the rendered image, and the owner-approved live test. The callback redirects to
-  `/connections?meta=<outcome>` for the screen that will land with those slices.
-- **Tests.** `scripts/test-meta-connect.ts` runs against a disposable database and a fake Graph
-  client: state hashing and single use, owner binding, encrypted storage and decryption, no tokens
-  in views, target selection and owner isolation, reconnect shrinking, needs-reconnect, disconnect
-  and cascades, pagination and refusing a foreign paging URL, plus the routes. `scripts/test-meta.ts`
-  covers the stub/fake publishing adapter. Both are in `npm test`; no test can reach Meta.
-- **Rollback:** stop calling the routes and leave the tables in place; they hold no active
-  publishing path. Disconnecting deletes only PraiseLoop's stored Meta tokens. Removing the app in
-  Facebook settings is the owner's side.
+- **Setup screen (`/connections`).** A Meta section sits beside the Buffer section. When the server
+  has no `META_APP_ID`/`META_APP_SECRET`/encryption key it shows an honest "Not available yet" state
+  with no Connect button (fail closed). Otherwise it offers Connect through the existing
+  `POST /api/meta/connect`, shows `needs_reconnect` from the connection status, and after connecting
+  lists Facebook Pages and linked Instagram accounts. Each business chooses exactly one target with
+  the existing `GET`/`PUT`/`DELETE /api/businesses/:id/meta-target` routes; an Instagram option
+  appears only for a Page with a linked account, and a Page that cannot publish or needs reconnecting
+  stays listed but disabled with the reason. Disconnect asks inline and removes the stored access.
+  Callback outcomes (`connected`, `no_pages`, `denied`, `expired`, `failed`, `not_configured`,
+  `plan_required`) are shown once from `/connections?meta=<code>` and removed from the address bar.
+  The wording and state rules live in `lib/meta/connectionsView.ts`.
+- **Not built:** the live Graph client and the owner-approved live connect/publish test. The worker
+  publishing path itself is built (see below); the setup screen and callback landing exist now.
+- **Tests:** `scripts/test-meta-connections-view.ts` covers the pure screen states and wording;
+  `scripts/test-meta-connections-browser.ts` walks the production build with synthetic data, the
+  not-available state, target selection, reconnect and disconnect, and asserts no request goes to
+  Meta. Neither test can reach Meta.
+- **Backend tests.** `scripts/test-meta-connect.ts` runs against a disposable database and a fake
+  Graph client: state hashing and single use, owner binding, encrypted storage and decryption, no
+  tokens in views, target selection and owner isolation, reconnect shrinking, needs-reconnect,
+  disconnect and cascades, pagination and refusing a foreign paging URL, plus the routes.
+  `scripts/test-meta.ts` covers the stub/fake publishing adapter; `scripts/test-meta-publish.ts`
+  covers the worker. All are in `npm test`; no test can reach Meta.
+- **Rollback:** stop calling the routes and leave the tables in place. Disconnecting deletes only
+  PraiseLoop's stored Meta tokens; a business with a Buffer channel keeps Buffer. Removing the app
+  in Facebook settings is the owner's side. The live connect/publish test has **not** been run.
 
 ## Quote-card rendering
 
@@ -505,7 +532,7 @@ is what lets the plan limit "more than one business".
 | Drafts per business per week | 1 | 5 | 5 |
 | Quote-card designs | 1 (Classic) | 4 | 4 |
 | Image watermark | Yes | No | No |
-| Automatic posting (through Buffer) | No | Yes | Yes |
+| Automatic posting (Buffer or Instagram/Facebook) | No | Yes | Yes |
 | Automatic review sync | No | Planned | Planned |
 | AI review replies | No | Planned | Planned |
 | Brand voice from your website | No | Yes | Yes |
@@ -541,9 +568,9 @@ The limits live in `lib/services/entitlements.ts` and are enforced on the server
 - **Automatic posting** is the paid limit `automaticPosting` (`false` on Free,
   `true` on Pro and Business). The server reads the effective plan through
   `entitlementsFor`, so an expired plan counts as Free. It is enforced when
-  starting or completing a Buffer connection, choosing a Buffer channel,
-  confirming a post for a slot, and again in the worker immediately before it
-  sends. A post already queued when a plan lapses is not sent and not
+  starting or completing a Buffer or Meta connection, choosing a Buffer channel
+  or Meta target, confirming a post for a slot, and again in the worker
+  immediately before it sends. A post already queued when a plan lapses is not sent and not
   resubmitted: it ends `error`/`failed` with the `plan_required` reason, and the
   approval card and schedule explain why. Free owners keep the phone share sheet
   and image download, and approval is required on every plan.
