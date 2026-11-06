@@ -42,7 +42,7 @@ async function main() {
         const { browser, page, errors } = await open(base, "/schedule");
         try {
           await page.getByText("Posting isn’t connected yet.").waitFor();
-          await page.getByRole("link", { name: "Connect Buffer" }).click();
+          await page.getByRole("link", { name: "Connect Instagram or Facebook" }).click();
           await page.waitForURL(`${base}/connections`);
 
           const conn = Number((await c.query("INSERT INTO buffer_connections(owner_id,organization_id,encrypted_access_token,encrypted_refresh_token,access_expires_at,scope,status) VALUES('banner-owner','org','a','r',now()+interval '1 hour','s','active') RETURNING id")).rows[0].id);

@@ -449,12 +449,14 @@ real business name is committed in tests or sample data.
 Status: the feasibility gate passed (#244). The stub and its fake adapter are in
 `lib/integrations/metaPublishing.ts`, the OAuth connect/disconnect backend is in
 `lib/services/metaConnection.ts`, and worker publishing is in `lib/services/bufferPosting.ts`
-(the shared provider worker) with the JPEG variant in `lib/services/imageRenderer.ts`. Worker
-publishing is **built and tested with a fake client only**. The **live Graph client, the setup UI
-and any live call are not built**, no Meta app or access token exists, and **no live call has been
-run**. The live connect/publish test was **not run**; it needs the owner's approved Meta access
-(Meta app, Business Verification and App Review). The live client still fails closed with
-`MetaAccessNotApproved`. #234 stays open.
+(the shared provider worker) with the JPEG variant in `lib/services/imageRenderer.ts`. The
+`/connections` setup screen is in `app/connections/page.tsx` with its pure rules in
+`lib/meta/connectionsView.ts`, and the posting banner is provider-neutral
+(`lib/posting/postingSetup.ts`). Worker publishing and the screen are **built and tested with a fake
+client only**. The **live Graph client and any live call are not built**, no Meta app or access token
+exists, and **no live call has been run**. The live connect/publish test was **not run**; it needs the
+owner's approved Meta access (Meta app, Business Verification and App Review). The live client still
+fails closed with `MetaAccessNotApproved`. #234 stays open.
 Everything below is from Meta's own documentation on 2026-11-05 (Graph API v27.0); vendor blogs
 were not used.
 
@@ -475,7 +477,9 @@ Login, not both.
 
 ### Connect (#234, built)
 
-The backend and API exist, and worker publishing is built (see below); there is no setup screen and no live client yet.
+The backend and API exist, worker publishing is built (see below) and the `/connections` setup
+screen is built; the live Graph client is not built yet. Without app credentials the screen shows a
+"not available yet" state instead of a broken Connect button, so nothing calls Meta.
 
 - **Routes.** `POST /api/meta/connect` (owner-wide) returns the Facebook Login URL.
   `GET /api/meta/callback` is public to the route guard but requires the signed-in owner.
@@ -503,10 +507,16 @@ The backend and API exist, and worker publishing is built (see below); there is 
   and an Instagram target needs a linked professional account. Another owner's business or Page is
   a 404. Automatic posting is paid, so a Free or expired plan is refused at start, completion and
   selection.
-- **Tests.** `scripts/test-meta-connect.ts` covers the state hash and single use, owner binding,
-  the token exchanges with a fake Graph, encrypted storage and decryption, no tokens in views,
-  target selection and isolation, reconnect shrinking, needs-reconnect, disconnect, cascades,
-  pagination (and refusing a foreign paging URL), and the routes. No test can reach Meta.
+- **Screen and tests.** The Meta section sits beside Buffer on `/connections`: connect, connected,
+  needs-reconnect, disconnect, and one target per business from the Page list. A Page that cannot
+  publish or needs reconnecting is shown disabled with the reason; an Instagram option appears only
+  with a linked professional account. `scripts/test-meta-connect.ts` covers the state hash and single
+  use, owner binding, the token exchanges with a fake Graph, encrypted storage and decryption, no
+  tokens in views, target selection and isolation, reconnect shrinking, needs-reconnect, disconnect,
+  cascades, pagination (and refusing a foreign paging URL), and the routes.
+  `scripts/test-meta-connections-view.ts` covers the pure screen wording/state rules and
+  `scripts/test-meta-connections-browser.ts` walks the production build and asserts no request goes
+  to Meta. No test can reach Meta, and the live connect/publish test has **not** been run.
 
 
 - The owner needs an **Instagram professional account** (Business or Creator). Consumer accounts
@@ -716,9 +726,9 @@ Login rather than Meta's newer recommendation.
    `META_REDIRECT_URI` through deployment secrets; never commit them. `META_CONFIG_ID` is optional
    (it replaces the scope list with the permissions in a Login for Business configuration), and
    `META_GRAPH_VERSION` defaults to `v27.0`.
-7. The connect backend and worker publishing are built; after approval, implement the live Graph
-   client, connect a real Page and record a `draft`-mode run. The setup screen and live test are
-   still to come.
+7. The connect backend, worker publishing and setup screen are built; after approval, implement the
+   live Graph client, connect a real Page and record a `draft`-mode run. The live connect/publish
+   test has **not** been run and needs this approved Meta app.
 
 ### Sources
 

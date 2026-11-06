@@ -18,6 +18,9 @@ async function main() {
     // Never call the real Buffer API. An empty client id makes connect answer 503.
     process.env.BUFFER_CLIENT_ID = "";
     process.env.BUFFER_CLIENT_SECRET = "";
+    // Keep the Meta section in its honest "not available" state for this walkthrough.
+    process.env.META_APP_ID = "";
+    process.env.META_APP_SECRET = "";
 
     await webFixture(async base => {
       const browser: Browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH === "playwright" ? undefined : process.env.CHROMIUM_PATH ?? "/usr/bin/chromium", args: ["--no-sandbox"] });
