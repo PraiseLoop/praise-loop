@@ -18,6 +18,7 @@ export async function getPostingSetup(ownerId: string, businessId: number, mode:
      WHERE c.business_id=$1 AND bc.owner_id=$2`,
     [businessId, ownerId]
   );
+  const metaConnection = await query<{ status: "active" | "needs_reconnect" }>("SELECT status FROM meta_connections WHERE owner_id=$1", [ownerId]);
   const meta = await query<{
     target: "instagram" | "facebook";
     page_name: string;
@@ -45,7 +46,7 @@ export async function getPostingSetup(ownerId: string, businessId: number, mode:
       channel: bufferRow ? { service: bufferRow.service, type: bufferRow.channel_type } : null
     },
     meta: {
-      connection: metaRow?.connection_status ?? null,
+      connection: metaConnection.rows[0]?.status ?? null,
       target: metaRow ? { target: metaRow.target, pageStatus: metaRow.page_status, tasks: metaRow.tasks ?? [] } : null
     }
   });
