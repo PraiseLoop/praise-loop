@@ -119,8 +119,8 @@ Run migration 010, configure owner login ([auth.md](auth.md)), and ensure the du
 
 1. Owner sets weekly posting slots (weekday + local time) on the Schedule page. Times are stored in business timezone.
 2. On confirm, the system proposes the next 5 available UTC slots (skipping occupied) using business timezone with correct DST resolution.
-3. Each selected approved draft gets a durable `queued` claim on a specific UTC instant and becomes `scheduled`. **Nothing is sent to Buffer at this point.** The business needs a connected Buffer and a channel that can post by itself (a Facebook Page or a Business/Creator Instagram).
-4. When the time comes the worker sends the post to Buffer ([Posting through Buffer](#posting-through-buffer-29-part-3)). Only Buffer saying `sent` makes the draft `published`.
+3. Each selected approved draft gets a durable `queued` claim on a specific UTC instant and becomes `scheduled`, with the provider fixed on the claim. **Nothing is sent to any provider at this point.** The business needs a usable target: a Meta Page/Instagram target, or a connected Buffer channel that can post by itself (a Facebook Page or a Business/Creator Instagram). Meta wins when both exist.
+4. When the time comes the worker sends the post to that provider ([Posting through Buffer](#posting-through-buffer-29-part-3), [Direct Meta publishing](#direct-meta-publishing-234)). Only a verified provider result makes the draft `published`.
 5. Before that time the owner can cancel (`POST /api/posting-slots/cancel`), which frees the slot and returns the draft to `approved`.
 
 ### DST handling
@@ -150,7 +150,7 @@ Run migration 010, configure owner login ([auth.md](auth.md)), and ensure the du
 
 - No automatic scheduling; owner explicitly confirms each batch.
 - Posting requires `BUFFER_POSTING_MODE` to be `draft` or `live` (see below). Without it, assign returns 503.
-- A post can be cancelled only while it is still `queued`. Once it has been handed to Buffer, manage it in Buffer.
+- A post can be cancelled only while it is still `queued`. Once it has been handed to a provider, manage it there.
 - Maximum 5 slots per weekly batch (MVP limit).
 
 ### Rollback
@@ -211,6 +211,50 @@ allows 1,000 requests per channel per month), and stop at `sent` or `error`.
 - **First real run:** set `BUFFER_POSTING_MODE=draft` on a test business whose channel is a Business
   Instagram, with the account owner's agreement. Expect one draft in Buffer and nothing published. Only
   then consider `live`.
+
+## Direct Meta publishing (#234)
+
+The same worker and gate can publish an approved, scheduled post straight to the Instagram
+professional account or Facebook Page the owner selected, instead of Buffer. The Connect backend,
+encrypted Page token and one target per business are described in
+[integrations.md](integrations.md#direct-instagram-and-facebook-publishing-234--checked-2026-11-05).
+The live Graph client and the setup screen are **not built**; the production client fails closed
+with `MetaAccessNotApproved`, no live call has been run, and nothing below has been exercised
+against Meta.
+
+- **Gate and plan.** `BUFFER_POSTING_MODE` is still the shared gate (`off`/`draft`/`live`, default
+  `off`), exposed provider-neutrally as `automaticPostingMode`. Scheduling and the worker both check
+  `automaticPosting`, so Free and expired owners are refused with no provider call. `off` makes no
+  provider call. Meta has no draft post type, so in `draft` mode the preflight runs but no container
+  is created and nothing is published; the draft returns to `approved` and the claim is `drafted`.
+- **Provider choice.** Meta wins over Buffer for a business with both. The provider is written on the
+  claim when the owner schedules, so later changes do not reroute a confirmed post; a business with
+  neither fails closed. The rule is in `lib/services/postingGate.ts`.
+- **Instagram.** Create a media container, commit its id to the claim, then publish. If the worker
+  dies between those steps, the next tick reads the container status: a published container is
+  confirmed, a finished one is published with the same id, and an in-progress one is polled later.
+  A crash after publish but before recording the receipt is confirmed, never published again.
+- **Facebook Page.** One `photos` call. Meta offers no idempotency key, so an ambiguous outcome is
+  `unknown` and never resubmitted; the owner resolves it like a Buffer `unknown`.
+- **Retries and errors.** Rate limits (`80002`/`80001`) and transient create errors requeue with a
+  backoff and stop after five attempts. A rejected Page token marks the Page `needs_reconnect` and
+  fails visibly once, with no retry loop. Permanent failures have short codes that the approval card
+  turns into sentences: `rejected`, `page_cannot_publish`, `instagram_unavailable`,
+  `container_unavailable`, `caption_too_long`, `too_many_hashtags`, `rate_limited`,
+  `retry_exhausted`. Every transition still writes one `draft_events` row.
+- **Media.** The stored original stays PNG. `renderJpegVariant`/`ensureDraftJpeg` derive a
+  deterministic, content-addressed JPEG (fixed quality/chroma, flattened on white, centre-cropped
+  into 4:5–1.91:1, under 8 MB). The tokenized public route serves it at
+  `/api/public-media/<token>.jpg` as `image/jpeg`, and `.png` still serves the original.
+- **Captions.** Instagram: 2,200 characters and 30 hashtags. Facebook: 63,206 characters. An
+  over-limit post is refused with an owner-readable reason; nothing is silently cut.
+- **Tests.** `scripts/test-meta-publish.ts` (DB-backed, fake Meta client) and
+  `scripts/test-meta.ts` (client contract) cover the state machine, retries, crash recovery,
+  duplicate delivery, plan and ownership refusals, gate modes, provider choice and the JPEG
+  variant. No test can reach Meta.
+- **Roll back** by setting `BUFFER_POSTING_MODE=off`; queued Meta posts wait and then become
+  `missed`. A Meta target and Buffer channel are independent, so removing the target leaves Buffer
+  posting available for businesses that still have it.
 
 ### The Schedule page shows what is lined up (#206)
 

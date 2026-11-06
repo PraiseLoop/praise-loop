@@ -447,9 +447,14 @@ real business name is committed in tests or sample data.
 ## Direct Instagram and Facebook publishing (#234) — checked 2026-11-05
 
 Status: the feasibility gate passed (#244). The stub and its fake adapter are in
-`lib/integrations/metaPublishing.ts`, and the OAuth connect/disconnect backend is in
-`lib/services/metaConnection.ts`; the live client, worker publishing and the setup UI are **not
-built**, no Meta app or access token exists, and **no live call has been run**. #234 stays open.
+`lib/integrations/metaPublishing.ts`, the OAuth connect/disconnect backend is in
+`lib/services/metaConnection.ts`, and worker publishing is in `lib/services/bufferPosting.ts`
+(the shared provider worker) with the JPEG variant in `lib/services/imageRenderer.ts`. Worker
+publishing is **built and tested with a fake client only**. The **live Graph client, the setup UI
+and any live call are not built**, no Meta app or access token exists, and **no live call has been
+run**. The live connect/publish test was **not run**; it needs the owner's approved Meta access
+(Meta app, Business Verification and App Review). The live client still fails closed with
+`MetaAccessNotApproved`. #234 stays open.
 Everything below is from Meta's own documentation on 2026-11-05 (Graph API v27.0); vendor blogs
 were not used.
 
@@ -470,7 +475,7 @@ Login, not both.
 
 ### Connect (#234, built)
 
-The backend and API exist; there is no setup screen or worker publishing yet.
+The backend and API exist, and worker publishing is built (see below); there is no setup screen and no live client yet.
 
 - **Routes.** `POST /api/meta/connect` (owner-wide) returns the Facebook Login URL.
   `GET /api/meta/callback` is public to the route guard but requires the signed-in owner.
@@ -583,6 +588,66 @@ Facebook Page: `POST /<page_id>/photos` with the public `url` and `caption`. The
 the photo id and the post id (`id`, `post_id`). The page post permalink is
 `https://www.facebook.com/<post_id>`.
 
+### Worker publishing (#234, built)
+
+The worker uses the same provider-neutral path as Buffer (`lib/services/bufferPosting.ts`,
+`postingTick`); only the adapter differs. The shared gate is still `BUFFER_POSTING_MODE`
+(`off` | `draft` | `live`, default `off`), read through `postingMode` /
+`automaticPostingMode` in `lib/services/postingGate.ts`. `off` never calls any provider. `live`
+publishes. Meta has no provider-side draft post type, so `draft` runs the preflight and records
+`drafted`/`approved` without creating a container or publishing anything. Scheduling still fails
+closed and nothing posts without an owner-confirmed slot.
+
+**Provider choice.** The provider is fixed when the owner schedules the post, on the claim row:
+a business with a Meta target uses Meta; a business with a Buffer channel keeps Buffer. If a
+business has both, **Meta wins** (choosing a Meta target is the explicit #234 action, and it is
+deterministic rather than depending on row order). A business with neither fails with the existing
+`no_channel`/connection message and never calls a provider. Changing the target after scheduling
+does not silently reroute the claim. This rule lives in `selectPostingProvider`.
+
+**Plan limit.** The `automaticPosting` limit from #216 is checked under the claim lock exactly as
+for Buffer, so a Free or expired owner fails closed with `plan_required` and no provider call.
+
+**Idempotency and retries.** `posting_slot_claims` records `provider`, `provider_target`,
+`container_id`, `idempotency_key`, `next_attempt_at` and `submit_attempts` (migration 028).
+- Instagram is two calls: create a container, **commit its id**, then publish it. A crash between
+  the steps leaves a `submitting` claim with the container id; the stale sweep requeues it and the
+  next tick reads the container status, confirming a published container or publishing the same
+  container. A lost publish response is therefore confirmed, not repeated.
+- A duplicate job delivery cannot create a second post: the claim enters `submitting` before the
+  first provider call and `SKIP LOCKED` plus the committed state allow only one worker.
+- Facebook has no container/idempotency key. The worker records the local key before the call and
+  treats a timeout after sending as `unknown`; it is never resubmitted, the same as Buffer.
+- Rate limits (`80002`/`80001`) and transient create failures requeue with `next_attempt_at` and
+  stop after five attempts (`rate_limited` or `retry_exhausted`). Creating a container is safe to
+  retry because it publishes nothing.
+
+**Owner-visible status.** The draft keeps the existing posting status fields and `draft_events`
+rows. A rejected Page token marks that Page `needs_reconnect` once and the claim fails with
+`needs_reconnect`; it is not retried. Permanent failures use a short code (`rejected`,
+`page_cannot_publish`, `instagram_unavailable`, `container_unavailable`, `caption_too_long`,
+`too_many_hashtags`); the approval card turns it into a sentence (never a stack trace or token).
+`app/api/drafts` exposes `posting_provider` so the card does not say "Buffer" to a Meta owner.
+
+**Caption limits.** Instagram captions are limited to **2,200 characters and 30 hashtags**;
+Facebook Page post text to **63,206 characters**. Over-limit posts are refused with the codes
+above before any provider call. Nothing is silently truncated mid-word.
+
+**JPEG variant.** `renderJpegVariant` flattens the stored 1080×1080 PNG on white, centre-crops an
+out-of-range frame into Instagram's 4:5–1.91:1 range, and encodes JPEG at fixed quality 90 with
+4:2:0 chroma subsampling. `ensureDraftJpeg` stores it content-addressed as
+`draft-<id>-<sha256(jpeg)>.jpg`; the same PNG always yields byte-identical JPEG and the 8 MB limit
+is enforced. The tokenized public route serves it at
+`/api/public-media/<token>.jpg` as `image/jpeg`; the PNG stays at `.png`. Draft mode and Buffer
+still use the PNG.
+
+**Tests.** `scripts/test-meta-publish.ts` (fake Meta client, DB-backed) covers connect-state,
+Instagram and Facebook success, permanent failure, revoked token/reconnect without a loop, rate
+limit and bounded retry, a crash between container and publish (and after publish), duplicate
+delivery, another owner's Page, Free plan, `off`, `draft`, both-provider selection, caption limits,
+the public route, and JPEG determinism/crop/size. `scripts/test-meta.ts` covers the client
+contract, including container idempotency. No test can reach Meta.
+
 ### Rate limits
 
 - Instagram Platform calls count against an app-and-app-user pair: `4800 × impressions` in a rolling
@@ -651,8 +716,9 @@ Login rather than Meta's newer recommendation.
    `META_REDIRECT_URI` through deployment secrets; never commit them. `META_CONFIG_ID` is optional
    (it replaces the scope list with the permissions in a Login for Business configuration), and
    `META_GRAPH_VERSION` defaults to `v27.0`.
-7. The connect backend is built; after approval, run it with the owner's own Page and record the
-   result. Publishing, the setup screen and the live test are still to come.
+7. The connect backend and worker publishing are built; after approval, implement the live Graph
+   client, connect a real Page and record a `draft`-mode run. The setup screen and live test are
+   still to come.
 
 ### Sources
 

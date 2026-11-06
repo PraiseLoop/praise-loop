@@ -100,6 +100,45 @@ function main() {
   assert.equal(postingView({ status: "failed", provider_state: "error" })?.detail, fallback);
   assert.equal(postingView({ status: "failed", provider_state: "queued" }), null);
 
+  // Direct Meta publishing (#234) uses the same fields but never says "Buffer".
+  assert.deepEqual(postingView({ status: "scheduled", provider_state: "queued", posting_provider: "meta" }), {
+    tone: "info",
+    headline: "Waiting for its time",
+    detail: "It will be sent to Instagram or Facebook at the scheduled time.",
+    link: null,
+    actions: ["cancel"]
+  });
+  assert.deepEqual(postingView({ status: "scheduled", provider_state: "unknown", posting_provider: "meta" }), {
+    tone: "warn",
+    headline: "We couldn’t confirm this post",
+    detail: "Check your Instagram or Facebook, then tell us what happened.",
+    link: null,
+    actions: ["posted", "not_posted"]
+  });
+  assert.deepEqual(postingView({ status: "approved", provider_state: "drafted", posting_provider: "meta" }), {
+    tone: "info",
+    headline: "Test mode: nothing was posted",
+    detail: "Automatic posting to Instagram or Facebook is in test mode, so this post was not sent.",
+    link: null,
+    actions: []
+  });
+  for (const [code, detail] of Object.entries({
+    needs_reconnect: "Instagram or Facebook needs to be reconnected.",
+    not_connected: "Instagram or Facebook isn’t connected for this business.",
+    rejected: "Instagram or Facebook didn’t accept this post.",
+    page_cannot_publish: "The Facebook Page doesn’t allow this app to publish.",
+    instagram_unavailable: "The Facebook Page has no linked Instagram account.",
+    container_unavailable: "The Instagram upload expired before it could be published.",
+    caption_too_long: "The caption is too long for Instagram (2,200 characters).",
+    too_many_hashtags: "Instagram accepts at most 30 hashtags in a caption.",
+    rate_limited: "Instagram or Facebook is limiting how often we can post. It wasn’t sent.",
+    retry_exhausted: "Instagram or Facebook kept failing. This post wasn’t sent."
+  })) {
+    const view = postingView({ status: "failed", provider_state: "error", posting_provider: "meta", posting_error_code: code });
+    assert.deepEqual(view, { tone: "bad", headline: "Not posted", detail, link: null, actions: ["approve_again"] });
+    assert.ok(!view?.detail?.includes(code), `${code} does not leak the raw code`);
+  }
+
   // Nothing to say: plain drafts, generation failures and shared drafts.
   assert.equal(postingView({}), null);
   assert.equal(postingView({ status: "draft" }), null);

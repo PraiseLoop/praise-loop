@@ -24,6 +24,7 @@ log.info("worker_started", {
   logLevel: logLevel(), appEnv: process.env.APP_ENV || "prod", intervalMs: interval,
   postingMode: postingMode(),
   bufferConfigured: !!(process.env.BUFFER_CLIENT_ID && process.env.BUFFER_CLIENT_SECRET && process.env.CREDENTIAL_ENCRYPTION_KEY),
+  metaConfigured: !!(process.env.META_APP_ID && process.env.META_APP_SECRET && process.env.CREDENTIAL_ENCRYPTION_KEY),
   mediaBaseIsHttps: (process.env.NEXTAUTH_URL ?? "").startsWith("https://"),
   mailTransport: process.env.EMAIL_TRANSPORT || "default"
 });
