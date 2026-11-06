@@ -7,13 +7,12 @@ import { useBusiness } from "../AppShell";
 import BrandPreview from "../brand/BrandPreview";
 import { ColorPicker, readLogo, timezones, TonePicker, type BrandTone } from "../brand/options";
 import Icon from "../ui/Icon";
+import { jobNotice, postCount, readyFooter } from "../../lib/onboardingStatus";
 import styles from "./onboarding.module.css";
 
 type Draft = { id: string; version: number; quote_text: string; caption_text: string; image_path: string | null; status: string; job_state?: string; error_code?: string };
 type Progress = { business: { id: string; name: string; timezone: string; weekly_target: number } | null; reviews: number; drafts: Draft[]; period?: { reason: string; allocated: number; target: number }; postsPerWeek?: number };
 type ImportResult = { imported: number; duplicates: number; rejectedInvalid: number; skippedEmpty: number; failedRows: number; errors?: { row: number; error: string }[] };
-
-const jobLabels: Record<string, string> = { pending: "Waiting its turn…", running: "Writing the caption and designing the image…", retry: "Hit a snag — trying again automatically…", complete: "Ready" };
 
 // A successful request can still queue nothing; say why instead of appearing to do nothing.
 const noDrafts: Record<string, string> = {
@@ -31,11 +30,31 @@ export default function Onboarding() {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [name, setName] = useState(""), [zone, setZone] = useState("UTC"), [primary, setPrimary] = useState("#5b2a44"), [secondary] = useState("#f2e3c8"), [tone, setTone] = useState<BrandTone>("friendly"), [logo, setLogo] = useState("");
   const [loaded, setLoaded] = useState<Record<string, string>>({}); const key = useRef(""); const fresh = useRef(false);
+  // How long this page has watched each draft hold its current in-flight state. A
+  // retry changes the state, so it starts a fresh clock instead of inheriting the
+  // age of an older draft.
+  const seenJobs = useRef<Record<string, { state: string; since: number }>>({});
+
+  function observeJobs(drafts: Draft[]) {
+    const at = Date.now();
+    const next: typeof seenJobs.current = {};
+    for (const draft of drafts) {
+      const state = draft.job_state ?? "";
+      if (!["pending", "running", "retry"].includes(state)) continue;
+      const before = seenJobs.current[draft.id];
+      next[draft.id] = before?.state === state ? before : { state, since: at };
+    }
+    seenJobs.current = next;
+  }
+  function waitingFor(draft: Draft) {
+    const before = seenJobs.current[draft.id];
+    return before && before.state === (draft.job_state ?? "") ? Date.now() - before.since : 0;
+  }
 
   async function load(id?: string) {
     const response = await apiFetch(`/api/onboarding${id ? `?businessId=${encodeURIComponent(id)}` : ""}`), next = await response.json();
     if (!response.ok) { setData(null); setMessage(response.status === 401 ? "" : next.error ?? "Unable to resume; sign in and retry"); return; }
-    setData(next); if (next.business) window.history.replaceState(null, "", `/onboarding?businessId=${next.business.id}`);
+    setData(next); observeJobs(next.drafts); if (next.business) window.history.replaceState(null, "", `/onboarding?businessId=${next.business.id}`);
   }
   useEffect(() => {
     const params = new URL(window.location.href).searchParams;
@@ -97,6 +116,7 @@ export default function Onboarding() {
   const complete = data.drafts.filter(d => d.caption_text.trim() && d.image_path && !["failed", "archived"].includes(d.status)).slice(0, target);
   const ready = complete.length === target && complete.every(d => loaded[d.id] === d.image_path);
   const active = data.drafts.some(d => ["pending", "running", "retry"].includes(d.job_state ?? ""));
+  const stuck = data.drafts.some(d => jobNotice(d, waitingFor(d)).kind === "slow");
   const step = !business ? 1 : importing || !data.drafts.length ? 2 : ready ? 4 : 3;
   const markLoaded = (d: Draft) => setLoaded(v => ({ ...v, [d.id]: d.image_path! }));
   const imageFailed = (d: Draft) => { setLoaded(v => ({ ...v, [d.id]: "" })); setMessage("An image didn’t load. You can recover it from This week."); };
@@ -105,9 +125,10 @@ export default function Onboarding() {
     <div className={styles.frame}>
       <header className={styles.header}>
         <div className={styles.headerRow}>
-          {step === 3 && business ? <button type="button" className="pl-link-button" onClick={() => setImporting(true)}>Back</button> : <span />}
+          <span />
           <span className="pl-small pl-muted" style={{ fontWeight: 600 }}>Step {step} of 4</span>
-          {business ? <Link href={`/approval?businessId=${business.id}`} className="pl-small" style={{ fontWeight: 600 }}>Save &amp; exit</Link> : shell.businesses.length ? <Link href="/approval" className="pl-small" style={{ fontWeight: 600 }}>Cancel</Link> : <span />}
+          {/* Step 3 puts its exits in the footer, next to the waiting message. */}
+          {business ? (step === 3 ? <span /> : <Link href={`/approval?businessId=${business.id}`} className="pl-small" style={{ fontWeight: 600 }}>Save &amp; exit</Link>) : shell.businesses.length ? <Link href="/approval" className="pl-small" style={{ fontWeight: 600 }}>Cancel</Link> : <span />}
         </div>
         <div role="progressbar" aria-label="Setup progress" aria-valuenow={step} aria-valuemin={0} aria-valuemax={4} className={styles.progress}>
           {[1, 2, 3, 4].map(n => <span key={n} className={n <= step ? styles.done : undefined} />)}
@@ -182,8 +203,8 @@ export default function Onboarding() {
             <ol aria-live="polite" className={styles.jobs}>
               {data.drafts.map((d, n) => {
                 // The worker marks the draft failed while it retries automatically; only a failed job is terminal.
-                const retrying = ["pending", "running", "retry"].includes(d.job_state ?? "");
-                const failed = d.job_state === "failed" || (d.status === "failed" && !retrying);
+                const notice = jobNotice(d, waitingFor(d));
+                const failed = notice.kind === "failed";
                 const shown = d.image_path && d.caption_text.trim() && !failed;
                 return (
                   <li key={d.id} className={styles.job}>
@@ -191,19 +212,26 @@ export default function Onboarding() {
                     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
                       <strong>Post {data.drafts.length - n}</strong>
                       <span className={failed ? undefined : "pl-muted"} style={failed ? { color: "#A3361F" } : undefined}>
-                        {failed ? `Needs attention${d.error_code ? ` (${d.error_code})` : ""}. Check your brand settings, then try again.` : d.error_code && d.job_state === "retry" ? "Needs attention — trying again automatically…" : jobLabels[d.job_state ?? ""] ?? "Ready"}
+                        {notice.text}
                       </span>
                     </div>
-                    {d.job_state === "failed" ? <button type="button" className="pl-btn pl-btn-dark" disabled={busy} onClick={() => void generate("/api/generation/retry", d)}>Try again</button>
+                    {notice.actions.includes("retry") ? <button type="button" className="pl-btn pl-btn-dark" disabled={busy} onClick={() => void generate("/api/generation/retry", d)}>Try again</button>
                       : shown ? <span className="pl-badge pl-badge-approved"><Icon name="check" size={13} strokeWidth={3} />Ready</span> : null}
                   </li>
                 );
               })}
             </ol>
+            {stuck && business ? (
+              <div className="pl-panel" role="status" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
+                <strong>This is taking longer than usual</strong>
+                <span className="pl-muted">The generation worker may be paused, so these posts are taking much longer than usual. Nothing is lost, and nothing is posted until you approve it. They’ll keep going in the background.</span>
+                <Link href={`/approval?businessId=${business.id}`} className="pl-btn">Carry on to This week</Link>
+              </div>
+            ) : null}
             {!active && complete.length < target ? (
               <div className="pl-panel" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
                 <strong>We need a few more reviews</strong>
-                <span className="pl-muted">We could make {complete.length} of {target} posts. Add a few more 4–5 star reviews with at least 30 characters so we can make the rest.</span>
+                <span className="pl-muted">We could make {complete.length} of {postCount(target)}. Add a few more 4–5 star reviews with at least 30 characters so we can make the rest.</span>
                 <button type="button" className="pl-btn" onClick={() => setImporting(true)}>Add more reviews</button>
               </div>
             ) : (
@@ -217,7 +245,7 @@ export default function Onboarding() {
         {step === 4 && business ? (
           <div className={styles.stack}>
             <div>
-              <h1 className={styles.title}>Your first {target} posts are ready</h1>
+              <h1 className={styles.title}>{target === 1 ? "Your first post is ready" : `Your first ${postCount(target)} are ready`}</h1>
               <p className="pl-muted" style={{ margin: 0 }}>Made from what your customers already said.</p>
             </div>
             <div className={styles.carousel}>
@@ -234,8 +262,12 @@ export default function Onboarding() {
 
       <footer className={styles.footer}>
         {step === 1 ? <button type="submit" form="brand-form" className="pl-btn pl-btn-primary pl-btn-lg" disabled={busy}>Continue</button> : null}
-        {step === 2 ? <button type="button" className="pl-btn pl-btn-primary pl-btn-lg" disabled={busy || !data.reviews} onClick={() => void generate()}>Make my first {target} posts</button> : null}
-        {step === 3 ? <span className="pl-small pl-muted" style={{ textAlign: "center" }}>We’ll move on as soon as all {target} posts are ready.</span> : null}
+        {step === 2 ? <button type="button" className="pl-btn pl-btn-primary pl-btn-lg" disabled={busy || !data.reviews} onClick={() => void generate()}>Make my first {postCount(target)}</button> : null}
+        {step === 3 && business ? <>
+          <span className="pl-small pl-muted" style={{ textAlign: "center" }}>{readyFooter(target)}</span>
+          <button type="button" className="pl-btn" onClick={() => setImporting(true)}>Back</button>
+          <Link href={`/approval?businessId=${business.id}`} className="pl-btn pl-btn-primary pl-btn-lg">Save &amp; exit</Link>
+        </> : null}
         {step === 4 && business ? <>
           <Link href={`/approval?businessId=${business.id}`} className="pl-btn pl-btn-primary pl-btn-lg">Review &amp; approve</Link>
           <span className="pl-small pl-muted" style={{ textAlign: "center" }}>Nothing posts until you approve it.</span>
