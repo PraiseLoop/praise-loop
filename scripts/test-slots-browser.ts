@@ -29,7 +29,7 @@ async function main(){
         const calendar=page.locator("ol");assert.match(await calendar.innerText(),/America\/New_York/);assert.match(await calendar.innerText(),/UTC/);
         await page.getByLabel(new RegExp(`Approved #${id}:`)).check();
         const assign=page.waitForResponse(r=>r.url().endsWith("/api/posting-slots/assign"));await page.getByRole("button",{name:"Confirm selected posting slots"}).click();
-        const data=await (await assign).json();assert.equal(data.results[0].status,503);await page.getByText(/Posting through Buffer is not switched on yet/).waitFor();
+        const data=await (await assign).json();assert.equal(data.results[0].status,503);await page.getByText(/Automatic posting is not switched on yet/).waitFor();
         await page.reload();await page.getByRole("combobox",{name:"Business"}).selectOption(String(bid));await page.getByLabel("Tue local time").waitFor();assert.equal(await page.getByLabel("Tue local time").inputValue(),"11:15");
         // Hold a previous business response until a new business has loaded.
         let release!:()=>void,started!:()=>void;
