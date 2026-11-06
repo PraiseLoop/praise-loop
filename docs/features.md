@@ -20,7 +20,12 @@ automatic approval or publishing is required.
 3. Explicitly queue up to three drafts (default weekly target three). Existing jobs
    and onboarding share the same weekly budget. Poll persisted state; auto-retries
    retain successful stages. Exhausted jobs offer bounded owner retry; fix branding
-   on the Brand page before retrying rendering failures.
+   on the Brand page before retrying rendering failures. A pending, running or
+   auto-retrying job that holds for two minutes (`STUCK_JOB_MS`) shows a “taking
+   longer than usual” notice and a “Carry on to This week” link, because the worker
+   may be paused; the job keeps its place and nothing posts without approval.
+   Back and Save & exit sit in the step 3 footer beside the waiting message, and
+   Save & exit opens the approval queue instead of resuming the wizard.
 4. Open the actual owner-protected images and captions. “Usable previews” appears
    only after each image loads. Review in approval selects the saved business;
    the owner decides what to edit/approve. Real publishing still depends on #29.

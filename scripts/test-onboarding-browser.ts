@@ -32,6 +32,14 @@ async function main(){
         assert.equal((await upload("rating,text,reviewed_at\n5,A wonderful synthetic experience with welcoming friendly staff,2026-10-01")).imported,1);
         const queue=page.waitForResponse(r=>r.url().endsWith("/api/quotes/select"));await page.getByRole("button",{name:"Make my first 3 posts"}).click();assert.equal((await queue).status(),202);
         await page.reload();await page.getByRole("heading",{name:"Making your first posts"}).waitFor();
+        // The waiting message lives in the footer with the exits next to it, so a
+        // stuck job can never trap the owner (#246).
+        await page.getByText("We’ll move on as soon as all 3 posts are ready.").waitFor();
+        await page.getByRole("link",{name:"Save & exit"}).click();await page.waitForURL(/\/approval\?businessId=/);
+        await page.getByRole("heading",{name:"Your posts are on the way"}).waitFor();
+        await page.goto(`${base}/onboarding`);await page.getByRole("heading",{name:"Making your first posts"}).waitFor();
+        await page.getByRole("button",{name:"Back"}).click();await page.getByRole("heading",{name:"Bring in your reviews"}).waitFor();
+        await page.goto(`${base}/onboarding`);await page.getByRole("heading",{name:"Making your first posts"}).waitFor();
         const first=(await c.query("SELECT id FROM generation_jobs ORDER BY id LIMIT 1")).rows[0].id;
         clock=new Date();await processGeneration(Number(first),deps);await page.getByText(/Needs attention/).first().waitFor();
         clock=new Date(clock.getTime()+31000);assert.equal(await processGeneration(Number(first),deps),true);
