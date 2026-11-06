@@ -444,6 +444,58 @@ reconciled against the official import without touching official rows. Remove th
 UI, provider and token setting once the official path is live. No review text, real place link or
 real business name is committed in tests or sample data.
 
+## Google Takeout review import (#233) — format unverified, checked 2026-11-05
+
+Status: built, **not verified against a real export**. No Google API access, OAuth
+grant, scraping or provider call is involved: the owner downloads their own Business
+Profile data from Google Takeout and uploads the `reviews.json` file to the reviews
+page or onboarding. The parser and docs are based on third-party descriptions of the
+Takeout archive and Google's documented Review fields; one real export must be run
+before announcing the feature.
+
+### What Takeout gives an owner
+
+[Google Takeout](https://takeout.google.com) exports Business Profile data as JSON
+only. The owner signs in as a profile owner or manager, deselects everything, selects
+**Business Profile** and exports once. The archive nests one `reviews.json` per
+account/location. Takeout covers only profiles the account owns or manages, and it
+does not include review photos. The separate **Maps** export contains reviews the
+person wrote about other businesses, not reviews customers left for them.
+
+Third-party guides describe each review as an object shaped like the Business Profile
+API `Review`: `reviewer.displayName`, `starRating` as `ONE`..`FIVE`, `comment`,
+`createTime`/`updateTime`, and `name` as an
+`accounts/.../locations/.../reviews/...` resource path (some variants also carry
+`reviewId`). The exact top-level shape (array or `{ "reviews": [...] }`) is part of
+what the real-export check must confirm. The parser accepts both, plus a `reviewData`
+array, and tolerates unknown fields.
+
+### Scope and safety
+
+- The server parses the uploaded file; there are no Google API calls and no new
+  environment settings.
+- Rows use `source='google_takeout'`, added by migration
+  `029_google_takeout_reviews.sql`, so they stay separate from `manual`, official
+  `google` and the Apify stopgap. Re-imports dedupe on the stable source review ID, or
+  on a deterministic reviewer/date/text hash when the file has no ID.
+- Validation and storage are shared with CSV import (`lib/services/reviewImport.ts`):
+  integer 1–5 stars, text, a valid date, bounded text/source ID/URL. The same 1 MB
+  and 1,000-row limits apply, and empty, invalid and storage-failed rows are counted
+  and reported.
+- The file is untrusted. Unknown fields are ignored, and reviewer email, profile
+  links, photos and owner replies are never stored.
+- Tests use only synthetic data (`@example.invalid`): `scripts/test-takeout-import.ts`
+  and `sample-data/takeout/reviews.json`. No real export or review content is
+  committed.
+
+### Before announcing
+
+1. Run a real Business Profile export and import one `reviews.json` end to end.
+2. Confirm the top-level shape, field names, rating enum/numbers and timestamp
+   format; update `lib/takeout.ts`, the fixture and this section if they differ.
+3. Confirm the same file re-imports with zero duplicates and correct invalid-row
+   counts. Keep #233 blocked until those checks are recorded.
+
 ## Direct Instagram and Facebook publishing (#234) — checked 2026-11-05
 
 Status: the feasibility gate passed (#244). The stub and its fake adapter are in

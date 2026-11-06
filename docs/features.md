@@ -500,6 +500,42 @@ Ownership enforcement is supplied by #42 before any customer exposure.
 
 Before customer access, configure owner login and explicitly claim any legacy data as described in [auth.md](auth.md).
 
+## Google Takeout review import (#233)
+
+Owners can import their own Business Profile reviews from a Google Takeout
+export, with no Google API approval and no scraping. The reviews page and
+onboarding show a second file picker next to the CSV import, and nothing calls
+Google.
+
+- **Export steps:** open [Google Takeout](https://takeout.google.com) signed in
+  as the profile owner, choose **Deselect all**, select **Business Profile**,
+  export once, download the archive, then open
+  `Google Business Profile/account-.../location-.../reviews.json`. Takeout only
+  covers profiles the account owns or manages. The Maps export is different: it
+  holds reviews the person wrote about other businesses.
+- **Format is unverified:** the real Takeout file has not been run in this repo.
+  The parser is built from third-party descriptions and Google's documented
+  review fields, so verify it with a real export before announcing the feature.
+  See [integrations.md](integrations.md#google-takeout-review-import-233--format-unverified-checked-2026-11-05).
+- **Accepted shape:** a top-level JSON array, or an object with a `reviews`
+  array (also `reviewData`). Each review may use `reviewer.displayName`,
+  `starRating` (`ONE`..`FIVE` or a number), `comment`/`text`,
+  `createTime`/`updateTime`, and `reviewId` or the `name` resource path. Unknown
+  fields are ignored, including reviewer email, profile links, photos and
+  replies.
+- **Import:** rows take the same validation and storage path as CSV import and
+  are stored with `source='google_takeout'`. A stable `reviewId` (or `name`)
+  makes a re-import a duplicate; a review without either gets a deterministic
+  hash of reviewer, date and text (rating excluded, so an edited rating still
+  matches). Limits match
+  the CSV import: 1 MB and 1,000 rows. Empty, invalid and storage-failed rows
+  are counted and reported, with at most 20 redacted errors.
+- **Tests:** `scripts/test-takeout-import.ts`, the synthetic fixture at
+  `sample-data/takeout/reviews.json`, the authorization check for another
+  owner's business, and the onboarding browser walkthrough.
+- **Rollback:** hide the second picker and remove the route. Migration 029 only
+  widens the `reviews.source` check, so existing `google_takeout` rows can stay.
+
 ## Approval
 
 Approval supports inline caption edits, per-item bulk approval, archive, and persisted
