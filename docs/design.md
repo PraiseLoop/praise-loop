@@ -4,7 +4,7 @@
 who are about to change it. It summarises and links; the detailed, authoritative text lives in the
 other docs. When you change behaviour, update the detailed doc and the matching line here.
 
-Last reviewed: 2026-11-05 (Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195).
+Last reviewed: 2026-11-05 (Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
 
 | Doc | What it is the source of truth for |
 | --- | --- |
@@ -70,7 +70,7 @@ business has reviews, a brand, drafts and a weekly target.
 
 ### Pipeline
 
-reviews (CSV import, `source='manual'`; Google sync is stubbed; the removable Apify stopgap writes `source='apify_google'`) → `quoteSelector` ranks candidate
+reviews (CSV import, `source='manual'`; Google Takeout import, `source='google_takeout'`; Google sync is stubbed; the removable Apify stopgap writes `source='apify_google'`) → `quoteSelector` ranks candidate
 quotes → `lib/services/generation.ts` reserves the week's quota (`generation_periods`) and enqueues
 `generation_jobs` → worker writes caption + rendered PNG into `draft_posts` → owner approves →
 owner shares from the phone and confirms "I posted it" (`shared`).
@@ -290,6 +290,7 @@ endpoints take the Page token or the User token, to be settled by the owner-appr
 | Direct Instagram/Facebook publishing | Worker publishing, provider choice, idempotent container resume, JPEG variant, owner status, Connect backend and the `/connections` setup screen built; provider-neutral posting banner and optional onboarding link built; **live client not built and the live connect/publish test not run** | #234, #244 |
 | Google review sync, AI review replies | blocked on access/policy | #46, #96 |
 | Apify Google reviews stopgap | built; client proven with one live run, full flow not yet run live; hidden without `APIFY_TOKEN` | #232 |
+| Google Takeout review import | built; assumed format **unverified**, needs a real-export check before announcing | #233 |
 | Business tier | planned, see [billing.md](billing.md) | #222, #225 |
 | Store subscriptions, VPS, pilot hosting, store accounts | not started / owner tasks | #95, #98, #90, #91 |
 | Email + password | needs explicit owner approval first | #159 |

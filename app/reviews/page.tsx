@@ -133,6 +133,28 @@ export default function ReviewsPage() {
     } finally { setBusy(false); }
   }
 
+  async function importTakeout(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!businessId) return;
+    const importedFor = businessId, stillCurrent = () => currentId.current === importedFor;
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+    formData.set("businessId", String(businessId));
+    setBusy(true);
+    try {
+      const response = await apiFetch("/api/reviews/import-takeout", { method: "POST", body: formData });
+      const data = await response.json();
+      // The owner may have switched business while the upload ran; don't show A's results under B.
+      if (!stillCurrent()) return;
+      if (!response.ok) { setResult(null); setMessage(`Import failed: ${data.error ?? "unknown error"}`); return; }
+      setResult(data); setMessage("");
+      form.reset();
+      await load(importedFor, stillCurrent);
+    } catch {
+      if (stillCurrent()) setMessage("Connection problem. Importing the same file again is safe — duplicates are skipped.");
+    } finally { setBusy(false); }
+  }
+
   async function fetchGoogleReviews(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!businessId) return;
@@ -237,6 +259,25 @@ export default function ReviewsPage() {
         </div>
       </form>
 
+      <form onSubmit={importTakeout} className="pl-panel" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div>
+          <h2 className="pl-h2" style={{ fontSize: 18, marginBottom: 4 }}>Import a Google Takeout export</h2>
+          <p className="pl-small pl-muted" style={{ margin: 0 }}>
+            In Google Takeout, deselect everything, choose <strong>Business Profile</strong>, and export once.
+            Download the archive, then open <strong>Google Business Profile → account-… → location-… → reviews.json</strong>.
+            Takeout only includes profiles you own or manage, and it exports JSON only. We read the file here; there is no Google API connection.
+          </p>
+        </div>
+        <label className="pl-field">
+          Google Takeout reviews (JSON)
+          <input className="pl-input" type="file" name="file" accept=".json,application/json" required />
+          <span className="pl-small pl-muted" style={{ fontWeight: 400 }}>reviews.json from your own Business Profile. Up to 1,000 reviews / 1 MB. Re-importing a file is safe.</span>
+        </label>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <button type="submit" className="pl-btn pl-btn-primary" disabled={busy}><Icon name="upload" size={18} />Import Takeout reviews</button>
+        </div>
+      </form>
+
       <p role="status" className="pl-toast">{message}</p>
 
       {result ? (
@@ -300,7 +341,7 @@ export default function ReviewsPage() {
       ) : (
         <div className="pl-empty">
           <h2>Start with your reviews</h2>
-          <p className="pl-muted">Upload a CSV of reviews above and we’ll make posts from the best ones.</p>
+          <p className="pl-muted">Upload a review CSV or a Google Takeout reviews.json above and we’ll make posts from the best ones.</p>
           <button type="button" className="pl-btn pl-btn-primary" onClick={() => fileInput.current?.click()}><Icon name="upload" size={16} />Choose a CSV file</button>
         </div>
       )}

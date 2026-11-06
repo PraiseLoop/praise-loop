@@ -78,7 +78,7 @@ async function main() {
       const handler = require(`../app/api/${path}/route`).POST;
       assert.equal((await handler(request(`/api/${path}`,"POST",{draftPostId:draft,captionText:"Synthetic",status:"approved"}))).status,404);
     }
-    for (const path of ["quotes/select","reviews/import"]) {
+    for (const path of ["quotes/select","reviews/import","reviews/import-takeout"]) {
       const handler = require(`../app/api/${path}/route`).POST;
       assert.equal((await handler(request(`/api/${path}`,"POST",{businessId:bb}))).status,404);
     }

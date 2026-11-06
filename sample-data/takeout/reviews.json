@@ -1,0 +1,50 @@
+{
+  "reviews": [
+    {
+      "name": "accounts/1000000001/locations/2000000001/reviews/takeout-review-001",
+      "reviewId": "takeout-review-001",
+      "reviewer": {
+        "displayName": "Avery Example",
+        "email": "avery@example.invalid",
+        "profileUrl": "https://example.invalid/profile/avery"
+      },
+      "starRating": "FIVE",
+      "comment": "A synthetic Takeout review with warm, welcoming service and excellent coffee.",
+      "createTime": "2026-10-01T12:00:00Z",
+      "updateTime": "2026-10-02T12:00:00Z",
+      "reviewReply": {
+        "comment": "Thank you from the invented owner.",
+        "updateTime": "2026-10-03T12:00:00Z"
+      },
+      "unknownExtraField": {
+        "ignored": true
+      }
+    },
+    {
+      "reviewId": "takeout-review-002",
+      "reviewer": {
+        "displayName": "Blake Example"
+      },
+      "starRating": "FOUR",
+      "comment": "Another synthetic review praising the friendly staff and the quiet corner table.",
+      "createTime": "2026-10-02T09:30:00Z"
+    },
+    {
+      "name": "accounts/1000000001/locations/2000000001/reviews/takeout-review-003",
+      "reviewer": {
+        "displayName": "Casey Example"
+      },
+      "starRating": "5",
+      "comment": "A third synthetic review with no explicit reviewId, only the resource name and a numeric star rating.",
+      "createTime": "2026-10-03T15:45:00Z"
+    },
+    {
+      "reviewer": {
+        "displayName": "Drew Example"
+      },
+      "starRating": "THREE",
+      "comment": "A fourth synthetic review with no ID, so a fingerprint must keep re-imports safe.",
+      "createTime": "2026-10-04T08:15:00Z"
+    }
+  ]
+}

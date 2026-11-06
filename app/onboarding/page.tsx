@@ -88,6 +88,14 @@ export default function Onboarding() {
       setResult(body); setMessage(""); form.reset(); await load(business.id);
     } catch { setMessage("Import connection failed; importing the same file again is safe."); } finally { setBusy(false); }
   }
+  async function importTakeout(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!business) return; const form = event.currentTarget; const formData = new FormData(form); formData.set("businessId", business.id); setBusy(true);
+    try {
+      const response = await apiFetch("/api/reviews/import-takeout", { method: "POST", body: formData }), body = await response.json();
+      if (!response.ok) { setResult(null); setMessage(body.error); return; }
+      setResult(body); setMessage(""); form.reset(); await load(business.id);
+    } catch { setMessage("Import connection failed; importing the same file again is safe."); } finally { setBusy(false); }
+  }
   async function generate(path = "/api/quotes/select", draft?: Draft) {
     if (!business) return; setBusy(true);
     try {
@@ -169,7 +177,7 @@ export default function Onboarding() {
           <div className={styles.stack}>
             <div>
               <h1 className={styles.title}>Bring in your reviews</h1>
-              <p className="pl-muted" style={{ margin: 0 }}>Upload a CSV with rating, review text and date. Uploading the same file twice is fine — we skip repeats.</p>
+              <p className="pl-muted" style={{ margin: 0 }}>Upload a CSV with rating, review text and date, or import a Google Takeout export. Uploading the same file twice is fine — we skip repeats.</p>
             </div>
             <form onSubmit={importCsv} className={styles.drop}>
               <Icon name="upload" size={28} />
@@ -181,6 +189,23 @@ export default function Onboarding() {
               <button type="submit" className="pl-btn" disabled={busy}>Import reviews</button>
             </form>
             <a href="/onboarding-example.csv" download className="pl-small" style={{ fontWeight: 600 }}>Download a sample CSV</a>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 8, borderTop: "1px solid var(--pl-line-soft)" }}>
+              <strong>Or import a Google Takeout export</strong>
+              <span className="pl-small pl-muted">
+                In Google Takeout, deselect everything, choose <strong>Business Profile</strong>, and export once.
+                Download the archive, then open <strong>Google Business Profile → account-… → location-… → reviews.json</strong>.
+                Takeout only includes profiles you own or manage, and it exports JSON only. This uses no Google API connection.
+              </span>
+              <form onSubmit={importTakeout} className={styles.drop}>
+                <Icon name="upload" size={28} />
+                <label className="pl-field" style={{ alignItems: "center", textAlign: "center" }}>
+                  Google Takeout reviews (JSON)
+                  <input className="pl-input" type="file" name="file" accept=".json,application/json" required />
+                </label>
+                <span className="pl-small pl-muted">reviews.json from your own Business Profile. Up to 1,000 reviews / 1 MB.</span>
+                <button type="submit" className="pl-btn" disabled={busy}>Import Takeout reviews</button>
+              </form>
+            </div>
             {result ? (
               <section aria-label="Import results" className="pl-panel" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 6 }}>
                 <strong>{result.imported} imported · {result.duplicates} duplicates skipped</strong>

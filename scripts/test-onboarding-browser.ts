@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync,rmSync } from "node:fs";
+import { mkdtempSync,readFileSync,rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { chromium } from "playwright-core";
@@ -28,6 +28,7 @@ async function main(){
         const repeated=await Promise.all([context.request.post(`${base}/api/businesses`,{data:body,headers:{origin:base}}),context.request.post(`${base}/api/businesses`,{data:body,headers:{origin:base}})]);
         for(const r of repeated)assert.equal((await r.json()).business.id,bid);
         const upload=async(csv:string)=>{await page.getByLabel("Review CSV").setInputFiles({name:"synthetic.csv",mimeType:"text/csv",buffer:Buffer.from(csv)});const r=page.waitForResponse(r=>r.url().endsWith("/api/reviews/import"));await page.getByRole("button",{name:"Import reviews",exact:true}).click();return (await r).json();};
+        const uploadTakeout=async(json:string)=>{await page.getByLabel("Google Takeout reviews (JSON)").setInputFiles({name:"reviews.json",mimeType:"application/json",buffer:Buffer.from(json)});const r=page.waitForResponse(r=>r.url().endsWith("/api/reviews/import-takeout"));await page.getByRole("button",{name:"Import Takeout reviews",exact:true}).click();return (await r).json();};
         assert.equal((await upload("rating,text,reviewed_at\n9,Invalid synthetic,2026-02-30")).rejectedInvalid,1);await page.getByText(/1 invalid/).waitFor();
         assert.equal((await upload("rating,text,reviewed_at\n5,A wonderful synthetic experience with welcoming friendly staff,2026-10-01")).imported,1);
         const queue=page.waitForResponse(r=>r.url().endsWith("/api/quotes/select"));await page.getByRole("button",{name:"Make my first 3 posts"}).click();assert.equal((await queue).status(),202);
@@ -65,6 +66,9 @@ async function main(){
         const second=page.waitForResponse(r=>r.url().endsWith("/api/businesses")&&r.request().method()==="POST");await page.getByRole("button",{name:"Continue",exact:true}).click();
         const secondBody=await (await second).json();assert.notEqual(secondBody.business.id,bid,"Add a business starts a new setup instead of resuming");
         await page.getByRole("heading",{name:"Bring in your reviews"}).waitFor();assert.equal((await c.query("SELECT count(*) FROM businesses")).rows[0].count,"2");
+        // The second business stays on step 2, so import the Takeout fixture here without
+        // changing the first business's three-post walkthrough above.
+        assert.equal((await uploadTakeout(readFileSync("sample-data/takeout/reviews.json","utf8"))).imported,4);await page.getByText(/4 imported/).waitFor();
         console.log(JSON.stringify({event:"synthetic_onboarding_walkthrough",elapsedSeconds:seconds,captionMode:"injected fixture",sessionMode:"synthetic",previews:3,liveTimingVerified:false}));
         await context.close();
       }finally{await browser.close();}
