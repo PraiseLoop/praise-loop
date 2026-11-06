@@ -208,9 +208,9 @@ allows 1,000 requests per channel per month), and stop at `sent` or `error`.
 - `scripts/test-buffer-posting.ts` (gate, every state change, concurrency, lateness, revocation, the public
   route) and `scripts/test-buffer.ts` (request shape and error mapping) use a scripted fake Buffer. No
   test can reach Buffer.
-- **First real run:** set `BUFFER_POSTING_MODE=draft` on a test business whose channel is a Business
-  Instagram, with the account owner's agreement. Expect one draft in Buffer and nothing published. Only
-  then consider `live`.
+- **First real run:** follow [the supervised draft-mode test](development.md#supervised-draft-mode-posting-test-207)
+  on a test business whose channel is a Business Instagram, with the account owner's agreement.
+  Expect one draft in Buffer and nothing published. Only then consider `live`.
 
 ## Direct Meta publishing (#234)
 
