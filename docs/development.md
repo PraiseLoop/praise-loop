@@ -222,6 +222,125 @@ endpoint for the same host, or each event is delivered twice. This is for test m
 need a dashboard webhook endpoint. The container shares `edge` with `web`, which trusts client-IP headers
 from that network, so run only this container and cloudflared on it.
 
+## Supervised draft-mode posting test (#207)
+
+This is the first real Buffer round trip: an approved post is submitted to the owner's own
+Buffer account as a **draft**, so nothing is published. Run it on an established **Business
+Instagram** channel, with the account owner's agreement, never a throwaway account. Direct
+Instagram/Facebook publishing (#234) uses the same gate and worker, but its setup screen and
+live Graph client are not built and this test has **not** been run against Meta.
+
+### Before you start
+
+- `BUFFER_POSTING_MODE=draft` for **both** web and worker. They read the value independently, so
+  changing only one leaves the other on its old mode. In Compose set it in `.env` or the stack
+  environment, then restart both services.
+- `BUFFER_CLIENT_ID`, `BUFFER_CLIENT_SECRET` and `CREDENTIAL_ENCRYPTION_KEY` on web, and
+  `NEXTAUTH_URL` as an `https://` address. Buffer must be able to fetch
+  `https://<host>/api/public-media/<token>.png` from the internet; on the home dev stack the
+  Cloudflare rule that limits `dev.praiseloop.ca` must also allow `/api/public-media/`. A
+  plain `http://localhost` setup fails with `media_url_unavailable`.
+- `APP_ENV=dev` on web and worker for the verbose log lines below (optional, but use it for this
+  test).
+- The owner's effective plan must be **Pro or Business**. `automaticPosting` is false on Free and
+  on an expired plan, so the test is refused before any Buffer call.
+- The worker is running. Its posting tick is part of the normal worker loop
+  (`DRAFT_PIPELINE_INTERVAL_MS`, default 60000).
+
+```sh
+# .env, or the stack environment in Dockhand
+BUFFER_POSTING_MODE=draft
+APP_ENV=dev
+```
+
+### Steps
+
+1. **Connect Buffer and choose the channel.** Sign in to the web app, open the profile menu and
+   choose **Connections** (`/connections`), then press **Connect Buffer** and finish Buffer's
+   consent screen. When **Connected** appears, use the **Channels** section to choose the
+   business's **Business Instagram** channel. A personal account is listed with “This looks like
+   a personal Instagram account…” and cannot post automatically; choose a different channel.
+   There is no Meta target picker yet: #234 has only the backend and worker.
+2. **Approve one post.** On **This week** (`/approval`), press **Approve** on a post marked
+   **Ready for review**. It now shows **Approved**.
+3. **Add a time about 10 minutes ahead.** Open **Schedule** (`/schedule`). Under **When to post**,
+   tick the business's current weekday and set the time input to about 10 minutes from now in the
+   business timezone shown next to the heading, then press **Save posting schedule**. The time must
+   appear under **Upcoming times**; if it does not, it has already passed — use a later time today
+   or the next day's weekday. “When to post” stores a weekday and local time, not a date.
+4. **Line it up and confirm.** Under **Line up approved posts**, tick the approved post and press
+   **Confirm selected posting slots**. The card becomes **Scheduled** and the tile says
+   **Waiting for its time**. Nothing has been sent to Buffer yet.
+5. **Let the worker submit it.** At the due time the worker sends the post to Buffer in draft
+   mode. The post goes back to **Approved**, and the Approval card and Schedule's **Recently
+   sent** section show **Saved as a draft in Buffer**, with **Test mode: nothing was posted. Find
+   it in Buffer.** If the worker was down for more than two hours past the time, it is not sent
+   late: the card shows **It was more than 2 hours past its time, so it wasn’t sent.**
+6. **Clean up.** Find that draft in Buffer and delete it. Set `BUFFER_POSTING_MODE` back to `off`
+   on **both** web and worker and restart them. That is the safe default; queued posts then wait
+   and become `missed` after two hours.
+
+### What each mode does
+
+| Value | Worker | Scheduling | Result |
+| --- | --- | --- | --- |
+| `off` (default; any unknown value) | Makes no provider call and logs `posting_gate_off` | `POST /api/posting-slots/assign` answers 503, “Automatic posting is not switched on yet” | Nothing is sent |
+| `draft` | Buffer: sends the post with `saveToDraft`, records the claim as `drafted`, and returns the draft to `approved`. Meta: runs the preflight only and creates no container | Confirm normally | Buffer has a draft, nothing is published. Buffer card: **Saved as a draft in Buffer**. Meta card: **Test mode: nothing was posted** |
+| `live` | Publishes through the chosen provider and reconciles the result | Confirm normally | A real post. Do not use it for this test |
+
+The comparison is case-insensitive and trims spaces; anything other than `draft` or `live`,
+including a typo, is treated as `off`.
+
+### Plan and provider limits
+
+- The app's limit is `automaticPosting` in `lib/services/entitlements.ts`: false on Free, true on
+  Pro and Business. An expired paid plan reads as Free. It is checked when connecting Buffer,
+  choosing a channel, confirming a slot, and again in the worker under the claim lock. A Free
+  owner is refused when connecting (403) or confirming a slot (a 403 result for that post), and
+  the worker ends a queued post with `plan_required`; no Buffer call is made.
+- Buffer's own free plan allows **10 scheduled posts and 1,000 API requests per channel per
+  month**. This test uses one draft, and the later status checks count against the request
+  allowance. The owner uses their own free Buffer account; this is separate from the PraiseLoop
+  plan.
+- A **Business** Instagram channel can post automatically. A Creator account is allowed only if
+  Buffer reports it as `business`; a personal one is notification-only and refused.
+
+### What to look for in the logs (`APP_ENV=dev`)
+
+Both containers write one JSON object per line. With `APP_ENV=dev` the level is `debug`, so every
+API request, worker tick and posting decision is shown. Logs never contain tokens, captions,
+review text or email addresses.
+
+- **Web start:** `web_started` with `appEnv: "dev"`, `postingMode: "draft"`,
+  `bufferClientConfigured: true`, `encryptionKeyConfigured: true` and `nextauthUrlIsHttps: true`.
+  A false here explains most failures before posting starts.
+- **Web requests:** each API request, and `buffer_connect_failed` with a `step` and short error
+  name if the OAuth exchange fails. A server error is `request_failed`.
+- **Worker start:** `worker_started` with `appEnv: "dev"`, `postingMode: "draft"`,
+  `bufferConfigured: true` and `mediaBaseIsHttps: true`.
+- **Worker ticks:** `posting_tick_start` with `mode: "draft"`, then when the time comes
+  `posting_submit_started`, `posting_submit_accepted` and `posting_claim_settled` with
+  `to: "drafted"`, `draftStatus: "approved"` and `provider: "buffer"`.
+- **Gate off:** `posting_gate_off` every tick means the worker is not seeing `draft`; fix its
+  environment and restart it.
+- **Failure:** `posting_submit_failed` carries a short `kind` and error fields, and
+  `posting_status_check_failed` means a later status read failed but the post state was not
+  changed.
+
+### If it fails, send this
+
+Include the date and time with the business timezone, the business and draft ids, the mode on
+**both** web and worker, and the scheduled time. Copy the relevant `posting_*`,
+`buffer_connect_failed` and `request_failed` lines from both containers (from a run with
+`APP_ENV=dev`), plus the exact Approval-card and Schedule wording and whether a draft appeared in
+Buffer. Say which channel type Connections shows (for example Instagram/Business) and whether
+`worker_started` reported `mediaBaseIsHttps: true` and `bufferConfigured: true`.
+
+**Never send** Buffer access or refresh tokens, `BUFFER_CLIENT_SECRET`,
+`CREDENTIAL_ENCRYPTION_KEY`, session cookies or `Authorization` headers, an OAuth `code`,
+`state` or verifier, captions, review text or email addresses. Sanitized ids, times, states and
+short error codes are enough to diagnose the test.
+
 ## Quickstart — all containers (production-style)
 
 ```bash
@@ -260,6 +379,9 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `APIFY_REVIEW_RUN_INTERVAL_HOURS` | no | One Apify run per business per interval on every plan (default `24`). A failed or timed-out run can be retried |
 | `APIFY_MAX_CHARGE_USD` | no | Apify's `maxTotalChargeUsd` for every run (default `0.50`). This is a spend cap on the owner's own Apify account |
 | `MEDIA_ROOT` | no | Where rendered draft images are written/served (default `private-media`, the owner-protected `generated_media` volume mount in Compose; host upgrades must move existing images there as described in [auth.md](auth.md)) |
+| `BUFFER_CLIENT_ID` / `BUFFER_CLIENT_SECRET` | for Buffer connect | Confidential Buffer app client (#29). Missing either, `CREDENTIAL_ENCRYPTION_KEY` or a redirect base makes `POST /api/buffer/connect` answer 503. Never commit the secret |
+| `BUFFER_REDIRECT_URI` | no | Optional override; defaults to `${NEXTAUTH_URL}/api/buffer/callback`. Must match Buffer's registered redirect URI exactly |
+| `BUFFER_POSTING_MODE` | no | `off` (default), `draft` or `live`; anything else is treated as `off`. `draft` saves Buffer posts as drafts (Meta runs the preflight only), `live` publishes. Web and worker read it separately, so set both. See [the supervised draft-mode test](#supervised-draft-mode-posting-test-207) |
 | `CREDENTIAL_ENCRYPTION_KEY` | for provider tokens | 32 random bytes, base64. Encrypts Buffer tokens, Meta Page tokens and the Buffer PKCE verifier at rest. Changing it makes stored tokens undecryptable, so owners must reconnect |
 | `META_APP_ID` / `META_APP_SECRET` | for Meta connect | Business-type Meta app credentials (#234, [integrations.md](integrations.md)). Missing either, the encryption key or a redirect base makes `POST /api/meta/connect` answer 503. Never commit the secret |
 | `META_REDIRECT_URI` | no | Optional override; defaults to `${NEXTAUTH_URL}/api/meta/callback`. Must match the Facebook app's redirect URI exactly |
@@ -269,6 +391,8 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `STRIPE_WEBHOOK_SECRET` | for webhooks | Signing secret from the Stripe dashboard or `stripe listen`. Missing it makes `/api/billing/webhook` answer 503, so no event is trusted |
 | `STRIPE_PRICE_PRO` / `STRIPE_PRICE_BUSINESS` | per paid plan | Recurring monthly price ids. A plan without a price cannot be checked out; Business stays unset until #222 |
 | `BILLING_PROVIDER` | no | `fake` enables the local billing adapter and the development-only `POST /api/dev/billing` walkthrough (#219). Refused in a production process, like `MOBILE_DEV_AUTH`; Stripe is selected instead when its keys are set |
+| `APP_ENV` | no | `prod` (default) or `dev`; `dev` logs every API request, worker tick and posting decision. See [Logging](#logging) |
+| `LOG_LEVEL` | no | `debug`, `info`, `warn` or `error`; overrides the level chosen by `APP_ENV` |
 | `REDIS_URL` | no | Reserved for future queue work; unused by the current worker |
 
 Postgres and Redis ports are bound to loopback (`127.0.0.1`) only — reachable
