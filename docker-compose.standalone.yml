@@ -46,6 +46,10 @@ services:
       - OPENROUTER_MODEL=${OPENROUTER_MODEL:-}
       - NEXTAUTH_URL=${NEXTAUTH_URL:?set NEXTAUTH_URL to the public https address}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:?set NEXTAUTH_SECRET}
+      # Pilot sign-up gate (#195). open (default) or invite; an invalid value fails
+      # closed to invite. INVITED_EMAILS is a comma/whitespace separated allow-list.
+      - SIGNUP_MODE=${SIGNUP_MODE:-open}
+      - INVITED_EMAILS=${INVITED_EMAILS:-}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - EMAIL_TRANSPORT=${EMAIL_TRANSPORT:-}

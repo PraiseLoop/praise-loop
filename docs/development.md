@@ -249,6 +249,8 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `APPLE_CLIENT_ID` | for Apple sign-in | Comma-separated audiences accepted from Apple identity tokens. The native app uses its bundle id `ca.visda.praiseloop`; a Services ID is added only when web Apple sign-in exists. Empty fails closed with 401 (see [auth.md](auth.md)) |
 | `MICROSOFT_CLIENT_ID` | for Microsoft sign-in | Entra ID application (client) id, also the comma-separated audience list for phone ID tokens (the web sign-in uses the first id). The same id goes in the app's `EXPO_PUBLIC_MICROSOFT_CLIENT_ID`. Empty hides the web button and fails the phone exchange closed with 401 (see [auth.md](auth.md)) |
 | `MICROSOFT_CLIENT_SECRET` | for web Microsoft sign-in | Client secret for the NextAuth `azure-ad` provider. The phone uses PKCE and never needs it. Never commit the value |
+| `SIGNUP_MODE` | no (production: `invite`) | `open` (default) lets any completed provider sign-in create an owner; `invite` allows only a new owner whose address is in `INVITED_EMAILS`. An invalid value fails closed to `invite` with one warning. Existing owners, returning identities and linking a method to a signed-in owner are never blocked (see [auth.md](auth.md#invite-only-sign-up-for-the-pilot-195)) |
+| `INVITED_EMAILS` | for `invite` mode | Comma and/or whitespace separated addresses, compared case-insensitively. Add or remove someone by editing `.env` and restarting the web service; no redeploy or migration. Never put real addresses in the committed examples |
 | `EXPO_ACCESS_TOKEN` | no | Expo push access token; only needed if enhanced push security is enabled on the Expo project |
 | `EMAIL_TRANSPORT` | no | `fake` (default outside production) or `resend`. `fake` records to an in-memory outbox and logs an `email_outbox` line, and is refused in a production process |
 | `EMAIL_FROM` | for real sends | Sender, for example `Praise Loop <no-reply@mail.example.com>`, on a domain verified in Resend. With the fake transport it defaults to `Praise Loop <no-reply@praiseloop.invalid>` |
@@ -355,7 +357,8 @@ owner runs them.
    the tunnel token.
 2. **Owner:** on the server, `cp .env.example .env` and set strong
    `POSTGRES_PASSWORD`, `NEXTAUTH_SECRET`, Google and OpenAI keys,
-   `CLOUDFLARE_TUNNEL_TOKEN`, and `NEXTAUTH_URL=https://praise.example.com`. The
+   `CLOUDFLARE_TUNNEL_TOKEN`, `SIGNUP_MODE=invite` with the pilot's addresses in
+   `INVITED_EMAILS`, and `NEXTAUTH_URL=https://praise.example.com`. The
    app's production `API_BASE_URL` is that same URL. Add
    `https://praise.example.com/api/auth/callback/google` as an authorized
    redirect URI on the Google OAuth client ([auth.md](auth.md)).

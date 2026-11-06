@@ -36,6 +36,14 @@ async function signedInOwner() {
   }
 }
 
+// A refused new sign-up goes back to the landing page with a machine code the page
+// turns into the invite-only message (#195). Returning a string makes NextAuth use it
+// as the redirect instead of its generic AccessDenied error page.
+function inviteOnlyRedirect() {
+  const base = (process.env.NEXTAUTH_URL ?? "").replace(/\/+$/, "");
+  return `${base}/?error=invite_only`;
+}
+
 // Google and Microsoft are optional: an owner can sign in by email even when an
 // organisation has no provider credentials. NextAuth still handles sessions and
 // sign-out with an empty provider list, which keeps the email session's sign-out
@@ -102,7 +110,8 @@ export const authOptions: NextAuthOptions = {
         };
         const linkToOwner = await signedInOwner();
         const result = await signInWithIdentity(identity, linkToOwner ? { linkToOwner } : {});
-        return result.ok;
+        if (result.ok) return true;
+        return result.reason === "invite_only" ? inviteOnlyRedirect() : false;
       }
       if (account?.provider === "azure-ad") {
         const microsoft = profile as MicrosoftProfile | undefined;
@@ -117,7 +126,8 @@ export const authOptions: NextAuthOptions = {
         };
         const linkToOwner = await signedInOwner();
         const result = await signInWithIdentity(identity, linkToOwner ? { linkToOwner } : {});
-        return result.ok;
+        if (result.ok) return true;
+        return result.reason === "invite_only" ? inviteOnlyRedirect() : false;
       }
       return false;
     }

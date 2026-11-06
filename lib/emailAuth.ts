@@ -1,5 +1,5 @@
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
-import { signInWithIdentity } from "./authLinking";
+import { signInWithIdentity, type SignInResult } from "./authLinking";
 import { query, transaction } from "./db";
 import { EmailError, getEmailTransport, oneTimeCodeEmail, sendEmail, stepUpCodeEmail } from "./email";
 
@@ -120,14 +120,22 @@ export async function requestEmailCode(email: string, ip: string, now = Date.now
   return "sent";
 }
 
+export type EmailSignInResult =
+  | { ok: true; ownerId: string }
+  | { ok: false; reason: "invalid_code" | "invite_only" };
+
 // Returns the owner on success. Wrong, expired, reused, superseded and exhausted
-// codes all return null with no detail for the caller.
-export async function verifyEmailCode(email: string, code: string, now = Date.now()): Promise<string | null> {
+// codes all return `invalid_code` with no detail for the caller. A valid code for a
+// brand-new address that the invite gate refuses returns `invite_only`; the code is
+// consumed and no owner, method or session is left behind (#195).
+export async function verifyEmailCode(email: string, code: string, now = Date.now()): Promise<EmailSignInResult> {
   const key = secret();
-  if (!key || !CODE_PATTERN.test(code)) return null;
+  if (!key || !CODE_PATTERN.test(code)) return { ok: false, reason: "invalid_code" };
   return transaction(async () => {
-    if (!await consumeEmailCode(email, code, key, now, "sign_in")) return null;
-    return findOrCreateEmailOwner(email);
+    if (!await consumeEmailCode(email, code, key, now, "sign_in")) return { ok: false, reason: "invalid_code" };
+    const result = await findOrCreateEmailOwnerResult(email);
+    if (result.ok) return { ok: true, ownerId: result.ownerId };
+    return { ok: false, reason: result.reason === "invite_only" ? "invite_only" : "invalid_code" };
   });
 }
 
@@ -174,11 +182,17 @@ async function consumeEmailCode(email: string, code: string, key: string, now: n
 // The linking policy (#156) lives in lib/authLinking.ts and is shared with Google: a code proves
 // control of the address, so an owner already known by that address keeps one owner and gains an
 // email method (with its added and last-used times), and concurrent first sign-ins are serialized
-// there. Returns null when the policy refuses the sign-in.
-export async function findOrCreateEmailOwner(email: string): Promise<string | null> {
+// there. Returns null when the policy refuses the sign-in; the result form below keeps the reason.
+export async function findOrCreateEmailOwnerResult(email: string): Promise<SignInResult> {
   const result = await signInWithIdentity({ provider: "email", subject: email, email, emailVerified: true });
-  if (!result.ok) return null;
-  // The code proved control of the mailbox, so the address now counts as verified.
-  await query(`UPDATE auth_users SET "emailVerified"=coalesce("emailVerified",now()) WHERE id=$1`, [result.ownerId]);
-  return result.ownerId;
+  if (result.ok) {
+    // The code proved control of the mailbox, so the address now counts as verified.
+    await query(`UPDATE auth_users SET "emailVerified"=coalesce("emailVerified",now()) WHERE id=$1`, [result.ownerId]);
+  }
+  return result;
+}
+
+export async function findOrCreateEmailOwner(email: string): Promise<string | null> {
+  const result = await findOrCreateEmailOwnerResult(email);
+  return result.ok ? result.ownerId : null;
 }

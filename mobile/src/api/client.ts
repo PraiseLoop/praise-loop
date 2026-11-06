@@ -14,13 +14,17 @@ export class ApiError extends Error {
   // The server's own words on a 409, so a caller can tell a stale version from
   // another refusal. For matching only; never shown to the owner as-is.
   readonly detail?: string;
+  // The server's stable machine code (for example `invite_only`), so a screen can
+  // map a refusal to its own copy without matching on a message.
+  readonly code?: string;
 
-  constructor(kind: ApiErrorKind, status?: number, message?: string, detail?: string) {
+  constructor(kind: ApiErrorKind, status?: number, message?: string, detail?: string, code?: string) {
     super(message ?? (kind === "http" ? "That didn’t work. Try again." : messages[kind]));
     this.name = "ApiError";
     this.kind = kind;
     this.status = status;
     this.detail = detail;
+    this.code = code;
   }
 }
 
@@ -87,9 +91,10 @@ export function createApiClient({ baseUrl, getToken, fetchImpl = fetch, timeoutM
       if (response.status === 409) throw new ApiError("conflict", 409, undefined, await conflictDetail(response));
       if (response.status === 429) throw new ApiError("limit", 429);
       if (!response.ok) {
-        const data = await response.json().catch(() => null) as { error?: unknown } | null;
-        const message = typeof data?.error === "string" ? data.error : undefined;
-        throw new ApiError("http", response.status, message);
+        const data = await response.json().catch(() => null) as { error?: unknown; message?: unknown } | null;
+        const code = typeof data?.error === "string" ? data.error : undefined;
+        const message = typeof data?.message === "string" ? data.message : code;
+        throw new ApiError("http", response.status, message, undefined, code);
       }
       if (response.status === 204) return undefined as T;
       return await response.json() as T;

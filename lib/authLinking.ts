@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { query, transaction } from "./db";
 import { fillProviderName } from "./services/profile";
+import { logRefusedSignup, newOwnerAllowed } from "./signupPolicy";
 
 // The one place that decides whether a sign-in method belongs to an owner (#156).
 // A method is identified by the provider plus its stable subject id, never by the
@@ -27,8 +28,11 @@ export type AuthMethod = {
 };
 
 export type LinkFailure = "invalid_identity" | "provider_already_linked" | "account_taken" | "unknown_owner" | "last_method" | "not_found";
+// `invite_only` is only a sign-in refusal: attaching a method to a live owner and
+// an existing identity can never produce it (#195).
+export type SignInFailure = LinkFailure | "invite_only";
 export type LinkResult = { ok: true; methods: AuthMethod[] } | { ok: false; reason: LinkFailure };
-export type SignInResult = { ok: true; ownerId: string } | { ok: false; reason: LinkFailure };
+export type SignInResult = { ok: true; ownerId: string } | { ok: false; reason: SignInFailure };
 
 const PROVIDER = /^[a-z][a-z0-9_-]{0,39}$/;
 
@@ -148,6 +152,16 @@ export async function signInWithIdentity(identity: AuthIdentity, options: { link
          RETURNING id, (xmax=0) AS inserted`,
         [randomUUID(), input.name, input.email]
       )).rows[0];
+      // A brand-new owner is refused before any method is attached. The upsert is
+      // what serializes two subjects racing for one address, so the decision uses
+      // its `inserted` flag, not a separate read. An existing owner (inserted =
+      // false) always signs in, invited or not. Deleting the row this transaction
+      // just created leaves nothing behind when the access check refuses (#195).
+      if (owner.inserted && !newOwnerAllowed(input)) {
+        await query("DELETE FROM auth_users WHERE id=$1", [owner.id]);
+        logRefusedSignup(input);
+        return { ok: false, reason: "invite_only" };
+      }
       if (await hasOtherSubject(owner.id, input.provider, input.subject)) return { ok: false, reason: "provider_already_linked" };
       const attached = await attachAccount(input.provider, input.subject, owner.id, input.email);
       if (!attached) return { ok: false, reason: "account_taken" };
@@ -165,6 +179,11 @@ export async function signInWithIdentity(identity: AuthIdentity, options: { link
     // A provider whose email claim is not verified (or is not guaranteed by the
     // provider, such as Microsoft's) never links by email. It gets its own owner
     // with no login email; the provider address is kept only on the method row.
+    // The invite gate still checks the address the provider reported (#195).
+    if (!newOwnerAllowed(input)) {
+      logRefusedSignup(input);
+      return { ok: false, reason: "invite_only" };
+    }
     const owner = (await query<{ id: string }>(
       `INSERT INTO auth_users(id,name,email,"emailVerified") VALUES($1,$2,NULL,NULL) RETURNING id`,
       [randomUUID(), input.name]
