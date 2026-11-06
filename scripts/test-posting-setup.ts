@@ -123,6 +123,16 @@ async function main() {
     assert.equal(body.state, "needs_reconnect"); assert.equal(body.mode, "draft"); assert.equal(body.provider, "meta");
     assert.equal((await get("other-session", business)).status, 404, "another owner's business is not found");
     assert.match(mine.headers.get("cache-control") ?? "", /no-store/);
+
+    // A Meta-only owner with a connection but no target yet (review on #255): the
+    // connection status is read on its own, not through the target join.
+    await c.query("DELETE FROM business_meta_targets WHERE business_id=$1", [business]);
+    await c.query("DELETE FROM business_buffer_channels WHERE business_id=$1", [business]);
+    await c.query("DELETE FROM buffer_connections WHERE owner_id=$1", [owner]);
+    assert.equal((await getPostingSetup(owner, business, "draft")).state, "needs_reconnect", "a flagged Meta connection without a target");
+    await c.query("UPDATE meta_connections SET status='active' WHERE id=$1", [metaConn]);
+    assert.equal((await getPostingSetup(owner, business, "draft")).state, "no_channel", "a working Meta connection without a target asks for the target");
+    assert.equal((await getPostingSetup(other, business, "draft")).state, "not_connected", "another owner's connection never counts");
   });
   console.log("posting setup banner state, provider choice, wording and route tests passed");
 }
