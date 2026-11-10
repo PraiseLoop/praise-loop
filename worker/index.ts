@@ -1,6 +1,7 @@
 import { pool } from "../lib/db";
 import { errorFields, log, logLevel, logTick } from "../lib/log";
 import { pushTick } from "../lib/services/push";
+import { emailTick } from "../lib/services/weeklyEmail";
 import { generationQueue, generationTick } from "../lib/services/generationQueue";
 import { postingMode, postingTick } from "../lib/services/bufferPosting";
 const { queue,worker } = generationQueue();
@@ -14,6 +15,7 @@ function tick() {
   active = step("generation", () => generationTick(queue))
     .then(() => step("posting", () => postingTick()))
     .then(() => step("push", () => pushTick()))
+    .then(() => step("email", () => emailTick()))
     .finally(() => { active = undefined; });
 }
 const configured = Number(process.env.DRAFT_PIPELINE_INTERVAL_MS ?? 60000);

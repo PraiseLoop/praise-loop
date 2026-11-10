@@ -33,6 +33,9 @@ export default function AccountPage() {
   const [methodError, setMethodError] = useState<string | null>(null);
   const [methodNotice, setMethodNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [weeklyEmail, setWeeklyEmail] = useState<boolean | null>(null);
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -50,6 +53,20 @@ export default function AccountPage() {
   }, []);
 
   useEffect(() => { void loadMethods(); }, [loadMethods]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await apiFetch("/api/account/preferences");
+        if (!response.ok) throw new Error("preferences");
+        const data = await response.json() as { weeklyEmailEnabled?: boolean };
+        if (!cancelled) setWeeklyEmail(data.weeklyEmailEnabled !== false);
+      } catch {
+        if (!cancelled) setEmailError("We couldn’t load your email setting.");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
   useEffect(() => {
     const linked = new URLSearchParams(window.location.search).get("linked");
     if (linked) setMethodNotice(`${methodName(linked)} linked.`);
@@ -73,6 +90,33 @@ export default function AccountPage() {
       setMethodError("We couldn’t unlink that method.");
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function setWeeklyEmailEnabled(next: boolean) {
+    if (emailBusy || weeklyEmail === next) return;
+    const previous = weeklyEmail;
+    setWeeklyEmail(next);
+    setEmailBusy(true);
+    setEmailError(null);
+    try {
+      const response = await apiFetch("/api/account/preferences", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ weeklyEmailEnabled: next })
+      });
+      const data = await response.json().catch(() => null) as { error?: string; weeklyEmailEnabled?: boolean } | null;
+      if (!response.ok) {
+        setWeeklyEmail(previous);
+        setEmailError(data?.error ?? "We couldn’t save your email setting.");
+        return;
+      }
+      setWeeklyEmail(data?.weeklyEmailEnabled !== false);
+    } catch {
+      setWeeklyEmail(previous);
+      setEmailError("We couldn’t save your email setting. Check your connection and try again.");
+    } finally {
+      setEmailBusy(false);
     }
   }
 
@@ -154,6 +198,27 @@ export default function AccountPage() {
             </div>
           </>
         )}
+      </section>
+
+      <section aria-labelledby="emails-h" id="weekly-email" className="pl-panel" style={{ display: "flex", flexDirection: "column", gap: 12, scrollMarginTop: 24 }}>
+        <h2 id="emails-h" className="pl-h2">Emails</h2>
+        <p className="pl-muted" style={{ margin: 0 }}>
+          We send one email per business each week when its posts are ready to review. It links
+          straight to your approval queue.
+        </p>
+        <label htmlFor="weekly-email-toggle" style={{ display: "flex", alignItems: "flex-start", gap: 10, fontWeight: 600 }}>
+          <input
+            id="weekly-email-toggle"
+            type="checkbox"
+            checked={weeklyEmail ?? true}
+            disabled={weeklyEmail === null || emailBusy}
+            onChange={event => void setWeeklyEmailEnabled(event.target.checked)}
+            style={{ marginTop: 3 }}
+          />
+          <span>Email me when my weekly posts are ready</span>
+        </label>
+        {weeklyEmail === null && !emailError ? <p className="pl-small pl-muted" role="status" style={{ margin: 0 }}>Loading your email setting…</p> : null}
+        {emailError ? <p role="alert" className="pl-small" style={{ margin: 0 }}>{emailError}</p> : null}
       </section>
 
       <section aria-labelledby="plan-h" className="pl-panel" style={{ display: "flex", flexDirection: "column", gap: 12 }}>

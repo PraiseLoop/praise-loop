@@ -34,19 +34,40 @@ export function expoTransport(timeoutMs = 10000): PushTransport {
   };
 }
 
-// One delivery row per device per business-period; ON CONFLICT makes re-runs and restarts no-ops.
-export async function enqueuePostsReady(now = new Date()) {
-  const res = await query(`INSERT INTO push_deliveries(business_id, period_start, token, count)
-    SELECT p.business_id, p.period_start, t.token, c.n
+// One definition of a finished weekly batch: at least one reviewable draft and no
+// job still pending, retrying or running. Push and the weekly email (#275) share
+// it so the two notifications never disagree about when "posts are ready".
+export type ReadyPeriod = {
+  business_id: string;
+  /** `YYYY-MM-DD`, so callers and SQL parameters never depend on the process timezone. */
+  period_start: string;
+  count: number;
+  owner_id: string;
+  name: string;
+};
+
+export async function readyPeriods(now = new Date()): Promise<ReadyPeriod[]> {
+  return (await query<ReadyPeriod>(`SELECT p.business_id, to_char(p.period_start, 'YYYY-MM-DD') AS period_start, c.n AS count,
+      b.owner_id, b.name
     FROM generation_periods p
     JOIN businesses b ON b.id = p.business_id AND b.owner_id IS NOT NULL
-    JOIN device_push_tokens t ON t.owner_id = b.owner_id
     CROSS JOIN LATERAL (SELECT count(*)::int n FROM generation_jobs j JOIN draft_posts d ON d.id = j.draft_id
       WHERE j.business_id = p.business_id AND j.period_start = p.period_start AND j.state = 'complete' AND d.status = 'draft') c
     WHERE p.period_start >= $1::date - 14 AND p.allocated > 0 AND c.n > 0
       AND (p.allocated >= p.target OR p.reason = 'reviews_exhausted')
-      AND NOT EXISTS (SELECT 1 FROM generation_jobs j WHERE j.business_id = p.business_id AND j.period_start = p.period_start AND j.state IN ('pending','retry','running'))
-    ON CONFLICT DO NOTHING`, [now]);
+      AND NOT EXISTS (SELECT 1 FROM generation_jobs j WHERE j.business_id = p.business_id AND j.period_start = p.period_start AND j.state IN ('pending','retry','running'))`, [now])).rows;
+}
+
+// One delivery row per device per business-period; ON CONFLICT makes re-runs and restarts no-ops.
+export async function enqueuePostsReady(now = new Date()) {
+  const ready = await readyPeriods(now);
+  if (!ready.length) return 0;
+  const res = await query(`INSERT INTO push_deliveries(business_id, period_start, token, count)
+    SELECT r.business_id, r.period_start, t.token, r.count
+    FROM unnest($1::bigint[], $2::date[], $3::int[]) AS r(business_id, period_start, count)
+    JOIN device_push_tokens t ON t.owner_id = (SELECT b.owner_id FROM businesses b WHERE b.id = r.business_id)
+    ON CONFLICT DO NOTHING`,
+    [ready.map(r => r.business_id), ready.map(r => r.period_start), ready.map(r => r.count)]);
   return res.rowCount ?? 0;
 }
 
