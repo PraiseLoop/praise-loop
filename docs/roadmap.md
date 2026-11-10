@@ -37,6 +37,11 @@ Built and on `master`:
   queue, share-sheet posting, push registration, profile. Built and tested with mocks; never run
   on a device. Parked under the web-first strategy. Queue and draft
   screens have React Native Testing Library component tests (#86).
+- **Web-first validation:** the web app is installable on phones from the browser
+  (manifest, icons and an Add to Home Screen hint, #273), so validation needs no
+  app-store accounts. The manual install check on a real iPhone and Android phone
+  is not run yet. A no-cache service worker exists only for installability; it
+  never caches owner data or media and does not handle push.
 - **Dev environment:** Dockhand stacks, Stripe CLI forwarder, supervised draft-mode test
   guide in [development.md](development.md).
 
@@ -45,7 +50,7 @@ Built and on `master`:
 Take the first item that is not blocked. Each is one PR per issue (see CONTRIBUTING.md).
 
 1. **Web-first validation** (the pilot runs on these):
-   - #273 installable web app (manifest, icons, Add to Home Screen hint)
+   - ~~#273 installable web app~~ built (manual install check open)
    - ~~#274 share-sheet posting from the phone browser~~ built (manual phone check open)
    - ~~#275 weekly "your posts are ready" email~~ built
    - #276 every owner screen works at phone width
@@ -91,6 +96,10 @@ The full ordered list with steps and costs is **#271**. In short:
   Dockhand webhook secret that was ever pasted into a chat.
 - **Recheck on dev:** onboarding step 3 Back and Save & exit (#246 root cause was not
   reproduced; tell an agent if they still fail).
+- **Manual install check (#273):** open `dev.praiseloop.ca` on an iPhone (Safari) and an
+  Android phone (Chrome), add PraiseLoop to the home screen, and confirm it opens standalone
+  with the queue and no browser bars. The code and automated tests are done; this hardware
+  check is not run.
 
 ## Hard rules for whoever picks the next item
 

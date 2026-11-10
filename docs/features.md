@@ -1188,6 +1188,63 @@ half.
   section; the preference key and server tokens are ordinary local/API state,
   and removing a token from the server simply stops deliveries.
 
+## Installable web app (#273)
+
+The owner can put PraiseLoop on a phone's home screen and open it without the
+browser bars, so the pilot needs no app-store account (#271). The web app is a
+Progressive Web App: installable, but deliberately not offline-capable.
+
+- **Manifest**: `app/manifest.ts` is served by Next at `/manifest.webmanifest`
+  with `application/manifest+json`. It names the app, starts at `/approval`
+  (the weekly queue) in `standalone` display, and takes the theme and background
+  colours from the `--pl-green` and `--pl-ground` design tokens. The name,
+  colours and icon list live in `lib/installable.ts`; the same module supplies
+  the page metadata and viewport theme colour, so the manifest and the HTML
+  cannot disagree.
+- **Icons**: `scripts/generate-pwa-icons.ts` generates the committed PNGs from
+  the existing app logo (`mobile/assets/icon.png`) with Sharp:
+  `public/icons/icon-192.png`, `icon-512.png`, `icon-maskable-512.png` and
+  `public/apple-touch-icon.png`. The maskable file uses the full-bleed logo
+  whose mark is inside the Android safe zone. `metadata.icons.apple` links the
+  180×180 touch icon, and `metadata.appleWebApp` plus
+  `other: {"apple-mobile-web-app-capable": "yes"}` add the iOS standalone tags
+  (iOS ignores the manifest for these).
+- **Add to Home Screen hint**: `app/ui/InstallHint.tsx` is rendered by
+  `AppShell` only after the owner's session and businesses load. The pure rule in
+  `lib/installHint.ts` shows it only when the visitor is signed in, is on a phone
+  that can install, is not already in standalone mode, and has not dismissed it.
+  iPhone Safari sees "Tap the Share button, then choose Add to Home Screen";
+  Android waits for the browser's `beforeinstallprompt` event and offers an
+  **Install** button that calls it. Third-party iOS browsers and in-app browsers
+  (Instagram, Facebook) cannot install, so they get nothing. Dismissal is stored
+  under `praise-install-hint-dismissed` in `localStorage`; the hint never asks
+  again on that phone. A desktop browser and signed-out visitors never see it.
+- **Service worker**: `public/sw.js` is intentionally minimal: it registers a
+  fetch listener for the browser's installability check and caches **nothing**.
+  Owner reviews, captions, drafts and media therefore never enter a service
+  worker cache, and there is no web push. `ServiceWorkerRegistrar` registers it
+  only in production, so development is not shadowed by a stale worker.
+- **Public reachability**: the manifest, icons, touch icon and service worker
+  are static public assets, not API routes; `proxy.ts` only blocks
+  `/generated/*`. Nothing in them contains owner data, and `/approval` still
+  requires a session. `scripts/test-authorization.ts` is unchanged and passes.
+- **Tests**: `scripts/test-installable.ts` (in `npm test`) checks the manifest
+  fields and content, the design-token colours, each committed icon's format and
+  exact size, the Apple metadata, that the worker has no Cache API use or push,
+  and the full visibility/dismissal/platform rule. `scripts/test-installable-browser.ts`
+  (in `npm run test:browser`) fetches the public manifest and icons over HTTP,
+  checks the rendered iOS/theme/manifest tags, and drives Chromium as iPhone
+  Safari (hint, dismissal survives reload), Android (no hint before
+  `beforeinstallprompt`, then Install calls it), desktop and signed-out phone.
+- **Manual phone check**: **not run**. Installing from Safari on a real iPhone
+  and from Chrome on a real Android phone, and confirming the standalone launch,
+  still need hardware.
+- **Rollback**: remove the manifest route, install metadata, hint component,
+  registrar and `public/sw.js` plus its icons. Browsers that already installed
+  the app keep an installed shortcut, and a previously registered worker keeps
+  running until the site is revisited or the shortcut is removed; no owner data
+  or database row depends on this feature.
+
 ## Demo owner picker (#154)
 
 In a development process with `MOBILE_DEV_AUTH=1`, the phone sign-in screen and
