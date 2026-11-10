@@ -76,10 +76,10 @@ async function main() {
         (await c.query("INSERT INTO draft_posts(business_id,review_id,quote_text,caption_text,image_path,status) VALUES($1,$2,$3,$4,$5,$6) RETURNING id", [business, reviewId, `Synthetic quote with a long unbroken token ${longToken}`, caption, image, status])).rows[0].id;
       const ready = await draft("draft", `Synthetic caption with an unbroken token ${longToken}`, "/api/media/preview.png", longReview);
       const approved = await draft("approved", "Synthetic approved caption", "/api/media/preview.png", usedReview);
-      const failed = await draft("failed", "", null, usedReview);
-      const making = await draft("draft", "", null, usedReview);
-      await draft("shared", "Synthetic shared caption", "/api/media/preview.png", usedReview);
-      const archived = await draft("archived", "Synthetic skipped caption", "/api/media/preview.png", usedReview);
+      const failed = await draft("failed", "", null, await review("Synthetic failed review."));
+      const making = await draft("draft", "", null, await review("Synthetic making review."));
+      await draft("shared", "Synthetic shared caption", "/api/media/preview.png", await review("Synthetic shared review."));
+      const archived = await draft("archived", "Synthetic skipped caption", "/api/media/preview.png", await review("Synthetic skipped review."));
       await c.query("INSERT INTO generation_jobs(business_id,period_start,draft_id,state,attempts,error_code) VALUES($1,'2026-10-12',$2,'failed',3,'generation_failed')", [business, failed]);
       await c.query("INSERT INTO generation_jobs(business_id,period_start,draft_id,state,attempts) VALUES($1,'2026-10-12',$2,'pending',0)", [business, making]);
 
