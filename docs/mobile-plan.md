@@ -2,6 +2,25 @@
 
 Status: accepted 2026-10-26 (#79). Tracking issue: #99.
 
+> **Update 2026-11-10: web first, native app parked.** The owner does not want to pay for
+> anything until the product is validated. The pilot therefore runs on the **web app used on
+> phones**, which needs no Apple Developer Program ($99 USD a year), Google Play account ($25
+> USD), store review, D-U-N-S number, push credentials, Sign in with Apple or in-app
+> subscriptions. The phone-shaped parts of this plan move to the web:
+>
+> | This plan (native) | Web-first replacement |
+> |---|---|
+> | Install from TestFlight / Play | Add to Home Screen from the browser (#273); Android testers can also sideload the APK through Obtainium ([android-release.md](android-release.md)) |
+> | Share-sheet posting (#87) | The browser's Web Share API with the image file, same "Did you post it?" → `shared` flow (#274) |
+> | "Posts ready" push (#88, #89) | A weekly "posts ready" email (#275). Web push is not used: on iPhone it only works after Add to Home Screen |
+> | Phone approval queue (#86) | The web approval queue, checked at phone width (#276) |
+>
+> Everything below still describes the native app. Its code stays on `master` and keeps passing
+> CI, but device checks, store accounts and store release (Phase 3's TestFlight/Play pilot,
+> #95) wait until the web pilot shows owners use and pay for PraiseLoop. The owner approvals,
+> their order and costs are in #271. Goal 1 below now reads "from an email" during validation,
+> and goal 2's "plus the app store fees" does not apply.
+
 PraiseLoop becomes a phone app for business owners, backed by the server that
 already exists. The server keeps doing the hard work (review import, quote
 selection, AI captions, image rendering, the weekly job and the approval rules).
@@ -244,11 +263,13 @@ by theme; [Order of work](#order-of-work) says what has to wait for what.
 
 - #90 Home-server hosting through Cloudflare Tunnel, with backups
 - #102 Build and push the web and worker images to GitHub Container Registry
-- #91 App Store and Google Play accounts, privacy policy, test builds (owner)
-- #92 Sign in with Apple, before public App Store release
+- #262 privacy policy, terms and support pages (owner; was part of #91)
 - #93 Account deletion
-- Pilot with the first businesses through TestFlight and Play internal testing, using
-  the [pilot](pilot.md) process
+- **Web pilot first** (2026-11-10): the first businesses use the web app on their phones
+  (#273–#276), using the [pilot](pilot.md) process
+- Parked until the web pilot is validated: store accounts and test builds (#91, now split into
+  #261, #265, #266, #267, #270), #92 Sign in with Apple setup (#268), and the TestFlight / Play
+  internal testing pilot
 
 ### Phase 4: revenue and AI
 
