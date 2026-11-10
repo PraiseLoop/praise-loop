@@ -5,7 +5,7 @@ promise: the GitHub issues are the source of truth for scope and acceptance crit
 and this file says which ones to take, in what order, and what is waiting on the owner.
 **Update it in the same PR that finishes or reshapes an item** (see the last section).
 
-Last updated: 2026-11-10. Trackers: #225 (billing and the paid pilot), #271 (owner
+Last updated: 2026-11-10 (after the web-first batch). Trackers: #225 (billing and the paid pilot), #271 (owner
 approvals, order and costs), #99 (native app, parked).
 
 **Current strategy: validate on the web first, for $0** (decided 2026-11-10, see
@@ -53,14 +53,11 @@ Built and on `master`:
 
 Take the first item that is not blocked. Each is one PR per issue (see CONTRIBUTING.md).
 
-1. **Web-first validation** (the pilot runs on these):
-   - ~~#273 installable web app~~ built (manual install check open)
-   - ~~#274 share-sheet posting from the phone browser~~ built (manual phone check open)
-   - ~~#275 weekly "your posts are ready" email~~ built
-   - ~~#276 every owner screen works at phone width~~ built (manual phone check open)
-2. **Follow-ups from #159** (email and password sign-in is shipped on the web; the phone bearer
-   route is built): breached-password lookup, a signed-in "set a password" action, and phone UI
-   (parked with the native app).
+1. **#285 sign out of all devices** from the account page (follow-up from the #260 alert
+   email, which currently has nothing to point the owner at). Next code item.
+2. **#286 password follow-ups:** a signed-in "set a password" action and an optional
+   breached-password check (post-MVP). Phone UI for password sign-in is parked with the
+   native app; the bearer route exists.
 3. **#234 remaining:** decide whether to remove Buffer **after** the Meta live test passes.
    Until then Buffer is the only automatic posting route and stays fully available (plan and
    account copy is already provider-neutral, #258). The live
@@ -85,9 +82,6 @@ The full ordered list with steps and costs is **#271**. In short:
 - **Parked until validated:** #261 individual/organization and D-U-N-S, #265 Apple ($99 USD
   a year), #266 Google Play ($25 USD once), #267 push credentials, #268 Sign in with Apple
   setup, #270 store listings and testing, #269 Microsoft publisher verification.
-- **#274 manual check:** on iPhone Safari and Android Chrome, with Instagram and Facebook
-  installed, post an approved draft through the web share sheet and note what each app does
-  with the image and caption. Mark as not run until then.
 - **#233 verification:** run a real Google Takeout export on an owned Business Profile and
   upload it. The parser was built against a *guessed* file format (documented in
   [integrations.md](integrations.md)); the issue stays open until a real file imports. Do not
@@ -101,13 +95,14 @@ The full ordered list with steps and costs is **#271**. In short:
   Dockhand webhook secret that was ever pasted into a chat.
 - **Recheck on dev:** onboarding step 3 Back and Save & exit (#246 root cause was not
   reproduced; tell an agent if they still fail).
-- **Manual install check (#273):** open `dev.praiseloop.ca` on an iPhone (Safari) and an
-  Android phone (Chrome), add PraiseLoop to the home screen, and confirm it opens standalone
-  with the queue and no browser bars. The code and automated tests are done; this hardware
-  check is not run.
-- **#276 manual phone check:** the headless 360×800/390×844 walks pass, but nobody has
-  walked the owner pages in a real phone browser yet. Note anything the browser test
-  cannot see (on-screen keyboard, safe areas, iOS zoom, share sheet).
+- **Web pilot phone walk (#273, #274, #276):** on a real iPhone (Safari) and Android phone
+  (Chrome) against `dev.praiseloop.ca`: add PraiseLoop to the home screen and confirm it opens
+  standalone on the queue; post an approved draft through the share sheet with Instagram and
+  Facebook installed and note what each app does with the image and caption; walk the owner
+  pages and note anything the headless phone-width test cannot see (keyboard, safe areas, iOS
+  zoom). The code and automated tests are done; none of this hardware check has been run.
+- **Weekly email on first deploy (#275):** it looks back 14 days, so an owner may get one email
+  per recent finished week that still has drafts waiting, once.
 
 ## Hard rules for whoever picks the next item
 
