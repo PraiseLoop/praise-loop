@@ -80,7 +80,8 @@ export async function checkPasswordBreach(
 
   // SHA-1 is required by the range API's k-anonymity protocol and is not used
   // to store the password. Only its first five hex characters are sent.
-  const sha1 = createHash("sha1").update(password, "utf8").digest("hex").toUpperCase(); // codeql[js/insufficient-password-hash]
+  // codeql[js/insufficient-password-hash]
+  const sha1 = createHash("sha1").update(password, "utf8").digest("hex").toUpperCase();
   const prefix = sha1.slice(0, 5);
   const suffix = sha1.slice(5);
   const controller = new AbortController();
