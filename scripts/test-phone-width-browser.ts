@@ -80,6 +80,7 @@ async function main() {
       const making = await draft("draft", "", null, await review("Synthetic making review."));
       await draft("shared", "Synthetic shared caption", "/api/media/preview.png", await review("Synthetic shared review."));
       const archived = await draft("archived", "Synthetic skipped caption", "/api/media/preview.png", await review("Synthetic skipped review."));
+      await c.query("INSERT INTO generation_periods VALUES($1,'2026-10-12','UTC',5,4,3,'quota_met')", [business]);
       await c.query("INSERT INTO generation_jobs(business_id,period_start,draft_id,state,attempts,error_code) VALUES($1,'2026-10-12',$2,'failed',3,'generation_failed')", [business, failed]);
       await c.query("INSERT INTO generation_jobs(business_id,period_start,draft_id,state,attempts) VALUES($1,'2026-10-12',$2,'pending',0)", [business, making]);
 
