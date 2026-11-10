@@ -84,6 +84,16 @@ h1, h2, h3 { font-family: var(--pl-display); letter-spacing: -0.01em; }
   .pl-tabbar a[aria-current="page"] { color: var(--pl-green); font-weight: 700; }
 }
 
+/* Add to Home Screen hint (#273): a dismissible card above the phone tab bar. */
+.pl-install-hint { position: fixed; left: 12px; right: 12px; bottom: calc(78px + env(safe-area-inset-bottom)); z-index: 15; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; max-width: 520px; margin: 0 auto; padding: 14px 44px 14px 16px; border: 1px solid var(--pl-line); border-radius: 14px; background: var(--pl-surface); box-shadow: 0 12px 32px rgba(23, 32, 28, 0.16); }
+.pl-install-hint-copy { display: flex; flex: 1 1 180px; flex-direction: column; gap: 2px; font-size: 13px; }
+.pl-install-hint-copy strong { font-family: var(--pl-display); font-size: 15px; }
+.pl-install-hint-copy span { color: var(--pl-muted); }
+.pl-install-hint-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.pl-install-hint-actions .pl-btn { min-height: 38px; padding: 0 14px; font-size: 14px; }
+.pl-install-hint-close { position: absolute; top: 6px; right: 6px; width: 32px; height: 32px; border: 0; border-radius: 8px; background: none; color: var(--pl-muted); font-size: 20px; line-height: 1; cursor: pointer; }
+.pl-install-hint-close:hover { background: var(--pl-ground); color: var(--pl-ink); }
+
 /* Page header */
 .pl-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px; }
 .pl-header-text { display: flex; flex-direction: column; gap: 8px; max-width: 640px; }

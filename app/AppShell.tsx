@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react";
 import { apiFetch } from "./apiFetch";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import Icon, { type IconName } from "./ui/Icon";
+import InstallHint from "./ui/InstallHint";
 import ProfileMenu from "./ProfileMenu";
 import type { Profile } from "../lib/services/profile";
 
@@ -212,6 +213,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <nav aria-label="Main" className="pl-tabbar">
             {nav.map(item => <Link key={item.label} href={item.href} aria-current={current(item)}><Icon name={item.icon} size={22} />{item.label}</Link>)}
           </nav>
+          <InstallHint signedIn={status === "ready"} />
         </div>
       </ProfileContext.Provider>
     </BusinessContext.Provider>
