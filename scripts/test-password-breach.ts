@@ -13,7 +13,7 @@ import {
 // calls the real Have I Been Pwned service.
 
 const PASSWORD = "synthetic-breach-check-password-286";
-const SHA1 = createHash("sha1").update(PASSWORD, "utf8").digest("hex").toUpperCase();
+const SHA1 = createHash("sha1").update(PASSWORD, "utf8").digest("hex").toUpperCase(); // codeql[js/insufficient-password-hash]
 const PREFIX = SHA1.slice(0, 5);
 const SUFFIX = SHA1.slice(5);
 
