@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { emailSignInConfigured } from "../../../../../lib/emailAuth";
 import { recordFailure, tooManyFailures } from "../../../../../lib/mobileSignIn";
 import { passwordProblem, passwordRuleMessage, signUpWithPassword } from "../../../../../lib/passwordAuth";
+import { BREACHED_PASSWORD_MESSAGE } from "../../../../../lib/passwordBreach";
 import { readLimitedText, sameOriginRequest } from "../../../../../lib/requestBody";
 import { clientIp } from "../../../../../lib/requestIp";
 import { INVITE_ONLY_MESSAGE } from "../../../../../lib/signupMessages";
@@ -36,6 +37,7 @@ export async function POST(req: NextRequest) {
   if (!result.ok) {
     if (result.reason === "invite_only") return reply(403, { error: "invite_only", message: INVITE_ONLY_MESSAGE });
     if (result.reason === "invalid_password") return reply(400, { error: passwordRuleMessage(passwordProblem(body.password)) });
+    if (result.reason === "breached_password") return reply(400, { error: BREACHED_PASSWORD_MESSAGE });
     if (result.reason === "password_exists" || result.reason === "email_taken") {
       // Only a caller who already proved this mailbox reaches this branch.
       return reply(409, { error: "A password is already set for that address. Sign in or reset it." });

@@ -4,7 +4,7 @@
 who are about to change it. It summarises and links; the detailed, authoritative text lives in the
 other docs. When you change behaviour, update the detailed doc and the matching line here.
 
-Last reviewed: 2026-11-10 (sign out of all other devices, #285; email and password sign-in, #159; phone-width owner screens, #276; weekly "posts ready" email, #275; web Sign in with Apple, #92; new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
+Last reviewed: 2026-11-10 (set a password while signed in and breached-password check, #286; sign out of all other devices, #285; email and password sign-in, #159; phone-width owner screens, #276; weekly "posts ready" email, #275; web Sign in with Apple, #92; new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
 
 | Doc | What it is the source of truth for |
 | --- | --- |
@@ -139,7 +139,11 @@ transactional.
   every new web or phone session, with a per-owner/per-method ten-minute limit; it records the
   method, rough client and time, never a token or code. Password sign-up (#159) rides the same
   email-code step: no credential is written until the address is verified, so an unverified attempt
-  cannot claim an existing owner, and a verified one may add a password to that owner. See
+  cannot claim an existing owner, and a verified one may add a password to that owner. A signed-in
+  owner can add a first password from `/account` after a fresh step-up, using their primary verified
+  address (#286, `POST /api/account/password/set`). Passwords are checked against Have I Been
+  Pwned's k-anonymity range API at sign-up, reset, change and set: only the first five SHA-1 hex
+  characters leave the server, and an unavailable lookup fails open. See
   [auth.md](auth.md) and [decisions.md](decisions.md).
 - **Pilot sign-up gate** (#195): `SIGNUP_MODE` is `open` (default) or `invite`, and `INVITED_EMAILS`
   is a comma/whitespace allow-list compared case-insensitively. The gate lives in
@@ -223,6 +227,7 @@ Expo Router screens: `sign-in`, `queue`, `draft/[id]`, `profile`. Design rules t
 | Postgres, Redis | data, job delivery | live |
 | OpenAI / OpenRouter | captions, brand voice | built, used with fakes in tests; no live run in CI |
 | Resend | sign-in codes (`lib/email.ts`, fake outbox in dev/tests) | **live and verified** (sender `noreply@praiseloop.ca`) |
+| Have I Been Pwned range API | breached-password check (#286); k-anonymity, only the five-hex SHA-1 prefix leaves the server | built; on by default in production, off in dev/tests, fails open; no key or dependency |
 | Zoho Mail | a human mailbox for `admin@praiseloop.ca` (vendor and service sign-ups, replies) | **live**; MX/SPF/DKIM for the root domain are Zoho's, Resend sends from the `send`/`rsend` subdomains and `resend._domainkey`; the root domain may have only one SPF record |
 | Cloudflare Tunnel | reaches the home server; the `praiseloop-dev` tunnel serves the dev environment at `dev.praiseloop.ca` (all paths to `http://praiseloop-web:3000`, 404 for any other host) and runs as its own cloudflared stack on the shared `edge` Docker network; the app stack (`docker-compose.standalone.yml`, for Dockhand) deliberately does not contain it | tunnel, DNS and routing created; the tunnel's public hostname must point at `praiseloop-web:3000` once its stack is up. A Cloudflare firewall rule `dev_home_only` blocks every request to that host that is not from the home IP, except `/api/mobile/*` (the phone's bearer-token API). If the home IP changes the web side locks out until the rule is edited. `NEXTAUTH_URL` is `https://dev.praiseloop.ca`; `app.praiseloop.ca` is reserved for production and not set up |
 | Expo push | "posts ready" notifications | built; needs EAS project id, APNs/FCM, a device test |
@@ -317,7 +322,7 @@ endpoints take the Page token or the User token, to be settled by the owner-appr
 | Google Takeout review import | built; assumed format **unverified**, needs a real-export check before announcing | #233 |
 | Business tier | planned, see [billing.md](billing.md) | #222, #225 |
 | Store subscriptions, VPS, pilot hosting, store accounts | not started / owner tasks | #95, #98, #90, #91 |
-| Email + password | web sign-up (verified email), sign-in, reset and change shipped; phone bearer route shipped, **phone UI not built** | #159 |
+| Email + password | web sign-up (verified email), sign-in, reset, change and signed-in set-password shipped; breached-password check with fail-open behind `PASSWORD_BREACH_CHECK`; phone bearer route shipped, **phone UI not built** | #159, #286 |
 
 Open work and blockers are tracked in GitHub issues; this table is a snapshot.
 
@@ -416,7 +421,7 @@ Open work and blockers are tracked in GitHub issues; this table is a snapshot.
 - **Google sign-in on the phone** needs a development build, not Expo Go (native module), plus an
   Android-type OAuth client with the signing key's SHA-1; the `EXPO_PUBLIC_*` values are already passed
   through compose.
-- **Email + password** (#159) is shipped on the web, with a phone bearer route but no phone UI.
-  The breached-password range lookup, a "set a password" action for an already signed-in owner and
-  the phone form are follow-ups; `NEXTAUTH_URL` and the existing email transport are the only
-  configuration it uses.
+- **Email + password** (#159, #286) is shipped on the web, including a signed-in set-password
+  action and the breached-password check. The phone bearer route exists but the phone form is still
+  parked with the native app. Configuration is `NEXTAUTH_URL`, the existing email transport and the
+  optional `PASSWORD_BREACH_CHECK` switch (on in production, off in development and tests).

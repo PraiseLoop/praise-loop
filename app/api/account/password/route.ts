@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { currentOwner, currentSession, ownerRoute } from "../../../../lib/authorization";
 import { changePassword, hasPassword, passwordProblem, passwordRuleMessage } from "../../../../lib/passwordAuth";
+import { BREACHED_PASSWORD_MESSAGE } from "../../../../lib/passwordBreach";
 
 // Owner-wide (#159): change the signed-in owner's password. The current password
 // is required even though the session already proves control, so a borrowed
@@ -21,6 +22,7 @@ async function handlePOST(req: NextRequest) {
   if (!result.ok) {
     if (result.reason === "no_password") return NextResponse.json({ error: "This account has no password to change" }, { status: 409 });
     if (result.reason === "invalid_password") return NextResponse.json({ error: passwordRuleMessage(passwordProblem(body?.newPassword)) }, { status: 400 });
+    if (result.reason === "breached_password") return NextResponse.json({ error: BREACHED_PASSWORD_MESSAGE }, { status: 400 });
     return NextResponse.json({ error: "That current password is not right" }, { status: 400 });
   }
   return NextResponse.json({ ok: true, revoked: result.revoked });
