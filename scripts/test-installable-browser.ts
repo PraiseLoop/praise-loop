@@ -79,7 +79,7 @@ async function main() {
           window.dispatchEvent(event);
         });
         await android.page.getByText("Add PraiseLoop to your home screen").waitFor();
-        await android.page.getByRole("button", { name: "Install" }).click();
+        await android.page.getByRole("button", { name: "Install", exact: true }).click();
         assert.equal(await android.page.evaluate(() => Boolean((window as unknown as { __prompted?: boolean }).__prompted)), true);
         assert.equal(await android.page.evaluate(key => localStorage.getItem(key), INSTALL_HINT_DISMISSED_KEY), "1");
         assert.deepEqual(android.errors, []);
