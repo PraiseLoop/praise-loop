@@ -1,7 +1,8 @@
 import { basename, join, resolve } from "node:path";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { query, transaction } from "../../lib/db";
-import { DEV_OWNERS, ensureDevOwner, type DevOwnerKey } from "../../lib/devAuth";
+import { DEV_OWNERS, DEV_OWNER_PASSWORD, ensureDevOwner, type DevOwnerKey } from "../../lib/devAuth";
+import { hashPassword } from "../../lib/passwordAuth";
 import { entitlementsFor, PLAN_LIMITS, setOwnerPlan, type Plan } from "../../lib/services/entitlements";
 import { generationWeek } from "../../lib/services/generation";
 import { renderDraftImage } from "../../lib/services/imageRenderer";
@@ -11,7 +12,7 @@ import { assertSeedable } from "./guard";
 import { SEED_BUSINESSES, SEED_PUSH_TOKEN, type BusinessSeed, type DraftSeed, type DraftStatus } from "./fixtures";
 
 const CSV_DIR = resolve(__dirname, "..", "..", "sample-data", "csv");
-const OWNER_PLANS: Record<DevOwnerKey, Plan> = { pro: "pro", business: "business", free: "free", email: "free" };
+const OWNER_PLANS: Record<DevOwnerKey, Plan> = { pro: "pro", business: "business", free: "free", email: "free", password: "free" };
 // The Business demo owner walks a provider subscription rather than a manual grant,
 // so the account screen can show a web subscription (#219). The fake adapter never
 // reaches a provider; this is just the same row a checkout would have written.
@@ -71,6 +72,23 @@ async function ensureSubscription(ownerId: string, subscription: { provider: str
     `INSERT INTO owner_plan_events(owner_id,plan,source,expires_at,actor,reason)
      VALUES($1,$2,'stripe',$3,'dev-seed','demo subscription')`,
     [ownerId, subscription.plan, periodEnd]
+  );
+}
+
+// Keeps one synthetic password credential for the password demo owner (#159). It
+// uses the production hashing path, resets any lock/counter left by earlier
+// manual testing, and never writes the plaintext anywhere.
+async function ensureDemoPassword(ownerId: string, email: string) {
+  const stored = await hashPassword(DEV_OWNER_PASSWORD);
+  await query(
+    `INSERT INTO password_credentials(owner_id,email,password_hash,scrypt_n,scrypt_r,scrypt_p,salt,key_length,verified_at,created_at,updated_at)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,now(),now(),now())
+     ON CONFLICT(owner_id) DO UPDATE SET
+       email=EXCLUDED.email, password_hash=EXCLUDED.password_hash,
+       scrypt_n=EXCLUDED.scrypt_n, scrypt_r=EXCLUDED.scrypt_r, scrypt_p=EXCLUDED.scrypt_p,
+       salt=EXCLUDED.salt, key_length=EXCLUDED.key_length, verified_at=now(),
+       failed_attempts=0, failure_window_started_at=NULL, lock_count=0, locked_until=NULL, updated_at=now()`,
+    [ownerId, email, stored.hash, stored.n, stored.r, stored.p, stored.salt, stored.keyLength]
   );
 }
 
@@ -189,6 +207,7 @@ export async function runSeed(env: Record<string, string | undefined> = process.
 
   const owners = {} as Record<DevOwnerKey, string>;
   for (const key of Object.keys(DEV_OWNERS) as DevOwnerKey[]) owners[key] = await ensureDevOwner(key);
+  await ensureDemoPassword(owners.password, DEV_OWNERS.password.email);
   // Keep the Free demo owner nameless on every run, so the profile empty state
   // (#149) stays visible even when a previous seed or demo edit filled it in.
   await query("UPDATE auth_users SET name=$2, name_source='provider' WHERE id=$1", [owners.free, DEV_OWNERS.free.name]);

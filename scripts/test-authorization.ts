@@ -19,7 +19,10 @@ async function main() {
   // unguessable, time-limited, revocable token in the address is the only credential (scripts/test-buffer-posting.ts).
   // The Buffer callback is public by design (#29): the browser arrives from Buffer
   // without a session cookie, and the single-use state row authenticates the completion.
-  const publicRoutes = new Set(["app/api/mobile/config/route.ts", "app/api/mobile/session/apple/route.ts", "app/api/mobile/session/microsoft/route.ts", "app/api/mobile/session/dev/route.ts", "app/api/mobile/session/email/route.ts", "app/api/dev/session/route.ts", "app/api/dev/billing/route.ts", "app/api/billing/webhook/route.ts", "app/api/buffer/callback/route.ts", "app/api/meta/callback/route.ts", "app/api/public-media/[name]/route.ts"]);
+  // Password sign-in is public by design (#159): the phone exchange returns a bearer
+  // session, and the web routes live under /api/auth/, which the inventory already
+  // excludes like the email-code routes.
+  const publicRoutes = new Set(["app/api/mobile/config/route.ts", "app/api/mobile/session/apple/route.ts", "app/api/mobile/session/microsoft/route.ts", "app/api/mobile/session/password/route.ts", "app/api/mobile/session/dev/route.ts", "app/api/mobile/session/email/route.ts", "app/api/dev/session/route.ts", "app/api/dev/billing/route.ts", "app/api/billing/webhook/route.ts", "app/api/buffer/callback/route.ts", "app/api/meta/callback/route.ts", "app/api/public-media/[name]/route.ts"]);
   for (const file of files("app/api").filter(f => !f.includes("/auth/") && !publicRoutes.has(f))) {
     const route = require(join("..",file));
     const path = "/" + file.replace(/\/route.ts$/, "").replace("[id]", "999999").replace("[name]", "draft-999999.png");

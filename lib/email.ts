@@ -398,3 +398,73 @@ export function stepUpCodeEmail(code: string, options: { minutes?: number } = {}
     ].join("\n"),
   };
 }
+
+/**
+ * A single-use password reset link (#159). The token is the secret; the email
+ * never contains a password. A malformed URL is refused rather than emailed.
+ */
+export function passwordResetEmail(resetUrl: string, options: { minutes?: number } = {}): EmailTemplate {
+  const minutes = options.minutes ?? 30;
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) throw invalid("reset lifetime is 1 to 60 minutes");
+  let url: URL;
+  try {
+    url = new URL(resetUrl);
+  } catch {
+    throw invalid("reset link must be a URL");
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") throw invalid("reset link must be http(s)");
+  return {
+    subject: "Reset your Praise Loop password",
+    text: [
+      "Someone asked to reset the password for your Praise Loop account.",
+      "",
+      `Open this link to choose a new password. It expires in ${minutes} minutes and can be used once:`,
+      resetUrl,
+      "",
+      "If you did not ask for this, you can ignore this message. Your current password still works.",
+    ].join("\n"),
+  };
+}
+
+/**
+ * The matching message for an address without a password credential (#159). It
+ * is sent so the reset request costs the same work and time for every address;
+ * it contains no link or token and changes nothing.
+ */
+export function passwordResetNoAccountEmail(): EmailTemplate {
+  return {
+    subject: "Reset your Praise Loop password",
+    text: [
+      "Someone asked to reset the password for this email address.",
+      "",
+      "There is no Praise Loop password account for this address, so nothing changed.",
+      "If you sign in with Google, Apple, Microsoft or an email code, those methods still work.",
+      "",
+      "If you did not ask for this, you can ignore this message.",
+    ].join("\n"),
+  };
+}
+
+/**
+ * Sent when repeated failed password attempts lock an account (#159). It never
+ * contains a password, token or IP address; the owner resets through the
+ * normal request flow if the attempts were not theirs.
+ */
+export function passwordLockedEmail(options: { resetUrl?: string | null; minutes: number }): EmailTemplate {
+  const minutes = options.minutes;
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > 24 * 60) throw invalid("lock duration is 1 minute to 24 hours");
+  const action = options.resetUrl
+    ? `If this was not you, reset your password now: ${options.resetUrl}`
+    : "If this was not you, use the Forgot password link on the sign-in page to reset it.";
+  return {
+    subject: "Praise Loop sign-in was locked after failed attempts",
+    text: [
+      "Someone entered the wrong password for your Praise Loop account too many times.",
+      "",
+      `Sign-in with that password is locked for about ${minutes} minute${minutes === 1 ? "" : "s"}.`,
+      "Your account and data are unchanged.",
+      "",
+      action,
+    ].join("\n"),
+  };
+}

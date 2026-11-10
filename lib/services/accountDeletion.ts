@@ -1,4 +1,5 @@
 import { readdir, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { join, resolve, sep } from "node:path";
 import { query, transaction } from "../db";
 import { billingCanceller, fakeBillingEnabled, type BillingCanceller } from "../integrations/billing";
@@ -160,6 +161,12 @@ export async function deleteOwnerAccount(
 
     if (addresses.length) {
       await query("DELETE FROM email_sign_in_codes WHERE lower(email) = ANY($1::text[])", [addresses]);
+      // Reset throttles are keyed by a hash of the address rather than owner_id,
+      // so remove them explicitly. Sign-in IP buckets are not owner-specific.
+      const resetBuckets = addresses.map(email =>
+        `reset:email:${createHash("sha256").update(email).digest("hex").slice(0, 32)}`
+      );
+      await query("DELETE FROM password_throttle WHERE bucket = ANY($1::text[])", [resetBuckets]);
     }
     // Explicit for both an owner-column row without a business and its cascade.
     await query("DELETE FROM google_connections WHERE owner_id=$1", [ownerId]);

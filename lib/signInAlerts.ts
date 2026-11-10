@@ -30,6 +30,7 @@ const METHOD_LABELS: Record<string, string> = {
   microsoft: "Microsoft",
   apple: "Apple",
   email: "email code",
+  password: "password",
   dev: "demo sign-in"
 };
 

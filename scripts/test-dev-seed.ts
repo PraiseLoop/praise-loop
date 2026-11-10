@@ -18,6 +18,7 @@ async function snapshot(client: PoolClient, media: string) {
   return {
     owners: await rows("SELECT id,email,name,weekly_email_enabled FROM auth_users ORDER BY id"),
     methods: await rows("SELECT owner_id,provider,provider_account_id,email FROM auth_accounts ORDER BY owner_id,provider"),
+    passwords: await rows("SELECT owner_id,email,scrypt_n,scrypt_r,scrypt_p,key_length,verified_at IS NOT NULL verified FROM password_credentials ORDER BY owner_id"),
     plans: await rows("SELECT owner_id,plan,source FROM owner_plans ORDER BY owner_id"),
     subscriptions: await rows("SELECT owner_id,provider,external_id,plan,status FROM owner_subscriptions ORDER BY owner_id"),
     planEvents: await rows("SELECT owner_id,plan,actor FROM owner_plan_events ORDER BY owner_id,id"),
@@ -75,13 +76,24 @@ async function main() {
       const first = await runSeed();
       const one = await snapshot(client, media);
 
-      assert.deepEqual(first.owners, { "dev-owner": "pro", "dev-owner-business": "business", "dev-owner-free": "free", "dev-owner-email": "free" });
+      assert.deepEqual(first.owners, { "dev-owner": "pro", "dev-owner-business": "business", "dev-owner-free": "free", "dev-owner-email": "free", "dev-owner-password": "free" });
       assert.deepEqual(one.methods.map(m => [m.owner_id, m.provider, m.email]), [
         ["dev-owner", "google", "demo@praiseloop.invalid"],
         ["dev-owner-business", "google", "demo-business@praiseloop.invalid"],
         ["dev-owner-email", "email", "demo-email@praiseloop.invalid"],
-        ["dev-owner-free", "google", "demo-free@praiseloop.invalid"]
+        ["dev-owner-free", "google", "demo-free@praiseloop.invalid"],
+        ["dev-owner-password", "email", "demo-password@praiseloop.invalid"]
       ], "each demo owner has a synthetic method to walk the account screen");
+      assert.deepEqual(one.passwords, [{
+        owner_id: "dev-owner-password",
+        email: "demo-password@praiseloop.invalid",
+        scrypt_n: 16384,
+        scrypt_r: 8,
+        scrypt_p: 1,
+        key_length: 32,
+        verified: true
+      }], "the password demo owner has one verified synthetic credential with its hash parameters");
+      assert.doesNotMatch(JSON.stringify(one.passwords), /synthetic-demo-password-159/);
       assert.equal(first.businesses.length, SEED_BUSINESSES.length);
       const seeded = one.businesses.filter(b => b.owner_id !== "real-owner");
       assert.deepEqual(seeded.map(b => b.name).sort(), SEED_BUSINESSES.map(b => b.name).sort());

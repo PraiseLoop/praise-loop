@@ -16,7 +16,7 @@ async function main() {
 
   // The web picker offers exactly the known demo owner keys, in order.
   assert.deepEqual(DEV_OWNER_OPTIONS.map(owner => owner.key), Object.keys(DEV_OWNERS));
-  assert.deepEqual(DEV_OWNER_OPTIONS.map(owner => owner.label), ["Pro demo owner", "Business demo owner", "Free demo owner", "Email demo owner"]);
+  assert.deepEqual(DEV_OWNER_OPTIONS.map(owner => owner.label), ["Pro demo owner", "Business demo owner", "Free demo owner", "Email demo owner", "Password demo owner"]);
 
   // Disabled: both routes must look like unknown ones before they touch the database.
   delete process.env.MOBILE_DEV_AUTH;
