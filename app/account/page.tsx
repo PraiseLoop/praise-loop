@@ -10,6 +10,7 @@ import { expiryNote, formatLocalDate, pausedBusinessMessage, planName, quotaMetM
 import { usePlan } from "../ui/usePlan";
 import BillingActions from "./BillingActions";
 import PasswordForm from "./PasswordForm";
+import SignOutOtherDevices from "./SignOutOtherDevices";
 
 const sources = { default: "Default plan", manual: "Set manually or by our team", store: "App store subscription", stripe: "Web subscription" } as const;
 // Review sync (#46) and AI replies (#96) have no feature behind them yet, so a
@@ -278,6 +279,15 @@ export default function AccountPage() {
           <div><button type="button" className="pl-btn" onClick={() => void signIn("google", { callbackUrl: "/account?linked=google" })}>Link Google</button></div>
         ) : null}
         {methods?.length === 1 ? <p className="pl-small pl-muted" style={{ margin: 0 }}>You can’t unlink your only method. Add another method first.</p> : null}
+      </section>
+
+      <section aria-labelledby="devices-h" className="pl-panel" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <h2 id="devices-h" className="pl-h2">Other devices</h2>
+        <p className="pl-muted" style={{ margin: 0 }}>
+          If a sign-in you don’t recognise happened, end every other web and phone session. This
+          device stays signed in.
+        </p>
+        <SignOutOtherDevices />
       </section>
 
       <PasswordForm />

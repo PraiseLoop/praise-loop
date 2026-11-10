@@ -127,8 +127,8 @@ export type NewSignInEmailInput = {
 export function newSignInEmail(input: NewSignInEmailInput): EmailTemplate {
   const accountUrl = input.accountUrl && /^https?:\/\//.test(input.accountUrl) ? input.accountUrl : null;
   const action = accountUrl
-    ? `sign in at ${accountUrl} and review your account, then contact us at admin@praiseloop.ca.`
-    : "review your account and contact us at admin@praiseloop.ca.";
+    ? `sign in at ${accountUrl}, use “Sign out of all other devices” on the account page, then contact us at admin@praiseloop.ca.`
+    : "review your account, use “Sign out of all other devices” on the account page, then contact us at admin@praiseloop.ca.";
   return {
     subject: "New sign-in to your Praise Loop account",
     text: [
