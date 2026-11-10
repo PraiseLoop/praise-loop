@@ -42,6 +42,9 @@ Built and on `master`:
   app-store accounts. The manual install check on a real iPhone and Android phone
   is not run yet. A no-cache service worker exists only for installability; it
   never caches owner data or media and does not handle push.
+- **Web on phones:** every owner page fits 360×800 and 390×844 with no horizontal page
+  scrolling, 44px controls, 16px text fields and tab-bar clearance; the browser test
+  (`scripts/test-phone-width-browser.ts`) walks them at both sizes (#276).
 - **Dev environment:** Dockhand stacks, Stripe CLI forwarder, supervised draft-mode test
   guide in [development.md](development.md).
 
@@ -53,7 +56,7 @@ Take the first item that is not blocked. Each is one PR per issue (see CONTRIBUT
    - ~~#273 installable web app~~ built (manual install check open)
    - ~~#274 share-sheet posting from the phone browser~~ built (manual phone check open)
    - ~~#275 weekly "your posts are ready" email~~ built
-   - #276 every owner screen works at phone width
+   - ~~#276 every owner screen works at phone width~~ built (manual phone check open)
 2. **In flight from the 2026-11-09 batch:** #159 email and password sign-in (approved by
    the owner 2026-11-09; start after #260 merges because both change sign-in).
 3. **#234 remaining:** decide whether to remove Buffer **after** the Meta live test passes.
@@ -100,6 +103,9 @@ The full ordered list with steps and costs is **#271**. In short:
   Android phone (Chrome), add PraiseLoop to the home screen, and confirm it opens standalone
   with the queue and no browser bars. The code and automated tests are done; this hardware
   check is not run.
+- **#276 manual phone check:** the headless 360×800/390×844 walks pass, but nobody has
+  walked the owner pages in a real phone browser yet. Note anything the browser test
+  cannot see (on-screen keyboard, safe areas, iOS zoom, share sheet).
 
 ## Hard rules for whoever picks the next item
 

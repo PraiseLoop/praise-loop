@@ -116,12 +116,12 @@ export default function QuotesPage() {
   }
 
   return (
-    <main style={{ fontFamily: "sans-serif", padding: 24, maxWidth: 960 }}>
+    <main style={{ fontFamily: "sans-serif", padding: 0, maxWidth: 960, minWidth: 0 }}>
       <h1>Quote selector + caption generation</h1>
       <p>Deterministic quote ranking + AI captions + branded image render.</p>
 
-      <section style={{ marginBottom: 16 }}>
-        <select value={businessId} onChange={(e) => setBusinessId(e.target.value)}>
+      <section style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+        <select className="pl-select" style={{ minWidth: 0, maxWidth: "100%" }} value={businessId} onChange={(e) => setBusinessId(e.target.value)}>
           <option value="">Select business…</option>
           {businesses.map((b) => (
             <option key={b.id} value={b.id}>
@@ -131,15 +131,16 @@ export default function QuotesPage() {
         </select>
 
         <input
+          className="pl-input"
           type="number"
           min={1}
           max={5}
           value={limit}
           onChange={(e) => setLimit(Number(e.target.value) || 3)}
-          style={{ width: 80, marginLeft: 8 }}
+          style={{ width: 88 }}
         />
 
-        <button onClick={runSelector} disabled={!businessId} style={{ marginLeft: 8 }}>
+        <button className="pl-btn pl-btn-primary" onClick={runSelector} disabled={!businessId}>
           Generate candidates
         </button>
       </section>
@@ -160,17 +161,18 @@ export default function QuotesPage() {
                 <div>
                   #{d.id} [{d.status}] {d.quote_text}
                 </div>
-                <div style={{ marginTop: 6 }}>
+                <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 8 }}>
                   <button
+                    className="pl-btn"
                     onClick={() => generateCaptions(d.id)}
                     disabled={loadingDraftId === d.id}
                   >
                     {loadingDraftId === d.id ? "Generating..." : "Generate captions"}
                   </button>
                   <button
+                    className="pl-btn"
                     onClick={() => renderImage(d.id)}
                     disabled={renderingDraftId === d.id}
-                    style={{ marginLeft: 8 }}
                   >
                     {renderingDraftId === d.id ? "Rendering..." : "Render image"}
                   </button>
@@ -185,7 +187,7 @@ export default function QuotesPage() {
                     ] as const).map(([style, text]) => (
                       <li key={style} style={{ marginTop: 6 }}>
                         <strong>{style}:</strong> {text}{" "}
-                        <button onClick={() => chooseCaption(d.id, text)} style={{ marginLeft: 8 }}>
+                        <button className="pl-btn pl-small" onClick={() => chooseCaption(d.id, text)} style={{ marginLeft: 8 }}>
                           Use this
                         </button>
                       </li>
@@ -201,7 +203,7 @@ export default function QuotesPage() {
 
                 {d.image_path ? (
                   <div style={{ marginTop: 8 }}>
-                    <img src={d.image_path} alt={`Draft ${d.id} graphic`} style={{ width: 240, border: "1px solid #ddd" }} />
+                    <img src={d.image_path} alt={`Draft ${d.id} graphic`} style={{ width: 240, maxWidth: "100%", height: "auto", border: "1px solid #ddd" }} />
                   </div>
                 ) : null}
               </li>

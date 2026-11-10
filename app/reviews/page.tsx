@@ -255,7 +255,7 @@ export default function ReviewsPage() {
         </label>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <button type="submit" className="pl-btn pl-btn-primary pl-btn-lg" disabled={busy}><Icon name="upload" size={18} />Import reviews</button>
-          <a href="/onboarding-example.csv" download className="pl-small" style={{ fontWeight: 600 }}>Sample CSV</a>
+          <a href="/onboarding-example.csv" download className="pl-small" style={{ fontWeight: 600, display: "inline-flex", alignItems: "center", minHeight: 44 }}>Sample CSV</a>
         </div>
       </form>
 
@@ -296,7 +296,7 @@ export default function ReviewsPage() {
         </section>
       ) : null}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 170px), 1fr))", gap: 12 }}>
         <div className="pl-panel" style={{ padding: "16px 18px", background: "var(--pl-green-soft)", borderColor: "transparent" }}>
           <div style={{ fontFamily: "var(--pl-display)", fontSize: 32, fontWeight: 700, color: "var(--pl-green)" }}>{counts.ready ?? 0}</div>
           <div style={{ fontSize: 14, fontWeight: 600, color: "#0A3D31" }}>Ready to become posts</div>

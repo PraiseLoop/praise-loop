@@ -22,7 +22,7 @@
     "dev:seed": "npx ts-node --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"node\"}' scripts/dev-seed.ts",
     "plan:set": "ts-node scripts/set-plan.ts",
     "pilot:report": "ts-node scripts/pilot-report.ts",
-    "test:browser": "ts-node scripts/test-auth-http.ts && ts-node scripts/test-approval-browser.ts && ts-node scripts/test-slots-browser.ts && ts-node scripts/test-onboarding-browser.ts && ts-node scripts/test-profile-browser.ts && ts-node scripts/test-buffer-connections-browser.ts && ts-node scripts/test-meta-connections-browser.ts && ts-node scripts/test-posting-cards-browser.ts && ts-node scripts/test-posting-banner-browser.ts && ts-node scripts/test-lineup-browser.ts && ts-node scripts/test-web-share-browser.ts && ts-node scripts/test-installable-browser.ts"
+    "test:browser": "ts-node scripts/test-auth-http.ts && ts-node scripts/test-approval-browser.ts && ts-node scripts/test-slots-browser.ts && ts-node scripts/test-onboarding-browser.ts && ts-node scripts/test-profile-browser.ts && ts-node scripts/test-buffer-connections-browser.ts && ts-node scripts/test-meta-connections-browser.ts && ts-node scripts/test-posting-cards-browser.ts && ts-node scripts/test-posting-banner-browser.ts && ts-node scripts/test-lineup-browser.ts && ts-node scripts/test-web-share-browser.ts && ts-node scripts/test-installable-browser.ts && ts-node scripts/test-phone-width-browser.ts"
   },
   "dependencies": {
     "bullmq": "6.3.15",

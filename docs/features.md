@@ -1270,3 +1270,37 @@ account with no businesses (`npm run dev:seed` creates all four).
   phone's list is covered by `mobile/__tests__/demoOwners.test.ts`.
 - Rollback: remove the buttons and routes; the demo owners are ordinary
   `auth_users` rows, so no data migration is involved.
+
+## Phone-width owner screens (#276)
+
+Owners validate PraiseLoop as a web app used in their phone's browser (#271), so
+every owner-facing page has to work at phone width, not only on a desktop.
+
+- Target sizes are 360×800 and 390×844. The shell already swaps the sidebar for a
+  top bar and a fixed bottom tab bar at 760px and below; the content column keeps
+  96px of bottom padding so the tab bar never covers the last card or button.
+- What was fixed, by page: **Reviews/import** — the native file input's intrinsic
+  width (about 375px) made the document 420px wide at 360px; fields now cap at
+  their container and file inputs get a full-height target. **Account** — a long
+  unbroken email address widened the page to 515px; long words now wrap. **Plans**
+  and the **sign-in** page — header and helper links get 44px targets. **Approval**
+  (including caption editing and skipped posts), **Schedule**, **Brand** and the
+  legacy **Quotes** tool — grid tracks use `minmax(min(100%, …), 1fr)`, long
+  captions, quotes and reviewer links wrap, and disclosures are 44px targets.
+- Global rules live in `app/globals.css`, not one-off page styles: buttons, inputs,
+  selects, tabs, profile menu items and `<summary>` disclosures are at least 44px;
+  text fields use 16px text so iOS does not zoom on focus; `body` wraps unbroken
+  strings and `html` keeps iOS from inflating text.
+- `scripts/test-phone-width-browser.ts` (part of `npm run test:browser`) signs in to
+  a synthetic owner and loads `/approval` (including editing a caption and opening
+  skipped posts), `/schedule`, `/reviews`, `/quotes`, `/brand`, `/account`,
+  `/connections`, `/onboarding?new=1`, a finished onboarding carousel, `/plans`,
+  and the signed-out landing page with the email-code form open, at both sizes. On
+  each it asserts `document.documentElement.scrollWidth <= innerWidth`, no visible
+  control under 44px, no text field under 16px, and bottom padding at least the tab
+  bar height.
+- No redesign, no new dependency and no schema change: the fixes are the existing
+  design system's spacing, wrapping and touch-target rules. The manual check in a
+  real phone browser (keyboard, safe areas, iOS zoom, share sheet) is still an owner
+  task on the roadmap.
+- Rollback: revert the CSS and the browser test; nothing persists.

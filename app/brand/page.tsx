@@ -172,7 +172,7 @@ export default function BrandPage() {
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 32, alignItems: "flex-start" }}>
         <form onSubmit={save} className="pl-panel" style={{ flex: "1 1 420px", minWidth: 0, display: "flex", flexDirection: "column", gap: 22 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))", gap: 16 }}>
             <label className="pl-field">Business name<input className="pl-input" required maxLength={120} value={name} onChange={e => setName(e.target.value)} /></label>
             <label className="pl-field">Time zone
               <select className="pl-select" value={timezone} onChange={e => setTimezone(e.target.value)}>
@@ -265,7 +265,7 @@ export default function BrandPage() {
 
           <fieldset style={{ margin: 0, padding: 0, border: 0 }}>
             <legend style={{ padding: 0, marginBottom: 10, fontSize: 14, fontWeight: 600 }}>Quote text size</legend>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: 10 }}>
               {([["standard", "Standard", "Fits most reviews"], ["large", "Large", "Bolder, skips long reviews"]] as const).map(([value, label, hint]) => (
                 <label key={value} className="pl-chip" style={{ borderRadius: 12, alignItems: "flex-start", padding: 14 }}>
                   <input type="radio" name="quote-size" checked={quoteSize === value} onChange={() => setQuoteSize(value)} style={{ marginTop: 3 }} />
@@ -290,7 +290,7 @@ export default function BrandPage() {
           </div>
         </form>
 
-        <aside aria-label="Preview" style={{ flex: "1 1 320px", maxWidth: 460, display: "flex", flexDirection: "column", gap: 12 }}>
+        <aside aria-label="Preview" style={{ flex: "1 1 320px", minWidth: 0, maxWidth: 460, display: "flex", flexDirection: "column", gap: 12 }}>
           <span className="pl-eyebrow" style={{ fontSize: 13 }}>Live preview</span>
           <BrandPreview primary={primary} secondary={secondary} quoteSize={quoteSize} tone={tone} template={previewTemplate} />
         </aside>
