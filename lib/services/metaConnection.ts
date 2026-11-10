@@ -254,6 +254,11 @@ export async function getMetaPageCredentials(ownerId: string, metaPageId: number
   pageId: string;
   name: string;
   accessToken: string;
+  /**
+   * The stored ciphertext for `accessToken`. Opaque to callers; the worker keeps
+   * it so a later auth failure can be attributed to the token that actually failed.
+   */
+  encryptedPageToken: string;
   instagramBusinessAccountId: string | null;
   tasks: string[];
 }> {
@@ -288,6 +293,7 @@ export async function getMetaPageCredentials(ownerId: string, metaPageId: number
     pageId: row.page_id,
     name: row.name,
     accessToken,
+    encryptedPageToken: row.encrypted_page_token,
     instagramBusinessAccountId: row.instagram_business_account_id,
     tasks: row.tasks ?? []
   };
@@ -391,22 +397,6 @@ export async function clearMetaTarget(ownerId: string, businessId: number): Prom
 export async function disconnectMeta(ownerId: string): Promise<boolean> {
   const removed = await query("DELETE FROM meta_connections WHERE owner_id=$1", [ownerId]);
   return !!removed.rowCount;
-}
-
-/**
- * Mark a Page for reconnect after the worker saw Meta reject its token. The
- * owner-scoped Page id is enough; a Page that no longer belongs to the owner (or
- * was replaced by a reconnect) is left untouched and returns false.
- */
-export async function markMetaTargetNeedsReconnect(ownerId: string, metaPageId: number): Promise<boolean> {
-  if (!Number.isSafeInteger(metaPageId) || metaPageId <= 0) return false;
-  const updated = await query(
-    `UPDATE meta_pages p SET status='needs_reconnect', updated_at=now()
-     FROM meta_connections c
-     WHERE p.connection_id=c.id AND c.owner_id=$1 AND p.id=$2 AND p.status='active'`,
-    [ownerId, metaPageId]
-  );
-  return !!updated.rowCount;
 }
 
 /**

@@ -242,8 +242,9 @@ target counts exactly like a Buffer connection.
 - **Facebook Page.** One `photos` call. Meta offers no idempotency key, so an ambiguous outcome is
   `unknown` and never resubmitted; the owner resolves it like a Buffer `unknown`.
 - **Retries and errors.** Rate limits (`80002`/`80001`) and transient create errors requeue with a
-  backoff and stop after five attempts. A rejected Page token marks the Page `needs_reconnect` and
-  fails visibly once, with no retry loop. Permanent failures have short codes that the approval card
+  backoff and stop after five attempts. A rejected Page token fails visibly once, with no retry loop,
+  and marks that Page `needs_reconnect` only if it still holds the token that failed, so a reconnect
+  made while the request was in flight is left alone. Permanent failures have short codes that the approval card
   turns into sentences: `rejected`, `page_cannot_publish`, `instagram_unavailable`,
   `container_unavailable`, `caption_too_long`, `too_many_hashtags`, `rate_limited`,
   `retry_exhausted`. Every transition still writes one `draft_events` row.
@@ -255,8 +256,8 @@ target counts exactly like a Buffer connection.
   over-limit post is refused with an owner-readable reason; nothing is silently cut.
 - **Tests.** `scripts/test-meta-publish.ts` (DB-backed, fake Meta client) and
   `scripts/test-meta.ts` (client contract) cover the state machine, retries, crash recovery,
-  duplicate delivery, plan and ownership refusals, gate modes, provider choice and the JPEG
-  variant. No test can reach Meta.
+  duplicate delivery, plan and ownership refusals, gate modes, provider choice, token-aware
+  needs-reconnect and the JPEG variant. No test can reach Meta.
 - **Roll back** by setting `BUFFER_POSTING_MODE=off`; queued Meta posts wait and then become
   `missed`. A Meta target and Buffer channel are independent, so removing the target leaves Buffer
   posting available for businesses that still have it.
@@ -376,7 +377,8 @@ the decision is in [decisions.md](decisions.md).
 - **Reconnect.** Pages Meta no longer returns are deleted and their selections cascade away. A
   changed linked Instagram account drops an existing Instagram target rather than publishing to a
   different account. A reconnect that returns no Pages reports `no_pages` and leaves a working
-  connection alone. A rejected Page token marks that Page `needs_reconnect`.
+  connection alone. A rejected Page token marks that Page `needs_reconnect` only if it still holds
+  the token that failed, so a reconnect during the request is not overwritten.
 - **Setup screen (`/connections`).** A Meta section sits beside the Buffer section. When the server
   has no `META_APP_ID`/`META_APP_SECRET`/encryption key it shows an honest "Not available yet" state
   with no Connect button (fail closed). Otherwise it offers Connect through the existing

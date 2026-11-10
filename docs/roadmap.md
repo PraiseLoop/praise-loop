@@ -18,8 +18,9 @@ Built and on `master`:
 - **Billing:** plans, entitlements, Stripe checkout, webhook and portal (test mode works
   end to end on dev), Business tier, paid automatic posting.
 - **Posting:** Buffer (draft mode only so far) and direct Instagram/Facebook: connect
-  backend, worker publishing with a resumable Instagram flow and a JPEG variant, and the
-  setup UI on `/connections`. Onboarding no longer requires a posting connection.
+  backend, worker publishing with a resumable Instagram flow and a JPEG variant, token-aware
+  needs-reconnect marking, and the setup UI on `/connections`. Onboarding no longer requires a
+  posting connection.
 - **Phone app:** Expo scaffold, config gate, push registration server side.
 - **Dev environment:** Dockhand stacks, Stripe CLI forwarder, supervised draft-mode test
   guide in [development.md](development.md).
@@ -31,8 +32,6 @@ Take the first item that is not blocked. Each is one PR per issue (see CONTRIBUT
 1. **#234 remaining slices** (direct Instagram/Facebook publishing):
    - Remove Buffer from onboarding copy and the setup pages, then decide whether to remove
      Buffer altogether. Buffer stays working until that decision.
-   - Make `markMetaTargetNeedsReconnect` token-aware, so a failure on one Page's token does
-     not flag unrelated targets (minor follow-up from the worker PR).
    - Live connect and publish test on the owner's own accounts. **Blocked** on the owner
      (Meta app, Business Verification, App Review). Mark as not run until then.
 2. **#29 real scheduler** and **#46 Google Business Profile sync:** blocked on owner access
