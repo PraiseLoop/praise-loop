@@ -499,6 +499,122 @@ the mailbox.
   process and fake transport only); the seeder also creates an email-only owner
   (`demo-email@praiseloop.invalid`) so the flow can be walked without a mailbox.
 
+## Email and password (#159)
+
+The owner approved email and password sign-in on 2026-11-09. It adds a password
+*credential* to an owner; it does not add a new identity provider to
+`auth_accounts` and does not replace email codes, Google, Microsoft or Apple.
+Every other sign-in path is unchanged.
+
+**Storage.** `password_credentials` is keyed by `owner_id` and holds no plaintext:
+`password_hash`, `salt`, and the per-hash parameters `scrypt_n`, `scrypt_r`,
+`scrypt_p` and `key_length`, plus `verified_at`, the account-lock counters and
+timestamps. New hashes use Node's built-in `crypto.scrypt` with N=16384, r=8,
+p=1, a 16-byte random salt and a 32-byte key (no new dependency). Verification
+always reads the row's parameters, so raising the defaults later leaves existing
+hashes working; it compares with `crypto.timingSafeEqual`. An unknown address
+runs the same scrypt cost with a decoy salt so it is not an obviously faster
+failure. The plaintext is never written to a column, log line, email or response.
+`password_reset_tokens` stores only SHA-256 hashes; `password_throttle` holds
+DB-backed buckets so restarts and replicas share the limits. All three tables
+cascade from `auth_users`.
+
+**Sign-up.** `POST /api/auth/password/signup` takes `{email, password, code}`.
+The caller first requests a code with the existing `POST /api/auth/email/request`.
+The code is consumed through `lib/emailAuth.ts`, which finds or creates the owner
+through `lib/authLinking.ts` (`provider=email`, `emailVerified=true`). That keeps
+the #156 linking policy and the #195 `SIGNUP_MODE` invite gate in one place: an
+unverified request writes no credential and cannot claim an existing owner's
+address; a verified code may attach a password to an existing owner exactly as
+email-code sign-in already may. Only after that succeeds does the route insert the
+credential and create the normal eight-hour web session. A second credential for
+the same owner or address is refused without touching the existing one.
+
+**Password rules.** At least 12 and at most 256 Unicode code points. There are no
+composition rules, whitespace is preserved, and an over-long value is rejected
+rather than truncated. The breached-password k-anonymity range check is **not**
+built yet (it needs a network lookup and no dependency was approved); the minimum
+length is the current mitigation. That check is a follow-up.
+
+**Sign-in.** The web route is `POST /api/auth/password/signin` (same-origin,
+sets the hashed Postgres session cookie through `createWebSession`). The phone
+route is `POST /api/mobile/session/password` (public bearer exchange, modelled on
+the email-code route). Both call `signInWithPassword` in `lib/passwordAuth.ts`.
+An unknown address and a wrong password produce the same body and status: a `401`
+with `{"error":"invalid_credentials","message":"That email and password don’t
+match."}` on the web. The phone route answers `400` for the same reason the email
+route does: the app treats `401` as a dead session and would clear its token over
+a typo. Neither response says whether the address exists or is locked. The new
+session's alert passes `method: "password"`, and the credential's verified address
+is eligible to receive alerts.
+
+**Throttles and lockout.** Both are in Postgres, so they survive restarts and are
+shared by replicas:
+
+- Ten wrong passwords for one account in 15 minutes lock that account for 15
+  minutes. Each consecutive lock doubles the wait (15 minutes, 30, 60, …) up to
+  24 hours. A successful sign-in or a reset clears the counter and lock. While
+  locked, even the correct password is refused until the lock expires or the
+  owner resets. The lock sends a best-effort email (method and duration only, no
+  password, token or IP) to the owner's verified addresses; repeated lock events
+  are bounded by the backoff.
+- Thirty failed attempts from one client IP in 15 minutes block that IP for 15
+  minutes, doubling to 24 hours. The client IP uses the same `clientIp` rule as
+  the other sign-in routes (`cf-connecting-ip`, else `x-forwarded-for` only when
+  `TRUST_PROXY_HEADERS=1`; otherwise one shared bucket). An exhausted IP receives
+  `429` with a `Retry-After` header. The account-lock case deliberately stays a
+  generic credential refusal so it cannot confirm that an address exists.
+
+The account lock gives someone who knows an address a way to deny its owner
+password sign-in for a while; the owner is emailed and can reset, and the same
+address could already be denied email codes by requesting them. Refusing the
+correct password while locked is what makes the lock useful against guessing.
+
+**Reset.** `POST /api/auth/password/reset/request` takes `{email}` and always
+answers `200` with the same message, whether the address has a credential or not,
+so it cannot enumerate owners. It is limited to five requests per address and
+twenty per IP per 15 minutes, stored in Postgres; a throttled request also answers
+as if it sent. A real request creates a 32-byte random token, stores only its
+SHA-256, makes it expire in 30 minutes, supersedes older unconsumed tokens for
+that owner, and emails a link to `${NEXTAUTH_URL}/reset-password?token=…`. An
+address without a password credential receives a short no-account notice instead,
+so the work and timing do not reveal which branch ran. Neither email contains a
+password. `POST /api/auth/password/reset/confirm` takes `{token, password}`; the
+token is single use, expiry is checked again under a row lock, and success replaces
+the hash and deletes **every** web and phone session for the owner. The browser
+cookie is cleared in the response. The page at `/reset-password` handles both
+requesting and choosing a new password.
+
+**Change password.** `GET /api/account/password` returns `{hasPassword}`;
+`POST /api/account/password` takes `{currentPassword, newPassword}`. It is
+owner-wide (cookie or bearer) and requires the current password even though the
+session already proves control. A successful change rewrites the hash, resets the
+lock counters, supersedes outstanding reset tokens and deletes the owner's other
+sessions, keeping the one that made the change. Wrong current-password attempts
+count towards the same account lock. `/account` shows the form only when a
+credential exists.
+
+**Dev seeder.** `npm run dev:seed` creates `demo-password@praiseloop.invalid`
+with the obviously synthetic password `synthetic-demo-password-159` and the same
+synthetic data path as the other demo owners. The password is documentation, not
+a secret, and the seeder hashes it with the production code.
+
+**Tests.** `scripts/test-password-auth.ts` covers the hash parameters and their
+storage, custom stored parameters still verifying, password length rules,
+verified-email sign-up, the invite gate, the #156 linking rule, identical
+unknown-address/wrong-password responses, web and phone sessions, the new-sign-in
+alert, account lock and its email and backoff, the per-IP block, reset expiry,
+supersession and single use, session invalidation on reset and change, and a scan
+proving no plaintext password reaches the database or captured logs.
+
+**Deferred.** The breached-password range lookup, a "set a password" action for an
+already signed-in owner (today an existing owner uses the sign-up form while
+signed out and proves the mailbox first), and the phone sign-in UI. The phone
+bearer route is built and works; the native app is parked under the web-first
+strategy, so adding the form there is a follow-up. No new environment variable is
+needed: reset links use the existing `NEXTAUTH_URL`, and messages use the
+existing email transport.
+
 ### New sign-in alerts (#260)
 
 After every successful new session, PraiseLoop emails the owner so a reassigned mailbox or an

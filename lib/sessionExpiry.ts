@@ -20,8 +20,8 @@ export function isProtectedApiPath(url: string): boolean {
 // keep their own messages. The landing page is where the owner signs in, the plans
 // page is public and the dev email outbox is signed-out by design, so a 401 there
 // must never send them anywhere (no loops, and a visitor can read the plans before
-// signing in).
-const publicPages = new Set(["/", "/plans", "/dev/outbox"]);
+// signing in). The password reset page works without a session by design (#159).
+const publicPages = new Set(["/", "/plans", "/reset-password", "/dev/outbox"]);
 
 export function isSessionExpiry(input: { status: number; url: string; pathname: string }): boolean {
   return input.status === 401 && isProtectedApiPath(input.url) && !publicPages.has(input.pathname);

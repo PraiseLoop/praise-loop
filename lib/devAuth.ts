@@ -18,9 +18,16 @@ export const DEV_OWNERS = {
   pro: { id: DEV_OWNER_ID, email: DEV_OWNER_EMAIL, name: DEV_OWNER_NAME },
   business: { id: "dev-owner-business", email: "demo-business@praiseloop.invalid", name: "Demo Business Owner" },
   free: { id: "dev-owner-free", email: "demo-free@praiseloop.invalid", name: null as string | null },
-  email: { id: "dev-owner-email", email: "demo-email@praiseloop.invalid", name: "Demo Email Owner", provider: "email" as const }
+  email: { id: "dev-owner-email", email: "demo-email@praiseloop.invalid", name: "Demo Email Owner", provider: "email" as const },
+  // Email and password (#159): an ordinary email-method owner plus a synthetic
+  // credential. The password is deliberately obvious and documented in auth.md.
+  password: { id: "dev-owner-password", email: "demo-password@praiseloop.invalid", name: "Demo Password Owner", provider: "email" as const }
 } as const;
 export type DevOwnerKey = keyof typeof DEV_OWNERS;
+
+// Synthetic demo credential. It is not a secret and must never be used outside
+// the local development seeder.
+export const DEV_OWNER_PASSWORD = "synthetic-demo-password-159";
 
 // Labels for the demo-owner buttons on the web. The phone keeps its own copy in
 // mobile/src/auth/demoOwners.ts because it is a separate package.
@@ -28,7 +35,8 @@ export const DEV_OWNER_LABELS: Record<DevOwnerKey, string> = {
   pro: "Pro demo owner",
   business: "Business demo owner",
   free: "Free demo owner",
-  email: "Email demo owner"
+  email: "Email demo owner",
+  password: "Password demo owner"
 };
 export const DEV_OWNER_OPTIONS = (Object.keys(DEV_OWNERS) as DevOwnerKey[]).map(key => ({ key, label: DEV_OWNER_LABELS[key] }));
 

@@ -4,7 +4,7 @@
 who are about to change it. It summarises and links; the detailed, authoritative text lives in the
 other docs. When you change behaviour, update the detailed doc and the matching line here.
 
-Last reviewed: 2026-11-10 (phone-width owner screens, #276; weekly "posts ready" email, #275; web Sign in with Apple, #92; new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
+Last reviewed: 2026-11-10 (email and password sign-in, #159; phone-width owner screens, #276; weekly "posts ready" email, #275; web Sign in with Apple, #92; new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
 
 | Doc | What it is the source of truth for |
 | --- | --- |
@@ -104,7 +104,7 @@ re-queues generation. Scheduling fails closed. Nothing auto-posts.
 
 | Area | Tables |
 | --- | --- |
-| Owners and sign-in | `auth_users`, `auth_accounts` (provider + provider account id → owner), `auth_sessions` (web and mobile, hashed token), `email_sign_in_codes`, `sign_in_alerts` |
+| Owners and sign-in | `auth_users`, `auth_accounts` (provider + provider account id → owner), `auth_sessions` (web and mobile, hashed token), `email_sign_in_codes`, `sign_in_alerts`, `password_credentials`, `password_reset_tokens`, `password_throttle` |
 | Business content | `businesses` (brand colours/tone/voice, timezone, weekly target), `reviews`, `draft_posts`, `draft_events` |
 | Generation | `generation_periods`, `generation_jobs`, `posting_slot_claims` |
 | Plans and usage | `owner_plans`, `owner_plan_events`, `owner_subscriptions`, `billing_events`, `owner_usage` |
@@ -120,7 +120,9 @@ transactional.
 ## 4. Identity, sessions and authorization
 
 - **Identity = provider + stable subject**, never an email by itself. Providers: `google`, `email`
-  (one-time code), `apple`, `microsoft`. Microsoft's subject is `<tid>:<oid>` (`sub` differs per app
+  (one-time code), `apple`, `microsoft`. Email and password (#159) is an extra credential on an
+  owner, not another `auth_accounts` provider: sign-up proves the address with the email code, so
+  the same linking rule applies. Microsoft's subject is `<tid>:<oid>` (`sub` differs per app
   registration, so it must not be used). One owner can have several methods (`auth_accounts`).
 - **Linking policy** lives in one place, `lib/authLinking.ts` (`signInWithIdentity`,
   `linkIdentityToOwner`, `unlinkMethod`). A sign-in may *find an existing owner by email* only when
@@ -135,8 +137,10 @@ transactional.
   session under ten minutes old). It pauses the action; it does not protect against whoever holds
   the mailbox. A best-effort new-sign-in alert email (#260) now notifies verified addresses after
   every new web or phone session, with a per-owner/per-method ten-minute limit; it records the
-  method, rough client and time, never a token or code. See [auth.md](auth.md) and
-  [decisions.md](decisions.md).
+  method, rough client and time, never a token or code. Password sign-up (#159) rides the same
+  email-code step: no credential is written until the address is verified, so an unverified attempt
+  cannot claim an existing owner, and a verified one may add a password to that owner. See
+  [auth.md](auth.md) and [decisions.md](decisions.md).
 - **Pilot sign-up gate** (#195): `SIGNUP_MODE` is `open` (default) or `invite`, and `INVITED_EMAILS`
   is a comma/whitespace allow-list compared case-insensitively. The gate lives in
   `lib/signupPolicy.ts` and is consulted by `signInWithIdentity` only when it would create a new
@@ -173,15 +177,17 @@ transactional.
   store subscriptions (#95) are not. Deleting an account cancels every live provider subscription
   first, and a failed cancel leaves the account and sessions intact (#220). The design is in
   [billing.md](billing.md).
-- **Dev sign-in** (`MOBILE_DEV_AUTH=1`, never in production): demo owners (Pro, Business, Free, email-only) on
-  the phone and the web landing page, backed by `lib/devAuth.ts` and the dev seeder.
+- **Dev sign-in** (`MOBILE_DEV_AUTH=1`, never in production): demo owners (Pro, Business, Free, email-only,
+  password) on the phone and the web landing page, backed by `lib/devAuth.ts` and the dev seeder.
 
 ## 5. Clients
 
 ### Web
 Server-rendered shell (`app/AppShell.tsx`) holding the session, businesses and profile in context.
-Sign-in options: Google, Apple and Microsoft (when configured), email code, dev demo owners. Profile menu with
-name editing, plan and usage page, sign-in methods list (link/unlink), delete account.
+Sign-in options: Google, Apple and Microsoft (when configured), email code, email and password
+(#159, with create-account, forgot-password and `/reset-password`), dev demo owners. Profile menu
+with name editing, plan and usage page, sign-in methods list (link/unlink), password change, delete
+account.
 Sharing (web): an approved draft posts through the Web Share API from the approval queue, with the
 same download-and-copy fallback and "Did you post it?" confirmation as the phone (#274).
 
@@ -311,7 +317,7 @@ endpoints take the Page token or the User token, to be settled by the owner-appr
 | Google Takeout review import | built; assumed format **unverified**, needs a real-export check before announcing | #233 |
 | Business tier | planned, see [billing.md](billing.md) | #222, #225 |
 | Store subscriptions, VPS, pilot hosting, store accounts | not started / owner tasks | #95, #98, #90, #91 |
-| Email + password | needs explicit owner approval first | #159 |
+| Email + password | web sign-up (verified email), sign-in, reset and change shipped; phone bearer route shipped, **phone UI not built** | #159 |
 
 Open work and blockers are tracked in GitHub issues; this table is a snapshot.
 
@@ -410,4 +416,7 @@ Open work and blockers are tracked in GitHub issues; this table is a snapshot.
 - **Google sign-in on the phone** needs a development build, not Expo Go (native module), plus an
   Android-type OAuth client with the signing key's SHA-1; the `EXPO_PUBLIC_*` values are already passed
   through compose.
-- **Email + password** (#159) reverses the "no password database" stance and needs explicit approval.
+- **Email + password** (#159) is shipped on the web, with a phone bearer route but no phone UI.
+  The breached-password range lookup, a "set a password" action for an already signed-in owner and
+  the phone form are follow-ups; `NEXTAUTH_URL` and the existing email transport are the only
+  configuration it uses.

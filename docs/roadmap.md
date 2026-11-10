@@ -19,12 +19,13 @@ Built and on `master`:
 
 - **Core pipeline:** review import (CSV, Apify fetch, Google Takeout file), quote selection,
   weekly generation with quotas, rendered images, approval queue, draft lifecycle.
-- **Accounts:** Google, email-code, Microsoft sign-in; Sign in with Apple on the phone and
-  the web (web needs owner keys, #268); mobile bearer sessions; account deletion; invite-only
-  sign-up gate (`SIGNUP_MODE`, `INVITED_EMAILS`, #195); a best-effort new-sign-in alert email
-  with a per-owner/per-method rate limit (#260); and a weekly "your posts are ready" email per
-  business with an account opt-out (#275). A "sign out of all devices" action is **not**
-  built (follow-up from #260).
+- **Accounts:** Google, email-code, Microsoft and email+password sign-in; Sign in with Apple on
+  the phone and the web (web needs owner keys, #268); mobile bearer sessions; account deletion;
+  invite-only sign-up gate (`SIGNUP_MODE`, `INVITED_EMAILS`, #195); password reset and change
+  with session invalidation (#159); a best-effort new-sign-in alert email with a
+  per-owner/per-method rate limit (#260); and a weekly "your posts are ready" email per business
+  with an account opt-out (#275). A "sign out of all devices" action is **not** built
+  (follow-up from #260).
 - **Billing:** plans, entitlements, Stripe checkout, webhook and portal (test mode works
   end to end on dev), Business tier, paid automatic posting.
 - **Posting:** Buffer (draft mode only so far) and direct Instagram/Facebook: connect
@@ -57,8 +58,9 @@ Take the first item that is not blocked. Each is one PR per issue (see CONTRIBUT
    - ~~#274 share-sheet posting from the phone browser~~ built (manual phone check open)
    - ~~#275 weekly "your posts are ready" email~~ built
    - ~~#276 every owner screen works at phone width~~ built (manual phone check open)
-2. **In flight from the 2026-11-09 batch:** #159 email and password sign-in (approved by
-   the owner 2026-11-09; start after #260 merges because both change sign-in).
+2. **Follow-ups from #159** (email and password sign-in is shipped on the web; the phone bearer
+   route is built): breached-password lookup, a signed-in "set a password" action, and phone UI
+   (parked with the native app).
 3. **#234 remaining:** decide whether to remove Buffer **after** the Meta live test passes.
    Until then Buffer is the only automatic posting route and stays fully available (plan and
    account copy is already provider-neutral, #258). The live
@@ -93,7 +95,7 @@ The full ordered list with steps and costs is **#271**. In short:
 - **Deployment of the invite gate:** `SIGNUP_MODE=invite` and `INVITED_EMAILS=...` must be set
   on every environment that should be gated (dev stack and production). The default is
   `open`, so nothing is gated until they are set. Redeploy with an image pull after each
-  merge to `master`; migrations run on start (latest at time of writing: `031`).
+  merge to `master`; migrations run on start (latest at time of writing: `032`).
 - **Housekeeping on the dev stack:** delete the old Stripe dashboard webhook endpoint for
   `dev.praiseloop.ca` (it causes 403s; the CLI forwarder replaces it), and regenerate any
   Dockhand webhook secret that was ever pasted into a chat.

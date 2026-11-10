@@ -874,6 +874,51 @@ verified recipients, the limit and concurrent sign-ins, and a failed send that
 leaves the session working. Rollback: drop `sign_in_alerts`; sign-in and sessions
 are unaffected. No existing row is rewritten by the migration.
 
+## Email and password (#159)
+
+Owners who expect a password can create one after proving their mailbox with the
+existing email code, then sign in on the web with `POST /api/auth/password/signin`
+and on the phone with `POST /api/mobile/session/password`. The sign-in page has a
+"Sign in with a password" panel with sign-in and create-account modes; the reset
+page is `/reset-password`; and `/account` has a change-password form when the
+account has a credential.
+
+- **Storage.** Migration `032_password_credentials.sql` adds
+  `password_credentials` (owner-keyed, salted scrypt hash plus N, r, p and key
+  length per row, verified timestamp and lock counters), `password_reset_tokens`
+  (SHA-256 hashes only, 30-minute expiry, single use) and `password_throttle`
+  (DB-backed per-IP and reset-request buckets). Plaintext is never stored, logged
+  or emailed.
+- **Rules.** 12 to 256 Unicode code points, no composition rules, no truncation.
+  The breached-password k-anonymity check is not built; see the follow-up below.
+- **Sign-up is verified.** The code is consumed through `lib/emailAuth.ts`, so the
+  #156 linking policy and the #195 invite gate decide the owner before a credential
+  exists. An unverified request cannot claim an existing owner's address.
+- **Throttles.** Ten wrong passwords per account in 15 minutes lock it for 15
+  minutes, doubling to 24 hours and emailing the owner; 30 failed attempts per IP
+  in 15 minutes block the IP with the same backoff. Reset requests are limited to
+  five per address and twenty per IP per 15 minutes. All counters live in
+  Postgres, so they survive restarts and are shared by replicas.
+- **Sessions.** Web uses the normal eight-hour hashed cookie session; the phone
+  gets a bearer session like every other exchange. Reset deletes every session;
+  change password keeps the current one and deletes the others. Sign-in alerts say
+  "password".
+- **Non-enumeration.** Unknown addresses and wrong passwords answer identically;
+  unknown addresses still pay for one decoy scrypt. A locked account answers the
+  same generic failure rather than confirming the address. Reset requests answer
+  identically too, and an address without a password credential gets a no-account
+  notice so the branch is not a timing oracle.
+
+`scripts/test-password-auth.ts` covers hash parameters and custom stored
+parameters, length rules, verified sign-up, the invite gate and linking policy,
+non-enumeration, web/phone sessions, alerts, lockout and its email, IP throttling,
+reset expiry/supersession/single use, session invalidation and a database/log scan
+for plaintext. `scripts/test-dev-seed.ts` checks the synthetic
+`demo-password@praiseloop.invalid` owner. Rollback: stop the routes and drop the
+three tables; other sign-in methods are unaffected. The phone UI, a "set a
+password" action for an already signed-in owner and the breached-password lookup
+are follow-ups; the phone bearer route itself is built.
+
 ## Profile menu (#150)
 
 The web app keeps who the owner is and what they are on under one profile button

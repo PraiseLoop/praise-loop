@@ -9,6 +9,7 @@ import { ADD_NAME_HINT, ADD_NAME_PROMPT, displayName } from "../../lib/profileDi
 import { expiryNote, formatLocalDate, pausedBusinessMessage, planName, quotaMetMessage } from "../../lib/planDisplay";
 import { usePlan } from "../ui/usePlan";
 import BillingActions from "./BillingActions";
+import PasswordForm from "./PasswordForm";
 
 const sources = { default: "Default plan", manual: "Set manually or by our team", store: "App store subscription", stripe: "Web subscription" } as const;
 // Review sync (#46) and AI replies (#96) have no feature behind them yet, so a
@@ -278,6 +279,8 @@ export default function AccountPage() {
         ) : null}
         {methods?.length === 1 ? <p className="pl-small pl-muted" style={{ margin: 0 }}>You can’t unlink your only method. Add another method first.</p> : null}
       </section>
+
+      <PasswordForm />
 
       <section aria-labelledby="delete-h" className="pl-panel" style={{ borderColor: "#E7C4BB", display: "flex", flexDirection: "column", gap: 12 }}>
         <h2 id="delete-h" className="pl-h2" style={{ color: "#A3361F" }}>Delete account</h2>
