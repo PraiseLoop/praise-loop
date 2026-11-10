@@ -18,6 +18,7 @@ Last reviewed: 2026-11-05 (Stripe checkout, webhook and portal, #223; direct Met
 | [integrations.md](integrations.md) | Email, Buffer, direct Meta publishing and Google Business Profile feasibility and status |
 | [development.md](development.md) | Running it locally, env variables, tests, hosting, backups |
 | [android-release.md](android-release.md) | Building the Android APK on a tag for Obtainium |
+| [roadmap.md](roadmap.md) | What is built, what is next in order, owner tasks and blockers. Read it when asked "what's next?" |
 | [pilot.md](pilot.md) | The paid-pilot plan and how observations are recorded |
 | `CLAUDE.md`, `CONTRIBUTING.md` | Working rules for agents and contributors |
 

@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-PraiseLoop turns customer reviews into branded social posts for local businesses behind a human approval queue. **Read `docs/design.md` first**: it is the map of how the app works, the rules reviewers enforce, and where each decision lives. A Next.js app (UI + API routes) and a separate worker share one Postgres. An Expo phone app (`mobile/`, its own package) talks only to the API. Docs in `docs/` are the source of truth for design (`architecture.md`, `auth.md`, `features.md`, `decisions.md`, `mobile-plan.md`); update them when behavior changes.
+PraiseLoop turns customer reviews into branded social posts for local businesses behind a human approval queue. **Read `docs/design.md` first**: it is the map of how the app works, the rules reviewers enforce, and where each decision lives. A Next.js app (UI + API routes) and a separate worker share one Postgres. An Expo phone app (`mobile/`, its own package) talks only to the API. Docs in `docs/` are the source of truth for design (`architecture.md`, `auth.md`, `features.md`, `decisions.md`, `mobile-plan.md`); update them when behavior changes. When asked "what's next?", read `docs/roadmap.md` (order of work, owner tasks, blockers) and keep it current in the PR that finishes an item.
 
 ## Commands
 
