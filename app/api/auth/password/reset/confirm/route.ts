@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { passwordProblem, passwordRuleMessage, resetPassword } from "../../../../../../lib/passwordAuth";
+import { BREACHED_PASSWORD_MESSAGE } from "../../../../../../lib/passwordBreach";
 import { readLimitedText, sameOriginRequest } from "../../../../../../lib/requestBody";
 
 // Public by design: consume a reset token and choose a new password (#159). The
@@ -26,6 +27,7 @@ export async function POST(req: NextRequest) {
   const result = await resetPassword(body.token, body.password);
   if (!result.ok) {
     if (result.reason === "invalid_password") return reply(400, { error: passwordRuleMessage(passwordProblem(body.password)) });
+    if (result.reason === "breached_password") return reply(400, { error: BREACHED_PASSWORD_MESSAGE });
     return reply(400, { error: "That reset link is invalid or has expired." });
   }
 

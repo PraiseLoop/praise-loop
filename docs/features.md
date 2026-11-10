@@ -912,7 +912,8 @@ existing email code, then sign in on the web with `POST /api/auth/password/signi
 and on the phone with `POST /api/mobile/session/password`. The sign-in page has a
 "Sign in with a password" panel with sign-in and create-account modes; the reset
 page is `/reset-password`; and `/account` has a change-password form when the
-account has a credential.
+account has a credential. An owner who signed in another way can add a password
+from `/account` after a fresh step-up code (#286).
 
 - **Storage.** Migration `032_password_credentials.sql` adds
   `password_credentials` (owner-keyed, salted scrypt hash plus N, r, p and key
@@ -921,10 +922,22 @@ account has a credential.
   (DB-backed per-IP and reset-request buckets). Plaintext is never stored, logged
   or emailed.
 - **Rules.** 12 to 256 Unicode code points, no composition rules, no truncation.
-  The breached-password k-anonymity check is not built; see the follow-up below.
+  The breached-password check (#286) runs at sign-up, reset, change and
+  set-password: only the first five hex characters of the password's SHA-1 go to
+  Have I Been Pwned's range API, the rest is compared locally, and a positive
+  match is refused. A two-second timeout or an error fails open and logs
+  `password_breach_check_unavailable` without the password or hash. The
+  `PASSWORD_BREACH_CHECK` switch is on in production and off in development and
+  tests; tests inject a fake fetcher.
 - **Sign-up is verified.** The code is consumed through `lib/emailAuth.ts`, so the
   #156 linking policy and the #195 invite gate decide the owner before a credential
   exists. An unverified request cannot claim an existing owner's address.
+- **Set a password while signed in.** `POST /api/account/password/set` is
+  owner-wide and requires a fresh step-up. It uses the owner's primary verified
+  address, reuses `createPasswordCredential()`, and refuses an owner who already
+  has a password, an address another owner holds (generic message), an owner with
+  no verified address, and a breached password. `/account` shows the shared
+  step-up form before the first-password form.
 - **Throttles.** Ten wrong passwords per account in 15 minutes lock it for 15
   minutes, doubling to 24 hours and emailing the owner; 30 failed attempts per IP
   in 15 minutes block the IP with the same backoff. Reset requests are limited to
@@ -944,11 +957,14 @@ account has a credential.
 parameters, length rules, verified sign-up, the invite gate and linking policy,
 non-enumeration, web/phone sessions, alerts, lockout and its email, IP throttling,
 reset expiry/supersession/single use, session invalidation and a database/log scan
-for plaintext. `scripts/test-dev-seed.ts` checks the synthetic
+for plaintext. `scripts/test-password-set.ts` adds the set-password cases and the
+breach check at sign-up, reset, change and set; `scripts/test-password-breach.ts`
+covers the range request (five-character prefix only), matches, padding, fail-open
+and the switch. `scripts/test-dev-seed.ts` checks the synthetic
 `demo-password@praiseloop.invalid` owner. Rollback: stop the routes and drop the
-three tables; other sign-in methods are unaffected. The phone UI, a "set a
-password" action for an already signed-in owner and the breached-password lookup
-are follow-ups; the phone bearer route itself is built.
+three tables; setting the optional `PASSWORD_BREACH_CHECK=off` disables the
+lookup without a deploy. Other sign-in methods are unaffected. The phone UI is
+still a follow-up; the phone bearer route itself is built.
 
 ## Profile menu (#150)
 

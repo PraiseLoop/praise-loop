@@ -4,7 +4,8 @@ import { normalizeEmail, verifyEmailCode } from "./emailAuth";
 import { EmailError, getEmailTransport, passwordLockedEmail, passwordResetEmail, passwordResetNoAccountEmail, sendEmail } from "./email";
 import { log } from "./log";
 import { sessionHash } from "./auth-adapter";
-import { verifiedOwnerEmails } from "./verifiedEmails";
+import { checkPasswordBreach } from "./passwordBreach";
+import { primaryVerifiedOwnerEmail, verifiedOwnerEmails } from "./verifiedEmails";
 
 // Email and password sign-in (#159). The rule that decides who an owner is stays
 // in lib/authLinking.ts: sign-up proves the mailbox with the existing email code,
@@ -411,7 +412,7 @@ export async function signInWithPassword(
 
 export type PasswordSignUpResult =
   | { ok: true; ownerId: string }
-  | { ok: false; reason: "invalid_code" | "invite_only" | "invalid_password" | "password_exists" | "email_taken" };
+  | { ok: false; reason: "invalid_code" | "invite_only" | "invalid_password" | "password_exists" | "email_taken" | "breached_password" };
 
 /**
  * Create a credential for a mailbox the owner has just proved with the existing
@@ -431,6 +432,10 @@ export async function signUpWithPassword(
   if (problem) return { ok: false, reason: "invalid_password" };
   if (!email) return { ok: false, reason: "invalid_code" };
   const password = passwordInput as string;
+
+  // Checked before the code is consumed, so a rejected password does not also
+  // burn the owner's sign-up code. An unavailable lookup fails open.
+  if (await checkPasswordBreach(password) === "breached") return { ok: false, reason: "breached_password" };
 
   const verified = await verifyEmailCode(email, String(codeInput ?? "").trim(), now);
   if (!verified.ok) return { ok: false, reason: verified.reason === "invite_only" ? "invite_only" : "invalid_code" };
@@ -471,6 +476,35 @@ export async function createPasswordCredential(
     );
     return { ok: true } as const;
   });
+}
+
+// --- Set a password while signed in (#286) --------------------------------
+
+export type SetPasswordResult =
+  | { ok: true }
+  | { ok: false; reason: "no_verified_email" | "password_exists" | "email_taken" | "invalid_password" | "breached_password" };
+
+/**
+ * Add a password credential to an owner who signed in another way. The caller
+ * has already passed a fresh step-up. The address must be one the sign-in
+ * policy treats as verified, and it is fixed to the owner's primary verified
+ * address so the credential cannot claim an address the owner does not hold.
+ */
+export async function setPasswordForOwner(
+  ownerId: string,
+  passwordInput: unknown,
+  now = Date.now()
+): Promise<SetPasswordResult> {
+  const problem = passwordProblem(passwordInput);
+  if (problem) return { ok: false, reason: "invalid_password" };
+  if (await hasPassword(ownerId)) return { ok: false, reason: "password_exists" };
+  const email = await primaryVerifiedOwnerEmail(ownerId);
+  if (!email) return { ok: false, reason: "no_verified_email" };
+  const password = passwordInput as string;
+  if (await checkPasswordBreach(password) === "breached") return { ok: false, reason: "breached_password" };
+  const created = await createPasswordCredential(ownerId, email, password, now);
+  if (!created.ok) return { ok: false, reason: created.reason };
+  return { ok: true };
 }
 
 // --- Password reset -------------------------------------------------------
@@ -556,7 +590,7 @@ export async function requestPasswordReset(
 
 export type PasswordResetResult =
   | { ok: true; ownerId: string }
-  | { ok: false; reason: "invalid_token" | "invalid_password" };
+  | { ok: false; reason: "invalid_token" | "invalid_password" | "breached_password" };
 
 /**
  * Consume a reset token and replace the credential. Every web and phone session
@@ -582,6 +616,13 @@ export async function resetPassword(
   )).rows[0];
   if (!initial || initial.consumed_at || initial.superseded_at || initial.expires_at.getTime() <= now) {
     return { ok: false, reason: "invalid_token" };
+  }
+
+  // A valid link is not consumed by a breached-password rejection: the owner
+  // can choose another password within the token's lifetime. An unavailable
+  // lookup fails open.
+  if (await checkPasswordBreach(passwordInput as string) === "breached") {
+    return { ok: false, reason: "breached_password" };
   }
 
   const stored = await hashPassword(passwordInput as string);
@@ -622,7 +663,7 @@ export async function resetPassword(
 
 export type ChangePasswordResult =
   | { ok: true; revoked: number }
-  | { ok: false; reason: "no_password" | "invalid_current" | "invalid_password" };
+  | { ok: false; reason: "no_password" | "invalid_current" | "invalid_password" | "breached_password" };
 
 export async function changePassword(
   ownerId: string,
@@ -642,6 +683,12 @@ export async function changePassword(
     const lock = await recordCredentialFailure(ownerId, now);
     if (lock) notifyAccountLocked(ownerId, lock.lockedUntil);
     return { ok: false, reason: "invalid_current" };
+  }
+
+  // Checked after the current-password proof, before paying for a new hash.
+  // Nothing is changed, so the owner can choose another password.
+  if (await checkPasswordBreach(newPasswordInput as string) === "breached") {
+    return { ok: false, reason: "breached_password" };
   }
 
   const stored = await hashPassword(newPasswordInput as string);

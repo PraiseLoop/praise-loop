@@ -532,9 +532,19 @@ the same owner or address is refused without touching the existing one.
 
 **Password rules.** At least 12 and at most 256 Unicode code points. There are no
 composition rules, whitespace is preserved, and an over-long value is rejected
-rather than truncated. The breached-password k-anonymity range check is **not**
-built yet (it needs a network lookup and no dependency was approved); the minimum
-length is the current mitigation. That check is a follow-up.
+rather than truncated. The breached-password check (#286) runs at sign-up, reset,
+change and set-password. It sends only the first five hex characters of the
+password's SHA-1 to Have I Been Pwned's k-anonymity range API
+(`https://api.pwnedpasswords.com/range/<prefix>`, `Add-Padding: true`,
+`User-Agent: PraiseLoop`), compares the remaining 35 characters locally, and
+refuses a positive match with "This password has appeared in a data breach.
+Choose a different one." The lookup has a two-second timeout and **fails open**:
+a timeout, HTTP error or network failure allows the attempt and logs
+`password_breach_check_unavailable` without the password or any hash. It is
+controlled by `PASSWORD_BREACH_CHECK` (`on`/`off`; unset means on in production
+and off in development and tests). The minimum length remains the mitigation when
+the lookup is off or unavailable. Uses the global `fetch`; no dependency was
+added.
 
 **Sign-in.** The web route is `POST /api/auth/password/signin` (same-origin,
 sets the hashed Postgres session cookie through `createWebSession`). The phone
@@ -594,6 +604,28 @@ sessions, keeping the one that made the change. Wrong current-password attempts
 count towards the same account lock. `/account` shows the form only when a
 credential exists.
 
+**Set a password while signed in (#286).** `POST /api/account/password/set` takes
+`{password}` and is owner-wide (cookie or bearer), listed in `OWNER_WIDE_PATHS`.
+It requires a fresh step-up through `requireRecentStepUp()`, exactly like billing
+changes and signing out other devices: a missing or stale step-up is
+`403 {"error":"step_up_required"}`, and an owner with no address follows the same
+recent-session fallback (`403 {"error":"sign_in_again"}`). The credential email is
+the owner's primary verified address from `primaryVerifiedOwnerEmail()` in
+[`lib/verifiedEmails.ts`](../lib/verifiedEmails.ts); a body field cannot choose or
+override it. The write reuses `createPasswordCredential()` in
+[`lib/passwordAuth.ts`](../lib/passwordAuth.ts), so hashing, the verified
+timestamp and the address-uniqueness rule stay in one place. It answers `200
+{"ok":true}` on success and writes no credential when: the owner already has a
+password (`409`, use the change form), the address is already another owner's
+credential (`409`, the same generic message sign-up uses), the owner has no
+verified address (`400`), or the password is breached or the wrong length (`400`).
+Setting the first password does not delete existing sessions.
+
+On `/account` the password panel shows the existing change form when a credential
+exists. Otherwise it shows the shared `StepUpCodeForm`, then the new-password and
+confirm fields after the step-up succeeds; a `403` from the route asks for a fresh
+code rather than leaving an expired confirmation on screen.
+
 **Dev seeder.** `npm run dev:seed` creates `demo-password@praiseloop.invalid`
 with the obviously synthetic password `synthetic-demo-password-159` and the same
 synthetic data path as the other demo owners. The password is documentation, not
@@ -606,14 +638,18 @@ unknown-address/wrong-password responses, web and phone sessions, the new-sign-i
 alert, account lock and its email and backoff, the per-IP block, reset expiry,
 supersession and single use, session invalidation on reset and change, and a scan
 proving no plaintext password reaches the database or captured logs.
+`scripts/test-password-set.ts` covers the set-password happy path, the step-up
+requirement, an owner with no verified address, an address another owner already
+holds, an owner who already has a password, and the breach check at sign-up,
+reset, change and set. `scripts/test-password-breach.ts` covers the prefix-only
+range request, a match, Add-Padding zero-count entries, timeout/HTTP/network
+fail-open, the switch off, and logs that never contain the password or hash. Both
+inject a fake fetcher; no test calls Have I Been Pwned.
 
-**Deferred.** The breached-password range lookup, a "set a password" action for an
-already signed-in owner (today an existing owner uses the sign-up form while
-signed out and proves the mailbox first), and the phone sign-in UI. The phone
-bearer route is built and works; the native app is parked under the web-first
-strategy, so adding the form there is a follow-up. No new environment variable is
-needed: reset links use the existing `NEXTAUTH_URL`, and messages use the
-existing email transport.
+**Deferred.** The phone sign-in UI. The phone bearer route is built and works; the
+native app is parked under the web-first strategy, so adding the form there is a
+follow-up. Configuration uses the existing `NEXTAUTH_URL` and email transport,
+plus the optional `PASSWORD_BREACH_CHECK` switch described above.
 
 ### New sign-in alerts (#260)
 

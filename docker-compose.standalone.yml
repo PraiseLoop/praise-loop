@@ -55,6 +55,8 @@ services:
       - EMAIL_TRANSPORT=${EMAIL_TRANSPORT:-}
       - EMAIL_FROM=${EMAIL_FROM:-}
       - RESEND_API_KEY=${RESEND_API_KEY:-}
+      # Breached-password check (#286). Empty follows NODE_ENV: on in production.
+      - PASSWORD_BREACH_CHECK=${PASSWORD_BREACH_CHECK:-}
       - GOOGLE_IOS_CLIENT_ID=${GOOGLE_IOS_CLIENT_ID:-}
       - GOOGLE_ANDROID_CLIENT_ID=${GOOGLE_ANDROID_CLIENT_ID:-}
       - APPLE_CLIENT_ID=${APPLE_CLIENT_ID:-}
