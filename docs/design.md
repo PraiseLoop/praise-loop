@@ -4,7 +4,7 @@
 who are about to change it. It summarises and links; the detailed, authoritative text lives in the
 other docs. When you change behaviour, update the detailed doc and the matching line here.
 
-Last reviewed: 2026-11-05 (Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
+Last reviewed: 2026-11-09 (Provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
 
 | Doc | What it is the source of truth for |
 | --- | --- |
@@ -157,7 +157,8 @@ transactional.
   `owner_subscriptions`, and the effective plan is the highest active grant in `PLAN_ORDER` (#219).
   Every change appends to `owner_plan_events`; a provider event only ever writes the subscription
   tables. Free: 1 post/week, the Classic quote-card design, watermark, 1 business, no automatic posting. Pro: 5 posts/week, no
-  watermark, brand voice, automatic posting through Buffer, all four quote-card designs, 1 business;
+  watermark, brand voice, automatic posting to Instagram and Facebook (through Buffer or direct
+  publishing), all four quote-card designs, 1 business;
   review sync and AI replies are planned and are not sold until the server enforces them (#218). Business: Pro's features plus 5 businesses. Expired Pro or
   Business falls back to Free without deleting data, so automatic posting is refused and queued
   posts fail closed, and a saved Pro design stays saved but new images render the Classic design.
@@ -262,7 +263,8 @@ lock, and Instagram's create-container → commit-id → publish flow resumes fr
 instead of double-posting. The deterministic JPEG variant lives in `imageRenderer.ts` and is served
 by the tokenized public route as `.jpg`. The `/connections` screen shows the Meta section beside
 Buffer, fails closed to "not available yet" without app credentials, and reuses the existing target
-routes; onboarding links to it optionally and never requires Buffer or Meta. The live Graph client
+routes; onboarding links to it optionally and never requires Buffer or Meta. Plan and account copy
+say Instagram and Facebook rather than naming Buffer, because both routes can publish. The live Graph client
 and the owner-approved live connect/publish test are not built/run. The dated findings, permissions,
 token lifetimes, media rules, rate limits and sources are
 in [integrations.md](integrations.md#direct-instagram-and-facebook-publishing-234--checked-2026-11-05).
@@ -288,7 +290,7 @@ endpoints take the Page token or the User token, to be settled by the owner-appr
 | Native Google sign-in, push notifications | shipped; **need a development build and a device** | #85, #89 |
 | Android APK release pipeline | merged; not yet run | #190 |
 | Real scheduler through Buffer | Paid (Pro and Business) automatic posting; Connect + screen built; worker posting, image links, cancel and the off/draft/live gate built (#29 part 3); **never run live**; status display and `unknown` resolution not built | #29, #216 |
-| Direct Instagram/Facebook publishing | Worker publishing, provider choice, idempotent container resume, JPEG variant, owner status, Connect backend and the `/connections` setup screen built; provider-neutral posting banner and optional onboarding link built; **live client not built and the live connect/publish test not run** | #234, #244 |
+| Direct Instagram/Facebook publishing | Worker publishing, provider choice, idempotent container resume, JPEG variant, owner status, Connect backend and the `/connections` setup screen built; provider-neutral posting banner, optional onboarding link and plan/account copy built; **live client not built and the live connect/publish test not run** | #234, #244 |
 | Google review sync, AI review replies | blocked on access/policy | #46, #96 |
 | Apify Google reviews stopgap | built; client proven with one live run, full flow not yet run live; hidden without `APIFY_TOKEN` | #232 |
 | Google Takeout review import | built; assumed format **unverified**, needs a real-export check before announcing | #233 |

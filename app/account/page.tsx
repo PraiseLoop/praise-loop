@@ -113,7 +113,7 @@ export default function AccountPage() {
     ["Posts per week, per business", String(limits.postsPerWeek)],
     ["Quote-card designs", `${limits.templates} ${limits.templates === 1 ? "design" : "designs"}`],
     ["Watermark on images", limits.watermark ? "Yes" : "No"],
-    ["Automatic posting", limits.automaticPosting ? "Through Buffer, with your approval" : "Not included"],
+    ["Automatic posting", limits.automaticPosting ? "Instagram and Facebook, with your approval" : "Not included"],
     ["Automatic review sync", plannedOrNo(limits.reviewSync)],
     ["AI review replies", plannedOrNo(limits.aiReplies)],
     ["Brand voice", limits.brandVoice ? "Learn from your website" : "Not included"],

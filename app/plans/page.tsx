@@ -36,7 +36,7 @@ export default function PlansPage() {
           <h1 className={styles.headline}>Three plans. Your approval, always.</h1>
           <p className={styles.lede}>
             Start on Free. Pro makes more posts each week, removes the watermark and adds automatic
-            posting through Buffer, while Business adds room for several businesses. Every plan keeps
+            posting to Instagram and Facebook, while Business adds room for several businesses. Every plan keeps
             reviews and drafts private to your account, and nothing posts without your OK.
           </p>
         </section>

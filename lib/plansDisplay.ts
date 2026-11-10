@@ -38,8 +38,8 @@ export const PLAN_ROWS: PlanComparisonRow[] = [
   {
     key: "automaticPosting",
     label: "Automatic posting",
-    note: "Automatic posting sends an approved post to your connected Buffer account at the time you choose. You still approve every post, and nothing posts without that.",
-    value: l => l.automaticPosting ? "Through Buffer, with your approval" : "Not included"
+    note: "Automatic posting sends an approved post to your connected Instagram or Facebook account at the time you choose. You still approve every post, and nothing posts without that.",
+    value: l => l.automaticPosting ? "Instagram and Facebook, with your approval" : "Not included"
   },
   {
     key: "reviewSync",

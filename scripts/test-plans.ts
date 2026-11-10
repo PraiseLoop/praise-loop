@@ -34,7 +34,7 @@ assert.deepEqual(rows.map(row => ({ label: row.label, free: row.values.free, pro
   { label: "Posts each week, per business", free: "1 post", pro: "5 posts", business: "5 posts" },
   { label: "Quote-card designs", free: "1 design", pro: "4 designs", business: "4 designs" },
   { label: "Watermark on images", free: "Small PraiseLoop watermark", pro: "No watermark", business: "No watermark" },
-  { label: "Automatic posting", free: "Not included", pro: "Through Buffer, with your approval", business: "Through Buffer, with your approval" },
+  { label: "Automatic posting", free: "Not included", pro: "Instagram and Facebook, with your approval", business: "Instagram and Facebook, with your approval" },
   { label: "Automatic review sync", free: "Not included", pro: "Planned — not available yet", business: "Planned — not available yet" },
   { label: "AI review replies", free: "Not included", pro: "Planned — not available yet", business: "Planned — not available yet" },
   { label: "Brand voice", free: "Not included", pro: "Learn from your website", business: "Learn from your website" },
@@ -57,7 +57,7 @@ for (const row of rows) {
 
 // Unshipped features stay honest: the labels and notes must not claim they work.
 assert.deepEqual(planNotes(rows), [
-  "Automatic posting sends an approved post to your connected Buffer account at the time you choose. You still approve every post, and nothing posts without that.",
+  "Automatic posting sends an approved post to your connected Instagram or Facebook account at the time you choose. You still approve every post, and nothing posts without that.",
   "Automatic review sync (Google reviews) is planned for Pro and Business but is not available yet, so every plan starts with a spreadsheet import.",
   "AI review replies are planned for Pro and Business but are not available yet.",
   "Brand voice learns a short, editable profile from your own public website; nothing is scraped from social accounts."
