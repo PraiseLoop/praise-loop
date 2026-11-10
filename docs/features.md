@@ -805,6 +805,37 @@ unlink-last and the one-address/two-subject race.
 Recovery has no in-app path until the verified email code (#157) ships. There is
 no support override route and merging two owners remains an operator task.
 
+## New sign-in alerts (#260)
+
+Every successful new web or phone session sends the owner a short email: the
+method (Google, Microsoft, Apple, email code), a fixed client description derived
+from the User-Agent (for example "Chrome on macOS" or "Android phone app
+(Android)"), and the time in UTC plus the first business's timezone when known.
+It contains no code, token, IP address or geolocation, and links to `/account`.
+
+- **Exactly once per new session.** NextAuth OAuth notifies from its post-session
+  `events.signIn`; the custom web email-code and dev routes notify from
+  `createWebSession`; all phone methods notify from `createMobileSession`.
+  Session refresh and token renewal never notify.
+- **Best effort.** The send is started after the session row exists and is not
+  awaited, so a failed message cannot fail or delay sign-in. Failures log
+  `sign_in_alert_failed` with method, client and a sanitized reason, never an
+  address or token.
+- **Recipients.** Only verified addresses: the owner row plus Google, email-code
+  and Apple methods. Microsoft's address is not trusted. An owner with no such
+  address gets no alert and still signs in.
+- **Rate limit.** Migration `030_sign_in_alerts.sql` adds one row per owner and
+  method; at most one alert per method is sent to that owner every ten minutes,
+  across restarts and replicas. It is deleted with the account.
+- **No "sign out of all devices" action.** The email asks the owner to review
+  `/account` and contact the operator; a one-action sign-out everywhere is a
+  follow-up in the issue/PR.
+
+`scripts/test-signin-alerts.ts` covers each web and phone path, refresh silence,
+verified recipients, the limit and concurrent sign-ins, and a failed send that
+leaves the session working. Rollback: drop `sign_in_alerts`; sign-in and sessions
+are unaffected. No existing row is rewritten by the migration.
+
 ## Profile menu (#150)
 
 The web app keeps who the owner is and what they are on under one profile button

@@ -1,6 +1,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { query } from "./db";
 import { sessionHash } from "./auth-adapter";
+import { notifyNewSignIn } from "./signInAlerts";
 
 export const MOBILE_SESSION_IDLE_DAYS = 30;
 export const MOBILE_SESSION_ABSOLUTE_DAYS = 90;
@@ -11,8 +12,12 @@ function tokensMatch(a: string, b: string) {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
-// Returns the raw token once; only its SHA-256 hash is stored.
-export async function createMobileSession(ownerId: string) {
+export type NewMobileSignIn = { method: string; userAgent?: string | null };
+
+// Returns the raw token once; only its SHA-256 hash is stored. This is the one
+// place every phone sign-in method creates a bearer session, so the alert hook
+// covers Google, Microsoft, Apple, email code and dev sign-in exactly once.
+export async function createMobileSession(ownerId: string, signIn?: NewMobileSignIn) {
   const token = randomBytes(32).toString("base64url");
   const row = (await query<{ expires: Date }>(
     `INSERT INTO auth_sessions(token_hash, owner_id, expires, kind)
@@ -20,11 +25,13 @@ export async function createMobileSession(ownerId: string) {
      RETURNING expires`,
     [sessionHash(token), ownerId, String(MOBILE_SESSION_IDLE_DAYS)]
   )).rows[0];
+  if (signIn) notifyNewSignIn({ ownerId, client: "mobile", ...signIn });
   return { token, expires: row.expires };
 }
 
 // Sliding expiry, capped at 90 days after creation. Malformed tokens never reach
-// the database and every lookup is a constant-shape hash comparison.
+// the database and every lookup is a constant-shape hash comparison. Refreshing
+// an existing session never sends a new-sign-in alert.
 export async function resolveMobileSession(token: string) {
   if (!TOKEN_PATTERN.test(token)) return null;
   const hash = sessionHash(token);

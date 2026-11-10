@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { SignJWT, exportJWK, generateKeyPair, type JWK } from "jose";
 import { verifyAppleIdToken } from "../lib/appleIdToken";
 import { resetFailures } from "../lib/mobileSignIn";
+import { flushSignInAlerts } from "../lib/signInAlerts";
 import { createMobileSession } from "../lib/mobileSessions";
 import { sessionHash } from "../lib/auth-adapter";
 import { databaseFixture } from "./db-fixture";
@@ -179,6 +180,7 @@ async function main() {
       assert.equal((await exchange(await token())).status, 401);
       process.env.APPLE_CLIENT_ID = BUNDLE;
 
+      await flushSignInAlerts();
       assert.doesNotMatch(JSON.stringify((await client.query("SELECT * FROM auth_accounts")).rows), /eyJ/);
     });
   } finally {

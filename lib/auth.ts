@@ -5,6 +5,7 @@ import AzureADProvider from "next-auth/providers/azure-ad";
 import { authAdapter } from "./auth-adapter";
 import { signInWithIdentity, type AuthIdentity } from "./authLinking";
 import { microsoftEmail, microsoftSubject } from "./microsoftIdToken";
+import { callerUserAgent, canonicalSignInMethod, notifyNewSignIn } from "./signInAlerts";
 
 type GoogleProfile = {
   sub?: unknown;
@@ -130,6 +131,16 @@ export const authOptions: NextAuthOptions = {
         return result.reason === "invite_only" ? inviteOnlyRedirect() : false;
       }
       return false;
+    }
+  },
+  // NextAuth emits this after the session row exists, so a new alert never comes
+  // from a failed sign-in or a session refresh. The custom email/dev web routes
+  // notify from createWebSession instead.
+  events: {
+    async signIn({ user, account }) {
+      const method = canonicalSignInMethod(account?.provider);
+      if (!method || !user?.id) return;
+      notifyNewSignIn({ ownerId: user.id, client: "web", method, userAgent: await callerUserAgent() });
     }
   },
   logger: { error: code => console.error("auth_error", code), warn: code => console.warn("auth_warning", code), debug: () => {} }

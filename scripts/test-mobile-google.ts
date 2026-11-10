@@ -4,6 +4,7 @@ import { SignJWT, exportJWK, generateKeyPair, type JWK } from "jose";
 import { databaseFixture } from "./db-fixture";
 import { sessionHash } from "../lib/auth-adapter";
 import { resetFailures } from "../lib/mobileSignIn";
+import { flushSignInAlerts } from "../lib/signInAlerts";
 
 const IOS = "ios-client.apps.googleusercontent.com", ANDROID = "android-client.apps.googleusercontent.com";
 const ISS = "https://accounts.google.com";
@@ -106,6 +107,7 @@ async function main() {
     delete process.env.GOOGLE_IOS_CLIENT_ID; delete process.env.GOOGLE_ANDROID_CLIENT_ID;
     assert.equal((await exchange(await token())).status, 401);
 
+    await flushSignInAlerts();
     const out = logs.join("\n");
     assert.ok(!out.includes(first.token) && !out.includes(second.token) && !out.includes(await token().then(t => t.split(".")[2])), "no token in logs");
     assert.doesNotMatch(JSON.stringify((await client.query("SELECT * FROM auth_accounts")).rows), /eyJ/);

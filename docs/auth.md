@@ -461,7 +461,40 @@ the mailbox.
   process and fake transport only); the seeder also creates an email-only owner
   (`demo-email@praiseloop.invalid`) so the flow can be walked without a mailbox.
 
-### Step-up before sensitive steps (#221)
+### New sign-in alerts (#260)
+
+After every successful new session, PraiseLoop emails the owner so a reassigned mailbox or an
+unknown device is noticed. This is the first mitigation recorded for the accepted reassigned-mailbox
+risk in [decisions.md](decisions.md); it does not stop whoever holds the mailbox from signing in.
+
+- **Where it hooks.** Web OAuth (Google, Microsoft and any future web Apple) notifies from
+  NextAuth's `events.signIn`, which runs after the database session exists. The custom web email-code
+  and dev routes notify from `createWebSession`. Every phone method (Google, Microsoft, Apple, email
+  code, dev) notifies from `createMobileSession`. A session refresh or token renewal never sends one.
+- **Best effort, after sign-in.** `notifyNewSignIn` in `lib/signInAlerts.ts` is started without being
+  awaited, so a slow or failed email cannot fail or noticeably delay the sign-in. Each send failure is
+  logged as `sign_in_alert_failed` with the method, client and an `EmailError` code only; the address,
+  messages, session tokens and raw User-Agent are never logged.
+- **Recipients.** Only addresses the sign-in policy already treats as verified: `auth_users.email`
+  plus Google, email-code and Apple method addresses. Apple's private relay is eligible; Microsoft's
+  address is not, because it is not guaranteed to belong to the account holder. An owner with none of
+  those (for example Microsoft-only) gets no alert, and the sign-in still succeeds.
+- **Copy.** The message says the method in plain language, a fixed description derived from the
+  User-Agent (for example "Chrome on macOS" or "Android phone app (Android)"), and the time in UTC plus
+  the first business's timezone when one is known. It contains no code, token, IP address or
+  geolocation and links to `/account` (from `NEXTAUTH_URL`) for review and contact.
+- **Rate limit.** `sign_in_alerts` (migration `030_sign_in_alerts.sql`) holds one row per owner and
+  method with the last send time. The insert/upsert allows at most one alert per method per owner per
+  ten minutes, survives restarts and is shared by replicas. The row cascades away when the account is
+  deleted.
+- **No "sign out of all devices" action exists**, so the email does not claim one. Review the account
+  and contact the operator; a one-action sign-out everywhere is a follow-up.
+- **Tests.** `scripts/test-signin-alerts.ts` covers the template and User-Agent description, each web
+  and phone sign-in path, no alert on refresh, verified-recipient selection, the ten-minute limit
+  (including concurrent sign-ins), and a failed send that leaves the session working and logs no
+  address or token.
+
+## Step-up before sensitive steps (#221)
 
 The owner decided that email-code sign-in to an existing Google owner stays exactly as it is.
 The reassigned-mailbox risk is handled with a pause before sensitive actions (the billing portal

@@ -5,6 +5,7 @@ import { SignJWT, exportJWK, generateKeyPair, type JWK } from "jose";
 import { databaseFixture } from "./db-fixture";
 import { linkIdentityToOwner, signInWithIdentity } from "../lib/authLinking";
 import { clearEmailOutbox, emailOutbox } from "../lib/email";
+import { flushSignInAlerts } from "../lib/signInAlerts";
 import { resetEmailCodeThrottle } from "../lib/emailAuth";
 import { resetFailures } from "../lib/mobileSignIn";
 import { INVITE_ONLY_MESSAGE } from "../lib/signupMessages";
@@ -199,7 +200,11 @@ async function main() {
       assert.ok(timings.every(ms => ms < 2000), `request timings ${timings.join(", ")}ms`);
 
       // A valid code for an invited new address creates the owner.
-      const lastCode = () => /code is (\d{6})/.exec(emailOutbox().at(-1)!.text)![1];
+      const lastCode = () => {
+        const message = [...emailOutbox()].reverse().find(entry => /code is (\d{6})/.test(entry.text));
+        assert.ok(message, "a code email was queued");
+        return /code is (\d{6})/.exec(message.text)![1];
+      };
       const webVerify = require("../app/api/auth/email/verify/route").POST as (r: NextRequest) => Promise<Response>;
       const verifyRequest = (email: string, code: string) => new NextRequest("http://localhost/api/auth/email/verify", {
         method: "POST",
@@ -306,6 +311,7 @@ async function main() {
         account: { provider: "google", providerAccountId: "existing-google-sub" },
         profile: { email: EXISTING, email_verified: true, name: "Existing" }
       }), true);
+      await flushSignInAlerts();
     });
   } finally {
     globalThis.fetch = realFetch;

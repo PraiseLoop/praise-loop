@@ -4,7 +4,7 @@
 who are about to change it. It summarises and links; the detailed, authoritative text lives in the
 other docs. When you change behaviour, update the detailed doc and the matching line here.
 
-Last reviewed: 2026-11-09 (Provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
+Last reviewed: 2026-11-10 (new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
 
 | Doc | What it is the source of truth for |
 | --- | --- |
@@ -104,7 +104,7 @@ re-queues generation. Scheduling fails closed. Nothing auto-posts.
 
 | Area | Tables |
 | --- | --- |
-| Owners and sign-in | `auth_users`, `auth_accounts` (provider + provider account id → owner), `auth_sessions` (web and mobile, hashed token), `email_sign_in_codes` |
+| Owners and sign-in | `auth_users`, `auth_accounts` (provider + provider account id → owner), `auth_sessions` (web and mobile, hashed token), `email_sign_in_codes`, `sign_in_alerts` |
 | Business content | `businesses` (brand colours/tone/voice, timezone, weekly target), `reviews`, `draft_posts`, `draft_events` |
 | Generation | `generation_periods`, `generation_jobs`, `posting_slot_claims` |
 | Plans and usage | `owner_plans`, `owner_plan_events`, `owner_subscriptions`, `billing_events`, `owner_usage` |
@@ -133,7 +133,10 @@ transactional.
   steps: the billing portal and plan changes call `requireRecentStepUp`, which needs a code sent to
   the address on the signed-in owner's row within ten minutes (or, for owners with no address, a
   session under ten minutes old). It pauses the action; it does not protect against whoever holds
-  the mailbox. See [auth.md](auth.md) and [decisions.md](decisions.md).
+  the mailbox. A best-effort new-sign-in alert email (#260) now notifies verified addresses after
+  every new web or phone session, with a per-owner/per-method ten-minute limit; it records the
+  method, rough client and time, never a token or code. See [auth.md](auth.md) and
+  [decisions.md](decisions.md).
 - **Pilot sign-up gate** (#195): `SIGNUP_MODE` is `open` (default) or `invite`, and `INVITED_EMAILS`
   is a comma/whitespace allow-list compared case-insensitively. The gate lives in
   `lib/signupPolicy.ts` and is consulted by `signInWithIdentity` only when it would create a new

@@ -60,6 +60,10 @@ async function seedOwner(client: PoolClient, owner: string, label: string, withD
     "INSERT INTO device_push_tokens(owner_id,token,platform) VALUES($1,$2,'ios')",
     [owner, `ExponentPushToken[${owner}]`]
   );
+  await client.query(
+    "INSERT INTO sign_in_alerts(owner_id,method,last_sent_at) VALUES($1,'google',now())",
+    [owner]
+  );
   const business = (await client.query(
     "INSERT INTO businesses(name,timezone,owner_id,logo_url) VALUES($1,'UTC',$2,$3) RETURNING id",
     [`Synthetic ${label}`, owner, `/api/media/logo-${owner}.png`]
@@ -272,7 +276,7 @@ async function main() {
       for (const table of [
         "auth_accounts", "auth_sessions", "owner_usage", "owner_plans",
         "owner_plan_events", "owner_subscriptions", "billing_events",
-        "device_push_tokens", "businesses", "google_connections",
+        "device_push_tokens", "sign_in_alerts", "businesses", "google_connections",
         "buffer_connections", "buffer_oauth_states", "business_buffer_channels",
         "apify_review_places", "apify_review_runs",
         "reviews", "draft_posts", "generation_periods", "generation_jobs",

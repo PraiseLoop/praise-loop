@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     recordFailure(client);
     return reply(400, { error: "That code is invalid or has expired" });
   }
-  const session = await createWebSession(result.ownerId);
+  const session = await createWebSession(result.ownerId, Date.now(), { method: "email", userAgent: req.headers.get("user-agent") });
   const response = reply(200, { ok: true });
   response.cookies.set(webSessionCookie(session.token, session.expires));
   return response;

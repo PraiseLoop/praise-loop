@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair, type JWK } from "jose";
 import { verifyMicrosoftIdToken } from "../lib/microsoftIdToken";
 import { resetFailures } from "../lib/mobileSignIn";
+import { flushSignInAlerts } from "../lib/signInAlerts";
 import { createMobileSession } from "../lib/mobileSessions";
 import { sessionHash } from "../lib/auth-adapter";
 import { databaseFixture } from "./db-fixture";
@@ -224,6 +225,7 @@ async function main() {
       assert.equal((await exchange(await token())).status, 401);
       process.env.MICROSOFT_CLIENT_ID = `${CLIENT}, ${SECOND_CLIENT}`;
 
+      await flushSignInAlerts();
       assert.doesNotMatch(JSON.stringify((await client.query("SELECT * FROM auth_accounts")).rows), /eyJ/);
     });
   } finally {

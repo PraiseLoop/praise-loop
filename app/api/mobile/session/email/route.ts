@@ -40,6 +40,6 @@ export async function POST(req: NextRequest) {
     recordFailure(client);
     return reply(400, { error: "That code is invalid or has expired" });
   }
-  const session = await createMobileSession(result.ownerId);
+  const session = await createMobileSession(result.ownerId, { method: "email", userAgent: req.headers.get("user-agent") });
   return reply(200, { token: session.token, expires: session.expires });
 }
