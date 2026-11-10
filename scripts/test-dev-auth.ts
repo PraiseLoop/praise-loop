@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { databaseFixture } from "./db-fixture";
 import { DEV_OWNER_EMAIL, DEV_OWNER_ID, DEV_OWNER_OPTIONS, DEV_OWNERS, devAuthEnabled, ensureDevOwner } from "../lib/devAuth";
 import { resolveMobileSession } from "../lib/mobileSessions";
+import { flushSignInAlerts } from "../lib/signInAlerts";
 
 // The demo sign-in is the only unauthenticated way to mint an owner session. Its
 // gate has to fail closed, so it is tested separately from the route inventory.
@@ -112,6 +113,7 @@ async function main() {
       const business = (await client.query("INSERT INTO businesses(name,timezone,owner_id) VALUES('Demo café','UTC',$1) RETURNING id", [DEV_OWNER_ID])).rows[0].id;
       await client.query("INSERT INTO auth_users(id,email) VALUES('other-owner','other@example.invalid') ON CONFLICT DO NOTHING");
       assert.equal((await client.query("SELECT 1 FROM businesses WHERE id=$1 AND owner_id=$2", [business, "other-owner"])).rowCount, 0);
+      await flushSignInAlerts();
     } finally {
       delete process.env.MOBILE_DEV_AUTH;
     }

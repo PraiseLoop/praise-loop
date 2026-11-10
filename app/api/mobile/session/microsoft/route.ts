@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       recordFailure(client);
       return reply(401, { error: "Invalid Microsoft sign-in" });
     }
-    const session = await createMobileSession(result.ownerId);
+    const session = await createMobileSession(result.ownerId, { method: "microsoft", userAgent: req.headers.get("user-agent") });
     return reply(200, { token: session.token, expires: session.expires });
   } catch { return reply(500, { error: "Sign-in failed; retry" }); }
 }

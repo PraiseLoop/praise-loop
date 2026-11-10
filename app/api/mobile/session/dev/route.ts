@@ -21,7 +21,7 @@ export async function POST(req?: Request) {
   }
   try {
     const owner = await ensureDevOwner(which);
-    const session = await createMobileSession(owner);
+    const session = await createMobileSession(owner, { method: "dev", userAgent: req?.headers.get("user-agent") });
     return NextResponse.json(
       { token: session.token, expires: session.expires, owner },
       { headers: { "Cache-Control": "no-store" } }

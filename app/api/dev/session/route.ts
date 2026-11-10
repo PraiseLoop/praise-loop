@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const owner = await ensureDevOwner(which);
-    const session = await createWebSession(owner);
+    const session = await createWebSession(owner, Date.now(), { method: "dev", userAgent: req.headers.get("user-agent") });
     const response = reply(200, { ok: true, owner });
     response.cookies.set(webSessionCookie(session.token, session.expires));
     return response;

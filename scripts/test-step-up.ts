@@ -6,6 +6,7 @@ import { clearEmailOutbox, emailOutbox } from "../lib/email";
 import { resetEmailCodeThrottle } from "../lib/emailAuth";
 import { createMobileSession, revokeSession } from "../lib/mobileSessions";
 import { resetFailures } from "../lib/mobileSignIn";
+import { flushSignInAlerts } from "../lib/signInAlerts";
 import { STEP_UP_TTL_MS, requireRecentStepUp } from "../lib/stepUp";
 
 const ORIGIN = "http://localhost:3000";
@@ -14,7 +15,8 @@ const STEP_VERIFY = "/api/account/step-up/verify";
 const SIGNIN_REQUEST = "/api/auth/email/request";
 const SIGNIN_VERIFY = "/api/auth/email/verify";
 
-function fresh() {
+async function fresh() {
+  await flushSignInAlerts();
   clearEmailOutbox();
   resetEmailCodeThrottle();
   resetFailures();
@@ -41,7 +43,7 @@ function codeFrom(text: string) {
 }
 
 function lastCode() {
-  const message = emailOutbox().at(-1);
+  const message = [...emailOutbox()].reverse().find(entry => /code is (\d{6})/.test(entry.text));
   assert.ok(message, "an email was queued");
   return codeFrom(message.text);
 }
@@ -82,7 +84,7 @@ async function main() {
     };
 
     // Anonymous requests are refused, both through the guard and by the helper itself.
-    fresh();
+    await fresh();
     assert.equal((await requestRoute(post(STEP_REQUEST, undefined, {}))).status, 401);
     assert.equal((await verifyRoute(post(STEP_VERIFY, undefined, { code: "123456" }))).status, 401);
     assert.equal(expectDenied(await requireRecentStepUp(null)).status, 401);
@@ -97,7 +99,7 @@ async function main() {
 
     // The address comes from auth_users, never from the request body, and the
     // response never echoes it.
-    fresh();
+    await fresh();
     const sent = await requestRoute(post(STEP_REQUEST, core.token, { email: "attacker@example.invalid" }));
     assert.equal(sent.status, 200);
     const sentBody = await sent.json() as { ok: boolean; method: string };
@@ -149,7 +151,7 @@ async function main() {
     // An expired code is rejected.
     await addOwner("expired-owner", "expired@example.invalid");
     const expiredSession = await newSession("expired-owner");
-    fresh();
+    await fresh();
     assert.equal((await requestRoute(post(STEP_REQUEST, expiredSession.token, {}))).status, 200);
     const expiredCode = lastCode();
     await client.query("UPDATE email_sign_in_codes SET expires_at=now()-interval '1 minute' WHERE email='expired@example.invalid' AND purpose='step_up'");
@@ -161,7 +163,7 @@ async function main() {
     // Five wrong guesses consume the code, even if the right one follows.
     await addOwner("attempts-owner", "attempts@example.invalid");
     const attemptsSession = await newSession("attempts-owner");
-    fresh();
+    await fresh();
     assert.equal((await requestRoute(post(STEP_REQUEST, attemptsSession.token, {}))).status, 200);
     const attemptsCode = lastCode();
     const wrong = wrongCodeFor(attemptsCode);
@@ -175,7 +177,7 @@ async function main() {
     // and sends nothing.
     await addOwner("throttle-owner", "throttle@example.invalid");
     const throttleSession = await newSession("throttle-owner");
-    fresh();
+    await fresh();
     for (let i = 0; i < 5; i++) {
       assert.equal((await requestRoute(post(STEP_REQUEST, throttleSession.token, {}))).status, 200);
     }
@@ -189,7 +191,7 @@ async function main() {
     await addOwner("cross-b", "cross-b@example.invalid");
     const crossA = await newSession("cross-a");
     const crossB = await newSession("cross-b");
-    fresh();
+    await fresh();
     assert.equal((await requestRoute(post(STEP_REQUEST, crossA.token, {}))).status, 200);
     const stepCode = lastCode();
     assert.equal((await verifyRoute(post(STEP_VERIFY, crossB.token, { code: stepCode }))).status, 400, "another owner cannot use the code");
@@ -206,7 +208,7 @@ async function main() {
     await addOwner("noemail-owner", null);
     const noEmail = await newSession("noemail-owner");
     assert.equal(await requireRecentStepUp(noEmail), null, "a fresh session without an address passes");
-    fresh();
+    await fresh();
     const recentRequest = await requestRoute(post(STEP_REQUEST, noEmail.token, {}));
     assert.equal(recentRequest.status, 200);
     assert.equal((await recentRequest.json()).method, "recent_sign_in");

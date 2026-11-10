@@ -5,17 +5,19 @@ import { sessionHash } from "../lib/auth-adapter";
 import { EmailError, clearEmailOutbox, emailOutbox, sendEmail } from "../lib/email";
 import { normalizeEmail, resetEmailCodeThrottle } from "../lib/emailAuth";
 import { findOrCreateGoogleOwner, resetFailures } from "../lib/mobileSignIn";
+import { flushSignInAlerts } from "../lib/signInAlerts";
 
 const ORIGIN = "http://localhost:3000";
 
-function fresh() {
+async function fresh() {
+  await flushSignInAlerts();
   clearEmailOutbox();
   resetEmailCodeThrottle();
   resetFailures();
 }
 
 function lastCode() {
-  const message = emailOutbox().at(-1);
+  const message = [...emailOutbox()].reverse().find(entry => /code is (\d{6})/.test(entry.text));
   assert.ok(message, "an email was queued");
   return /code is (\d{6})/.exec(message.text)![1];
 }
@@ -73,7 +75,7 @@ async function main() {
 
     // A new address gets the same generic answer as an unknown one, and the code is
     // stored only as a keyed hash.
-    fresh();
+    await fresh();
     const first = await request(web("/api/auth/email/request", { email: "  New@Example.invalid " }));
     assert.equal(first.status, 200);
     const firstBody = await first.json();
@@ -114,7 +116,7 @@ async function main() {
     assert.equal((await verify(web("/api/auth/email/verify", { email: "new@example.invalid", code }))).status, 400);
 
     // A newer request invalidates the older code.
-    fresh();
+    await fresh();
     assert.equal((await request(web("/api/auth/email/request", { email: "supersede@example.invalid" }))).status, 200);
     const oldCode = lastCode();
     assert.equal((await request(web("/api/auth/email/request", { email: "supersede@example.invalid" }))).status, 200);
@@ -124,14 +126,16 @@ async function main() {
     assert.equal((await verify(web("/api/auth/email/verify", { email: "supersede@example.invalid", code: newCode }))).status, 200);
 
     // Two requests for one address at once leave exactly one live code, not two.
-    fresh();
+    await fresh();
     const concurrent = await Promise.all([
       request(web("/api/auth/email/request", { email: "concurrent@example.invalid" })),
       request(web("/api/auth/email/request", { email: "concurrent@example.invalid" }))
     ]);
     assert.deepEqual(concurrent.map(r => r.status), [200, 200]);
     assert.equal(await count("SELECT count(*)::int n FROM email_sign_in_codes WHERE email='concurrent@example.invalid' AND consumed_at IS NULL AND superseded_at IS NULL"), 1);
-    const concurrentCodes = emailOutbox().map(message => /code is (\d{6})/.exec(message.text)![1]);
+    const concurrentCodes = emailOutbox()
+      .filter(message => /code is (\d{6})/.test(message.text))
+      .map(message => /code is (\d{6})/.exec(message.text)![1]);
     assert.equal(concurrentCodes.length, 2);
     const concurrentResults = [];
     for (const value of concurrentCodes) {
@@ -140,7 +144,7 @@ async function main() {
     assert.deepEqual(concurrentResults.sort(), [200, 400]);
 
     // An expired code is rejected.
-    fresh();
+    await fresh();
     assert.equal((await request(web("/api/auth/email/request", { email: "expired@example.invalid" }))).status, 200);
     const expiredCode = lastCode();
     await client.query("UPDATE email_sign_in_codes SET expires_at=now()-interval '1 minute' WHERE email='expired@example.invalid'");
@@ -149,7 +153,7 @@ async function main() {
     // The email transport has its own hourly budget (five per recipient), which a request can hit before
     // the request limiter does. A request whose message cannot be sent must not invalidate the code that
     // was already delivered.
-    fresh();
+    await fresh();
     for (let i = 0; i < 5; i++) {
       resetEmailCodeThrottle();
       assert.equal((await request(web("/api/auth/email/request", { email: "budget@example.invalid" }))).status, 200);
@@ -162,7 +166,7 @@ async function main() {
     assert.equal((await verify(web("/api/auth/email/verify", { email: "budget@example.invalid", code: deliveredCode }))).status, 200, "the delivered code still signs in");
 
     // Five wrong guesses kill the code, even if the right one follows.
-    fresh();
+    await fresh();
     assert.equal((await request(web("/api/auth/email/request", { email: "guesses@example.invalid" }))).status, 200);
     const guessedCode = lastCode();
     const wrongGuess = wrongCodeFor(guessedCode);
@@ -174,14 +178,14 @@ async function main() {
 
     // A new code resets its own guess count, so wrong guesses are also capped per address across codes.
     for (let round = 0; round < 3; round++) {
-      fresh();
+      await fresh();
       assert.equal((await request(web("/api/auth/email/request", { email: "grind@example.invalid" }))).status, 200);
       const grindWrong = wrongCodeFor(lastCode());
       for (let i = 0; i < 5; i++) {
         assert.equal((await verify(web("/api/auth/email/verify", { email: "grind@example.invalid", code: grindWrong }))).status, 400);
       }
     }
-    fresh();
+    await fresh();
     assert.equal((await request(web("/api/auth/email/request", { email: "grind@example.invalid" }))).status, 200);
     const lockedCode = lastCode();
     assert.equal((await verify(web("/api/auth/email/verify", { email: "grind@example.invalid", code: lockedCode }))).status, 400,
@@ -196,7 +200,7 @@ async function main() {
     await client.query(`INSERT INTO auth_users(id,name,email,"emailVerified") VALUES('google-owner','Google Owner','google@example.invalid',now())`);
     await client.query("INSERT INTO auth_accounts(provider,provider_account_id,owner_id) VALUES('google','google-sub-1','google-owner')");
     await client.query("INSERT INTO businesses(name,timezone,owner_id) VALUES('Google business','UTC','google-owner')");
-    fresh();
+    await fresh();
     assert.equal((await request(web("/api/auth/email/request", { email: "google@example.invalid" }))).status, 200);
     const linkedCode = lastCode();
     const linked = await verify(web("/api/auth/email/verify", { email: "google@example.invalid", code: linkedCode }));
@@ -215,7 +219,7 @@ async function main() {
     assert.equal(await count("SELECT count(*)::int n FROM auth_accounts WHERE provider='google' AND provider_account_id='google-sub-2'"), 0);
 
     // A different address never attaches to that owner.
-    fresh();
+    await fresh();
     assert.equal((await request(web("/api/auth/email/request", { email: "other@example.invalid" }))).status, 200);
     const otherCode = lastCode();
     assert.equal((await verify(web("/api/auth/email/verify", { email: "other@example.invalid", code: otherCode }))).status, 200);
@@ -223,7 +227,7 @@ async function main() {
     assert.equal(await count("SELECT count(*)::int n FROM auth_users WHERE email='other@example.invalid'"), 1);
 
     // Two verifications of one code race: exactly one session is created.
-    fresh();
+    await fresh();
     assert.equal((await request(web("/api/auth/email/request", { email: "race@example.invalid" }))).status, 200);
     const raceCode = lastCode();
     const raced = await Promise.all([
@@ -233,7 +237,7 @@ async function main() {
     assert.deepEqual(raced.map(r => r.status).sort(), [200, 400]);
 
     // A cookie-minting request must be same-origin.
-    fresh();
+    await fresh();
     assert.equal((await request(web("/api/auth/email/request", { email: "csrf@example.invalid" }))).status, 200);
     const csrfCode = lastCode();
     assert.equal((await verify(web("/api/auth/email/verify", { email: "csrf@example.invalid", code: csrfCode }, { origin: "" }))).status, 403);
@@ -242,7 +246,7 @@ async function main() {
 
     // The phone gets a normal bearer session. A wrong code is a 400, never a 401,
     // because the app treats 401 as an ended session and would clear its token.
-    fresh();
+    await fresh();
     assert.equal((await request(web("/api/auth/email/request", { email: "phone@example.invalid" }))).status, 200);
     const phoneCode = lastCode();
     assert.equal((await mobileVerify(mobile({ email: "phone@example.invalid", code: wrongCodeFor(phoneCode) }))).status, 400);
@@ -253,20 +257,20 @@ async function main() {
     assert.equal((await client.query("SELECT kind FROM auth_sessions WHERE token_hash=$1", [sessionHash(phoneBody.token)])).rows[0].kind, "mobile");
 
     // Unknown and known addresses get byte-identical answers.
-    fresh();
+    await fresh();
     const unknownBody = await (await request(web("/api/auth/email/request", { email: "nobody@example.invalid" }))).json();
     const knownBody = await (await request(web("/api/auth/email/request", { email: "phone@example.invalid" }))).json();
     assert.deepEqual(knownBody, unknownBody);
 
     // Request throttling: the sixth request for one address sends nothing more.
-    fresh();
+    await fresh();
     for (let i = 0; i < 5; i++) assert.equal((await request(web("/api/auth/email/request", { email: "throttle@example.invalid" }))).status, 200);
     assert.equal(emailOutbox().length, 5);
     assert.equal((await request(web("/api/auth/email/request", { email: "throttle@example.invalid" }))).status, 200);
     assert.equal(emailOutbox().length, 5);
 
     // The transport itself refuses to spam one recipient.
-    fresh();
+    await fresh();
     for (let i = 0; i < 5; i++) await sendEmail({ to: "transport@example.invalid", subject: "Test", text: "Synthetic" });
     await assert.rejects(
       sendEmail({ to: "transport@example.invalid", subject: "Test", text: "Synthetic" }),
@@ -274,12 +278,12 @@ async function main() {
     );
 
     // A malformed address is rejected before anything is stored or sent.
-    fresh();
+    await fresh();
     assert.equal((await request(web("/api/auth/email/request", { email: "not-an-address" }))).status, 400);
     assert.equal(emailOutbox().length, 0);
 
     // Missing configuration fails closed with a clear message, without touching the body.
-    fresh();
+    await fresh();
     (process.env as Record<string, string | undefined>).NODE_ENV = "production";
     assert.equal((await request(web("/api/auth/email/request", { email: "config@example.invalid" }))).status, 503);
     assert.equal((await mobileVerify(mobile({ email: "config@example.invalid", code: "123456" }))).status, 503);
@@ -296,7 +300,7 @@ async function main() {
     delete process.env.EMAIL_FROM;
 
     // The code never reaches a log line.
-    fresh();
+    await fresh();
     const logs: string[] = [];
     const original = { log: console.log, info: console.info, error: console.error };
     console.log = (...args: unknown[]) => { logs.push(args.map(String).join(" ")); };
@@ -315,6 +319,7 @@ async function main() {
       console.info = original.info;
       console.error = original.error;
     }
+    await flushSignInAlerts();
   });
 
   (process.env as Record<string, string | undefined>).NODE_ENV = savedNodeEnv;

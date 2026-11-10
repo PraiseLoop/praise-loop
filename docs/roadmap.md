@@ -20,7 +20,9 @@ Built and on `master`:
 - **Core pipeline:** review import (CSV, Apify fetch, Google Takeout file), quote selection,
   weekly generation with quotas, rendered images, approval queue, draft lifecycle.
 - **Accounts:** Google, email-code, Microsoft sign-in; mobile bearer sessions; account
-  deletion; invite-only sign-up gate (`SIGNUP_MODE`, `INVITED_EMAILS`, #195).
+  deletion; invite-only sign-up gate (`SIGNUP_MODE`, `INVITED_EMAILS`, #195); a
+  best-effort new-sign-in alert email with a per-owner/per-method rate limit (#260).
+  A "sign out of all devices" action is **not** built (follow-up from #260).
 - **Billing:** plans, entitlements, Stripe checkout, webhook and portal (test mode works
   end to end on dev), Business tier, paid automatic posting.
 - **Posting:** Buffer (draft mode only so far) and direct Instagram/Facebook: connect
@@ -42,7 +44,7 @@ Take the first item that is not blocked. Each is one PR per issue (see CONTRIBUT
    - #274 post approved drafts from the phone browser through the share sheet
    - #275 weekly "your posts are ready" email (replaces push during validation)
    - #276 every owner screen works at phone width
-2. **In flight from the 2026-11-09 batch:** #260 sign-in alert email, #92 web Sign in with
+2. **In flight from the 2026-11-09 batch:** #92 web Sign in with
    Apple (code only; owner setup is parked in #268), #86 component tests for the native queue,
    then #159 email and password sign-in (approved by
    the owner 2026-11-09; start after #260 merges because both change sign-in).
@@ -77,7 +79,7 @@ The full ordered list with steps and costs is **#271**. In short:
 - **Deployment of the invite gate:** `SIGNUP_MODE=invite` and `INVITED_EMAILS=...` must be set
   on every environment that should be gated (dev stack and production). The default is
   `open`, so nothing is gated until they are set. Redeploy with an image pull after each
-  merge to `master`; migrations run on start (latest at time of writing: `029`).
+  merge to `master`; migrations run on start (latest at time of writing: `030`).
 - **Housekeeping on the dev stack:** delete the old Stripe dashboard webhook endpoint for
   `dev.praiseloop.ca` (it causes 403s; the CLI forwarder replaces it), and regenerate any
   Dockhand webhook secret that was ever pasted into a chat.
