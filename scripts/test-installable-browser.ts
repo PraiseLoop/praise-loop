@@ -98,7 +98,8 @@ async function main() {
         const context = await browser.newContext({ userAgent: IPHONE_UA, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
         const page = await context.newPage();
         await page.goto(`${base}/approval`);
-        await page.getByText("Sign in to see your posts").waitFor();
+        // A signed-out /approval sends the visitor to the landing sign-in page.
+        await page.getByRole("button", { name: /Continue with Google/ }).first().waitFor();
         assert.equal(await page.getByText("Add PraiseLoop to your home screen").count(), 0, "signed-out visitors are not asked to install");
       } finally { await browser.close(); }
     });
