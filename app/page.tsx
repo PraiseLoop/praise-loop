@@ -39,13 +39,18 @@ export default function HomePage() {
     const inviteOnly = new URLSearchParams(window.location.search).get("error") === "invite_only";
     setNotice({ message: inviteOnly ? INVITE_ONLY_MESSAGE : fromSession.message, callbackUrl: fromSession.callbackUrl });
   }, []);
-  // Microsoft is optional like Google: only offer it when the server has its
-  // client configured, which NextAuth reports in its provider list.
+  // Microsoft and Apple are optional like Google: only offer them when the server
+  // has their client configured, which NextAuth reports in its provider list.
   const [microsoftReady, setMicrosoftReady] = useState(false);
+  const [appleReady, setAppleReady] = useState(false);
   useEffect(() => {
     let cancelled = false;
     getProviders()
-      .then(providers => { if (!cancelled) setMicrosoftReady(!!providers?.["azure-ad"]); })
+      .then(providers => {
+        if (cancelled) return;
+        setMicrosoftReady(!!providers?.["azure-ad"]);
+        setAppleReady(!!providers?.apple);
+      })
       .catch(() => { /* The Google and email options still work. */ });
     return () => { cancelled = true; };
   }, []);
@@ -163,6 +168,11 @@ export default function HomePage() {
             <button type="button" className="pl-btn pl-btn-dark pl-btn-lg" onClick={() => signIn("google", { callbackUrl: notice.callbackUrl ?? "/approval" })} disabled={status === "loading" || status === "ready"}>
               Continue with Google
             </button>
+            {appleReady ? (
+              <button type="button" className="pl-btn pl-btn-dark pl-btn-lg" onClick={() => signIn("apple", { callbackUrl: notice.callbackUrl ?? "/approval" })} disabled={status === "loading" || status === "ready"}>
+                Continue with Apple
+              </button>
+            ) : null}
             {microsoftReady ? (
               <button type="button" className="pl-btn pl-btn-dark pl-btn-lg" onClick={() => signIn("azure-ad", { callbackUrl: notice.callbackUrl ?? "/approval" })} disabled={status === "loading" || status === "ready"}>
                 Continue with Microsoft
