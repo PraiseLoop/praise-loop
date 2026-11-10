@@ -171,11 +171,26 @@ export default function DraftScreen() {
       applyUpdate(updated, next === "approved" ? "Approved. Post it whenever you're ready." : "Archived. It won't be posted.");
     } catch (error) {
       handleError(error);
-      setNotice({ tone: "danger", message: message(error, "Couldn't update this post.") });
+      // A stale version means this screen's snapshot is out of date, so fetch
+      // the current post before the owner retries. Keep the explanation after
+      // the reload clears the previous notice.
+      if (error instanceof ApiError && error.kind === "conflict") {
+        try {
+          const found = await fetchDraft();
+          if (!mounted.current) return;
+          applyFetched(found);
+        } catch (reloadError) {
+          if (!mounted.current) return;
+          handleError(reloadError);
+        }
+      }
+      if (mounted.current) {
+        setNotice({ tone: "danger", message: message(error, "Couldn't update this post.") });
+      }
     } finally {
       setBusy(null);
     }
-  }, [applyUpdate, busy, caption, draft, handleError, shareBusy]);
+  }, [applyFetched, applyUpdate, busy, caption, draft, fetchDraft, handleError, shareBusy]);
 
   // Asks the server for a fresh caption and image. The post is cleared and re-queued, so there is
   // nothing useful to show here: after the confirmation, go back to the queue, which reloads on
@@ -300,7 +315,7 @@ export default function DraftScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
-        <ActivityIndicator style={styles.loading} />
+        <ActivityIndicator style={styles.loading} accessibilityLabel="Loading this post" />
       </SafeAreaView>
     );
   }

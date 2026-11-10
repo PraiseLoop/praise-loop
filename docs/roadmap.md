@@ -32,7 +32,8 @@ Built and on `master`:
   posting connection.
 - **Phone app (native, parked):** sign-in (Google, email code, Microsoft, Apple), weekly
   queue, share-sheet posting, push registration, profile. Built and tested with mocks; never run
-  on a device. Parked under the web-first strategy.
+  on a device. Parked under the web-first strategy. Queue and draft
+  screens have React Native Testing Library component tests (#86).
 - **Dev environment:** Dockhand stacks, Stripe CLI forwarder, supervised draft-mode test
   guide in [development.md](development.md).
 
@@ -45,7 +46,7 @@ Take the first item that is not blocked. Each is one PR per issue (see CONTRIBUT
    - #274 post approved drafts from the phone browser through the share sheet
    - #275 weekly "your posts are ready" email (replaces push during validation)
    - #276 every owner screen works at phone width
-2. **In flight from the 2026-11-09 batch:** #86 component tests for the native queue, then #159 email and password sign-in (approved by
+2. **In flight from the 2026-11-09 batch:** #159 email and password sign-in (approved by
    the owner 2026-11-09; start after #260 merges because both change sign-in).
 3. **#234 remaining:** decide whether to remove Buffer **after** the Meta live test passes.
    Until then Buffer is the only automatic posting route and stays fully available (plan and
