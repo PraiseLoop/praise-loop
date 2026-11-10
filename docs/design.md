@@ -4,7 +4,7 @@
 who are about to change it. It summarises and links; the detailed, authoritative text lives in the
 other docs. When you change behaviour, update the detailed doc and the matching line here.
 
-Last reviewed: 2026-11-10 (email and password sign-in, #159; phone-width owner screens, #276; weekly "posts ready" email, #275; web Sign in with Apple, #92; new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
+Last reviewed: 2026-11-10 (sign out of all other devices, #285; email and password sign-in, #159; phone-width owner screens, #276; weekly "posts ready" email, #275; web Sign in with Apple, #92; new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
 
 | Doc | What it is the source of truth for |
 | --- | --- |
@@ -186,8 +186,8 @@ transactional.
 Server-rendered shell (`app/AppShell.tsx`) holding the session, businesses and profile in context.
 Sign-in options: Google, Apple and Microsoft (when configured), email code, email and password
 (#159, with create-account, forgot-password and `/reset-password`), dev demo owners. Profile menu
-with name editing, plan and usage page, sign-in methods list (link/unlink), password change, delete
-account.
+with name editing, plan and usage page, sign-in methods list (link/unlink), password change, sign out
+of all other devices (step-up confirmed, #285), delete account.
 Sharing (web): an approved draft posts through the Web Share API from the approval queue, with the
 same download-and-copy fallback and "Did you post it?" confirmation as the phone (#274).
 

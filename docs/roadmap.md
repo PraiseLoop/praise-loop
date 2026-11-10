@@ -5,7 +5,7 @@ promise: the GitHub issues are the source of truth for scope and acceptance crit
 and this file says which ones to take, in what order, and what is waiting on the owner.
 **Update it in the same PR that finishes or reshapes an item** (see the last section).
 
-Last updated: 2026-11-10 (after the web-first batch). Trackers: #225 (billing and the paid pilot), #271 (owner
+Last updated: 2026-11-10 (sign out of all other devices, #285). Trackers: #225 (billing and the paid pilot), #271 (owner
 approvals, order and costs), #99 (native app, parked).
 
 **Current strategy: validate on the web first, for $0** (decided 2026-11-10, see
@@ -23,9 +23,9 @@ Built and on `master`:
   the phone and the web (web needs owner keys, #268); mobile bearer sessions; account deletion;
   invite-only sign-up gate (`SIGNUP_MODE`, `INVITED_EMAILS`, #195); password reset and change
   with session invalidation (#159); a best-effort new-sign-in alert email with a
-  per-owner/per-method rate limit (#260); and a weekly "your posts are ready" email per business
-  with an account opt-out (#275). A "sign out of all devices" action is **not** built
-  (follow-up from #260).
+  per-owner/per-method rate limit (#260); "Sign out of all other devices" on `/account`
+  with step-up confirmation (#285); and a weekly "your posts are ready" email per business
+  with an account opt-out (#275).
 - **Billing:** plans, entitlements, Stripe checkout, webhook and portal (test mode works
   end to end on dev), Business tier, paid automatic posting.
 - **Posting:** Buffer (draft mode only so far) and direct Instagram/Facebook: connect
@@ -53,22 +53,20 @@ Built and on `master`:
 
 Take the first item that is not blocked. Each is one PR per issue (see CONTRIBUTING.md).
 
-1. **#285 sign out of all devices** from the account page (follow-up from the #260 alert
-   email, which currently has nothing to point the owner at). Next code item.
-2. **#286 password follow-ups:** a signed-in "set a password" action and an optional
+1. **#286 password follow-ups:** a signed-in "set a password" action and an optional
    breached-password check (post-MVP). Phone UI for password sign-in is parked with the
    native app; the bearer route exists.
-3. **#234 remaining:** decide whether to remove Buffer **after** the Meta live test passes.
+2. **#234 remaining:** decide whether to remove Buffer **after** the Meta live test passes.
    Until then Buffer is the only automatic posting route and stays fully available (plan and
    account copy is already provider-neutral, #258). The live
    connect and publish test is **blocked** on #263 (Meta verification and App Review).
-4. **#29 real scheduler** and **#46 Google Business Profile sync:** blocked on owner access
+3. **#29 real scheduler** and **#46 Google Business Profile sync:** blocked on owner access
    (#264). Do not start without the owner confirming access exists.
-5. **Parked until the web pilot is validated:** the native app's device checks and store
+4. **Parked until the web pilot is validated:** the native app's device checks and store
    release (#85, #86, #87, #89 device runs; #270), #95 store subscriptions, and every paid
    approval (#265 Apple, #266 Google Play). The native code stays on `master` and keeps passing
    CI; don't add native-only features.
-6. **#98 move production to a VPS** and **#96 AI review replies:** post-MVP.
+5. **#98 move production to a VPS** and **#96 AI review replies:** post-MVP.
 
 ## Owner tasks (agents do not do these)
 

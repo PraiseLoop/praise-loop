@@ -865,14 +865,45 @@ It contains no code, token, IP address or geolocation, and links to `/account`.
 - **Rate limit.** Migration `030_sign_in_alerts.sql` adds one row per owner and
   method; at most one alert per method is sent to that owner every ten minutes,
   across restarts and replicas. It is deleted with the account.
-- **No "sign out of all devices" action.** The email asks the owner to review
-  `/account` and contact the operator; a one-action sign-out everywhere is a
-  follow-up in the issue/PR.
+- **Sign out of all other devices.** The email tells the owner to use the action
+  on `/account` when a sign-in was not them; see
+  [Sign out of all other devices (#285)](#sign-out-of-all-other-devices-285).
 
 `scripts/test-signin-alerts.ts` covers each web and phone path, refresh silence,
 verified recipients, the limit and concurrent sign-ins, and a failed send that
 leaves the session working. Rollback: drop `sign_in_alerts`; sign-in and sessions
 are unaffected. No existing row is rewritten by the migration.
+
+## Sign out of all other devices (#285)
+
+`/account` has a **Sign out of all other devices** button in the sign-in methods
+section. It asks for a fresh step-up code with the shared `StepUpCodeForm`, then
+calls `DELETE /api/account/sessions`. The server removes every `auth_sessions`
+row for the signed-in owner except the current one and answers
+`{"ok":true,"revoked":N}`; the page shows "Signed out N other session(s)". Both
+web and phone (bearer) sessions are in the same table, so one action covers both
+kinds. The current device stays signed in.
+
+- **Step-up is required.** The route calls `requireRecentStepUp()` before the
+  delete, exactly like billing changes (#221). Without a code it is
+  `403 {"error":"step_up_required"}`; an owner with no email address follows
+  the recent-session fallback. Anonymous requests are `401`.
+- **No token reaches the response or a log.** The current session's token is
+  hashed with the same helper used for session lookup; the response carries only
+  the count, and the tests capture the logs to prove no raw token appears.
+- **Push tokens stay.** `device_push_tokens` is owner-level, not session-level,
+  so ending other sessions does not unregister the owner's devices. The phone
+  still unregisters on its own sign-out and Expo's `DeviceNotRegistered` cleanup
+  removes dead tokens.
+- **Phone width.** The action uses the standard 44px `.pl-btn`, so it follows
+  the #276 rules already checked at 360×800 and 390×844.
+
+`scripts/test-sign-out-all.ts` covers a cookie caller and a bearer caller, the
+step-up requirement, only other sessions being removed (web and mobile), the
+current session surviving, another owner's sessions remaining, anonymous `401`,
+the repeat run, the untouched push token and the logs. No migration is needed.
+Rollback: remove the route and button; `auth_sessions` is untouched by the code
+otherwise.
 
 ## Email and password (#159)
 

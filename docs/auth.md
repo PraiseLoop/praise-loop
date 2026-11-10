@@ -641,8 +641,8 @@ risk in [decisions.md](decisions.md); it does not stop whoever holds the mailbox
   method with the last send time. The insert/upsert allows at most one alert per method per owner per
   ten minutes, survives restarts and is shared by replicas. The row cascades away when the account is
   deleted.
-- **No "sign out of all devices" action exists**, so the email does not claim one. Review the account
-  and contact the operator; a one-action sign-out everywhere is a follow-up.
+- **Sign out of all other devices.** The email tells the owner to use the action on `/account` when a
+  sign-in was not them; see the next section.
 - **Tests.** `scripts/test-signin-alerts.ts` covers the template and User-Agent description, each web
   and phone sign-in path, no alert on refresh, verified-recipient selection, the ten-minute limit
   (including concurrent sign-ins), and a failed send that leaves the session working and logs no
@@ -677,11 +677,40 @@ strong protection: whoever holds the mailbox can also receive the step-up code.
 - Owners with no `auth_users.email` (for example Apple or Microsoft owners) cannot receive a
   code. They pass only while their session's `created_at` is under ten minutes old; otherwise
   the request route and helper answer `403 { "error": "sign_in_again" }`, and verify does too.
-- The reusable web form is `app/ui/StepUpCodeForm.tsx`; no page uses it yet. Neither the code nor
-  the address is logged. `scripts/test-step-up.ts` covers correct, wrong, expired and exhausted
+- The reusable web form is `app/ui/StepUpCodeForm.tsx`; `BillingActions` and
+  `SignOutOtherDevices` use it. Neither the code nor the address is logged.
+  `scripts/test-step-up.ts` covers correct, wrong, expired and exhausted
   codes, throttling, another owner's code, the two purposes not being interchangeable, the
   ten-minute expiry, another session not being marked, sign-out, the no-address fallback and
   anonymous requests.
+
+## Sign out of all other devices (#285)
+
+`DELETE /api/account/sessions` is owner-wide (listed in `OWNER_WIDE_PATHS`) and works with both the
+NextAuth cookie and a mobile bearer session. It requires a fresh step-up through
+`requireRecentStepUp()` first, exactly like billing changes (#221): a missing or stale step-up is
+`403 {"error":"step_up_required"}`, and an owner with no address follows the same recent-session
+fallback (`403 {"error":"sign_in_again"}`). Anonymous requests are `401`.
+
+On success `revokeOtherSessions` in `lib/accountSessions.ts` deletes every `auth_sessions` row for the
+owner **except the one that made the request**, and the response is
+`200 {"ok":true,"revoked":N}`. Both kinds are covered by the one table: web and mobile bearer sessions
+are rows with `kind='web'` or `kind='mobile'`, so no second code path is needed. The current token is
+hashed with the same SHA-256 helper the session lookup uses; the raw token is never sent to SQL as an
+identifier, logged or returned. Repeating the request after the other sessions are gone is `200` with
+`revoked: 0`.
+
+`device_push_tokens` is owner-level (`owner_id`), not tied to a session, so push registrations are
+deliberately left in place. The owner's own device keeps receiving "posts ready" notifications; a
+device the owner no longer controls is already covered by the phone's unregister-on-sign-out path and
+by Expo's `DeviceNotRegistered` cleanup.
+
+The web action lives in `app/account/SignOutOtherDevices.tsx` inside the sign-in methods section on
+`/account`. It mounts the shared `StepUpCodeForm` before calling the route and shows
+"Signed out N other session(s)". The button is a 44px `.pl-btn`, so it follows the phone-width rules
+(#276). `scripts/test-sign-out-all.ts` covers the cookie and bearer paths, both session kinds, the
+current session surviving, another owner's sessions, the step-up requirement, anonymous `401`,
+no token in logs, the owner-level push token and a repeat run. No migration was needed.
 
 Push tokens (#88): `POST /api/mobile/push-tokens` (`{token, platform}`) registers or refreshes
 the signed-in owner's Expo push token and `DELETE` (`{token}`) removes it on sign-out; a
