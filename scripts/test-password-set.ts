@@ -32,7 +32,8 @@ const TAKEN_PASSWORD = "synthetic-set-password-taken-286";
 
 function sha1(value: string) {
   // The range protocol is SHA-1 based; this only builds synthetic test input.
-  return createHash("sha1").update(value, "utf8").digest("hex").toUpperCase(); // codeql[js/insufficient-password-hash]
+  // codeql[js/insufficient-password-hash]
+  return createHash("sha1").update(value, "utf8").digest("hex").toUpperCase();
 }
 
 /** A fake range response: the target password's suffix has a positive count. */
