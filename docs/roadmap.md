@@ -31,7 +31,8 @@ Take the first item that is not blocked. Each is one PR per issue (see CONTRIBUT
 
 1. **#234 remaining slices** (direct Instagram/Facebook publishing):
    - Remove Buffer from onboarding copy and the setup pages, then decide whether to remove
-     Buffer altogether. Buffer stays working until that decision.
+     Buffer altogether. This waits on the Meta live test. Until direct publishing works,
+     Buffer is the only working automatic posting route and stays available to new owners.
    - Live connect and publish test on the owner's own accounts. **Blocked** on the owner
      (Meta app, Business Verification, App Review). Mark as not run until then.
 2. **#29 real scheduler** and **#46 Google Business Profile sync:** blocked on owner access
