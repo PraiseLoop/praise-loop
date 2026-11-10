@@ -1,7 +1,23 @@
 "use client";
 import { useEffect, useState } from "react";
+import { apiFetch } from "../apiFetch";
 import Icon from "../ui/Icon";
 import { postingView } from "../../lib/posting/postingView";
+import {
+  confirmShared,
+  declineShared,
+  fallbackCopy,
+  fallbackDownload,
+  FALLBACK_HINT,
+  markShared,
+  PASTE_HINT,
+  prepareShare,
+  SHARED_HINT,
+  type ShareImage,
+  type ShareOutcome,
+  type WebShareDeps,
+  type WebShareState
+} from "../../lib/posting/webShare";
 
 export type Draft = {
   id: number; version: number;
@@ -19,7 +35,12 @@ export type Draft = {
 };
 
 export type Stage = "making" | "failed" | "ready" | "approved" | "scheduled" | "shared" | "archived";
-export type Action = (path: string, draft: Draft, extra?: Record<string, unknown>) => Promise<boolean>;
+export type RunResult = {
+  ok: boolean;
+  status: number;
+  data: { draft?: Draft; error?: string; message?: string; [key: string]: unknown };
+};
+export type Action = (path: string, draft: Draft, extra?: Record<string, unknown>) => Promise<RunResult>;
 
 export function stageOf(draft: Draft): Stage {
   if (draft.status === "archived") return "archived";
@@ -73,8 +94,143 @@ export default function PostCard({ draft, run, busy }: { draft: Draft; run: Acti
   const [badgeClass, badgeText] = badges[stage];
   const posting = postingView(draft);
 
+  // Web Share API (#274). The PNG is fetched as soon as an approved card
+  // renders so the Post button can call navigator.share immediately on click;
+  // iOS Safari rejects a share that happens after a long await.
+  const [shareSupported, setShareSupported] = useState<boolean | null>(null);
+  const [shareState, setShareState] = useState<WebShareState>({ step: "idle" });
+  const [shareImage, setShareImage] = useState<ShareImage | null>(null);
+  const [imageLoading, setImageLoading] = useState(false);
+  const [prefetchAttempt, setPrefetchAttempt] = useState(0);
+  const [sharing, setSharing] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (typeof navigator === "undefined" || typeof navigator.canShare !== "function" || typeof navigator.share !== "function") {
+        setShareSupported(false);
+        return;
+      }
+      const probe = new File([new Blob([""], { type: "image/png" })], "probe.png", { type: "image/png" });
+      setShareSupported(navigator.canShare({ files: [probe] }));
+    } catch {
+      setShareSupported(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!shareSupported || stage !== "approved" || !draft.image_path) {
+      setShareImage(null);
+      setImageLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setImageLoading(true);
+    apiFetch(draft.image_path)
+      .then(async response => {
+        if (!response.ok) throw new Error("image");
+        return response.blob();
+      })
+      .then(blob => { if (!cancelled) setShareImage({ blob, filename: `praiseloop-${draft.id}.png` }); })
+      .catch(() => { if (!cancelled) setShareImage(null); })
+      .finally(() => { if (!cancelled) setImageLoading(false); });
+    return () => { cancelled = true; };
+  }, [shareSupported, stage, draft.id, draft.image_path, draft.version, prefetchAttempt]);
+
+  // A version change means the draft moved on (or was edited elsewhere): the
+  // confirmation question is about the old version, so start over.
+  useEffect(() => { setShareState({ step: "idle" }); }, [draft.version, draft.status]);
+
+  const shareDeps: WebShareDeps = {
+    canShare: () => shareSupported === true,
+    loadImage: async () => {
+      if (!shareImage) throw new Error("image not ready");
+      return shareImage;
+    },
+    copyCaption: async text => {
+      if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(text);
+    },
+    share: async (item): Promise<ShareOutcome> => {
+      const file = new File([item.blob], item.filename, { type: "image/png" });
+      try {
+        await navigator.share({ files: [file] });
+        return "shared";
+      } catch (error) {
+        // AbortError is the owner closing the sheet; anything else is a failure.
+        if (typeof error === "object" && error !== null && (error as { name?: string }).name === "AbortError") return "cancelled";
+        throw error;
+      }
+    },
+    downloadImage: async item => {
+      if (!item.image_path) throw new Error("no image");
+      const response = await apiFetch(item.image_path);
+      if (!response.ok) throw new Error("download");
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `praiseloop-${item.id}.png`;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    },
+    markShared: async item => {
+      const result = await run("/api/drafts/status", { ...draft, ...item }, { status: "shared" });
+      if (result.ok) return { ok: true, draft: result.data.draft ?? { ...item, status: "shared" } };
+      if (result.status === 409) return { ok: false, reason: "conflict" };
+      if (result.status === 401) return { ok: false, reason: "signedOut" };
+      return { ok: false, reason: "generic" };
+    }
+  };
+
+  async function startShare() {
+    setSharing(true);
+    setShareState({ step: "preparing" });
+    try {
+      setShareState(await prepareShare(draft, shareDeps));
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  async function answerPosted() {
+    setSharing(true);
+    try {
+      setShareState(await confirmShared(shareState, shareDeps));
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  async function downloadFallback() {
+    setSharing(true);
+    try {
+      setShareState(await fallbackDownload(draft, shareDeps));
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  async function copyFallback() {
+    setSharing(true);
+    try {
+      setShareState(await fallbackCopy(draft, shareDeps));
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  async function markFallbackPosted() {
+    setSharing(true);
+    try {
+      setShareState(await markShared(draft, shareDeps));
+    } finally {
+      setSharing(false);
+    }
+  }
+
   async function saveCaption() {
-    if (await run("/api/drafts/caption", draft, { captionText: caption })) setEditing(false);
+    if ((await run("/api/drafts/caption", draft, { captionText: caption })).ok) setEditing(false);
   }
 
   return (
@@ -122,6 +278,46 @@ export default function PostCard({ draft, run, busy }: { draft: Draft; run: Acti
             <p className="pl-caption-text"><strong>{posting.headline}</strong></p>
             {posting.detail ? <p className="pl-small pl-muted">{posting.detail}</p> : null}
             {posting.link ? <p className="pl-small"><a href={posting.link} target="_blank" rel="noreferrer">See the post</a></p> : null}
+          </div>
+        ) : null}
+
+        {stage === "approved" && shareSupported !== null ? (
+          <div role="group" aria-label="Post this draft">
+            {shareState.step === "confirm" ? (
+              <>
+                <p className="pl-caption-text"><strong>Did you post it?</strong></p>
+                <p className="pl-small pl-muted">{SHARED_HINT}</p>
+                <div className="pl-card-actions">
+                  <button type="button" className="pl-btn pl-btn-primary pl-grow" disabled={busy || sharing} onClick={() => void answerPosted()}>Yes, I posted it</button>
+                  <button type="button" className="pl-btn" disabled={busy || sharing} onClick={() => setShareState(declineShared())}>No, not yet</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="pl-small pl-muted">{shareSupported ? PASTE_HINT : FALLBACK_HINT}</p>
+                {shareState.step === "error" ? <p className="pl-small pl-error" role="status">{shareState.message}</p> : null}
+                {shareState.step === "fallback" && shareState.notice ? <p className="pl-small" role="status">{shareState.notice}</p> : null}
+                {shareState.step === "done" ? <p className="pl-small" role="status">Marked as posted.</p> : null}
+                <div className="pl-card-actions">
+                  {shareSupported ? (
+                    <>
+                      <button type="button" className="pl-btn pl-btn-primary pl-grow" disabled={busy || sharing || !shareImage} onClick={() => void startShare()}>
+                        {imageLoading ? "Getting the image ready…" : "Post"}
+                      </button>
+                      {!shareImage && !imageLoading ? (
+                        <button type="button" className="pl-btn" disabled={busy || sharing} onClick={() => setPrefetchAttempt(n => n + 1)}>Try loading the image again</button>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <button type="button" className="pl-btn pl-grow" disabled={busy || sharing} onClick={() => void downloadFallback()}>Download image</button>
+                      <button type="button" className="pl-btn pl-grow" disabled={busy || sharing} onClick={() => void copyFallback()}>Copy caption</button>
+                      <button type="button" className="pl-btn pl-btn-primary pl-grow" disabled={busy || sharing} onClick={() => void markFallbackPosted()}>Mark as posted</button>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         ) : null}
 

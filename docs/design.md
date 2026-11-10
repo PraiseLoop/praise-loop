@@ -182,6 +182,8 @@ transactional.
 Server-rendered shell (`app/AppShell.tsx`) holding the session, businesses and profile in context.
 Sign-in options: Google, Apple and Microsoft (when configured), email code, dev demo owners. Profile menu with
 name editing, plan and usage page, sign-in methods list (link/unlink), delete account.
+Sharing (web): an approved draft posts through the Web Share API from the approval queue, with the
+same download-and-copy fallback and "Did you post it?" confirmation as the phone (#274).
 
 ### Phone (`mobile/`)
 Expo Router screens: `sign-in`, `queue`, `draft/[id]`, `profile`. Design rules that matter:

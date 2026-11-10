@@ -554,6 +554,43 @@ with Chromium installed (`CHROMIUM_PATH` defaults to /usr/bin/chromium). Uses sy
 sessions and fixtures only, with no external AI/social calls. Rollback requires
 stopping writes first; retain audit events, revision columns, and immutable media.
 
+## Posting from the web approval queue (#274)
+
+An approved draft on the web approval queue can be posted from the phone's browser
+without the phone app, Buffer or a Meta integration. The rules mirror the phone
+share flow (#87); the pure module is `lib/posting/webShare.ts` and the card wiring
+is in `app/approval/PostCard.tsx`.
+
+- **Share supported.** When `navigator.canShare({ files })` is true, the card
+  prefetches the owner-protected PNG from `/api/media/<name>` as it renders, then
+  **Post** copies the caption and calls `navigator.share({ files })` directly from
+  the click. The prefetch matters: iOS Safari rejects a share made after a long
+  await because the tap's user activation has expired. The hint says "Caption
+  copied — paste it in Instagram" because Instagram ignores caption text from
+  another app; the browser sends the image only.
+- **Fallback.** When file sharing is unavailable (most desktop browsers), the card
+  shows **Download image**, **Copy caption** and **Mark as posted** instead. The
+  fallback uses the same owner-protected media route; nothing is made public.
+- **Confirm.** After the sheet closes, the owner answers "Did you post it?". Yes
+  sends the card's `version` to the existing `POST /api/drafts/status` with
+  `status: "shared"`; a 409 reloads the queue with the existing "changed
+  somewhere else" message. No records nothing, and a dismissed sheet (`AbortError`)
+  returns to idle without asking. Posting is never inferred from the share result;
+  the server keeps `shared` as owner-reported (`owner_shared` audit event), never
+  verified.
+- **Tests.** `scripts/test-web-share.ts` covers supported and unsupported sharing,
+  image-load and clipboard failures, a cancelled share, yes/no, the fallback
+  actions and a version conflict.
+  `scripts/test-web-share-browser.ts` forces the fallback in Chromium, checks the
+  caption actually reaches the clipboard, downloads the image, then marks the
+  draft shared and checks the database and audit event. No external provider is
+  called.
+- **Manual check still pending:** posting on iPhone Safari and Android Chrome
+  with Instagram and Facebook installed, recording what each app does with the
+  image and caption. Mark it not run until the owner does it.
+- **Rollback:** remove the share panel from the card and the two test suites. No
+  schema or route change is involved; the `shared` status predates this feature.
+
 ## Plans and entitlements (#94)
 
 An owner's effective plan is `free` (the default), `pro` or `business`. The

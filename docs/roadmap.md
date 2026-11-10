@@ -29,7 +29,9 @@ Built and on `master`:
 - **Posting:** Buffer (draft mode only so far) and direct Instagram/Facebook: connect
   backend, worker publishing with a resumable Instagram flow and a JPEG variant, token-aware
   needs-reconnect marking, and the setup UI on `/connections`. Onboarding no longer requires a
-  posting connection.
+  posting connection. Approved drafts also post from the phone browser through the Web Share
+  API (#274): download + copy fallback on desktop, "Did you post it?" confirmation, and the
+  owner-reported `shared` status.
 - **Phone app (native, parked):** sign-in (Google, email code, Microsoft, Apple), weekly
   queue, share-sheet posting, push registration, profile. Built and tested with mocks; never run
   on a device. Parked under the web-first strategy. Queue and draft
@@ -43,7 +45,7 @@ Take the first item that is not blocked. Each is one PR per issue (see CONTRIBUT
 
 1. **Web-first validation** (the pilot runs on these):
    - #273 installable web app (manifest, icons, Add to Home Screen hint)
-   - #274 post approved drafts from the phone browser through the share sheet
+   - ~~#274 share-sheet posting from the phone browser~~ built (manual phone check open)
    - #275 weekly "your posts are ready" email (replaces push during validation)
    - #276 every owner screen works at phone width
 2. **In flight from the 2026-11-09 batch:** #159 email and password sign-in (approved by
@@ -72,6 +74,9 @@ The full ordered list with steps and costs is **#271**. In short:
 - **Parked until validated:** #261 individual/organization and D-U-N-S, #265 Apple ($99 USD
   a year), #266 Google Play ($25 USD once), #267 push credentials, #268 Sign in with Apple
   setup, #270 store listings and testing, #269 Microsoft publisher verification.
+- **#274 manual check:** on iPhone Safari and Android Chrome, with Instagram and Facebook
+  installed, post an approved draft through the web share sheet and note what each app does
+  with the image and caption. Mark as not run until then.
 - **#233 verification:** run a real Google Takeout export on an owned Business Profile and
   upload it. The parser was built against a *guessed* file format (documented in
   [integrations.md](integrations.md)); the issue stays open until a real file imports. Do not

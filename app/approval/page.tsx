@@ -63,15 +63,15 @@ export default function ThisWeekPage() {
           "/api/posting-slots/resolve": "Thanks — noted."
         };
         setMessage(path === "/api/drafts/status"
-          ? { approved: "Approved", archived: "Skipped. You can bring it back below.", draft: "Moved back to review" }[String(extra.status)] ?? "Saved"
+          ? { approved: "Approved", archived: "Skipped. You can bring it back below.", draft: "Moved back to review", shared: "Marked as posted." }[String(extra.status)] ?? "Saved"
           : done[path] ?? data.message ?? "Saved");
       } else {
         setMessage(data.error === "Draft changed; refresh and retry" ? conflict : data.error ?? "That didn’t work — try again");
       }
-      return response.ok;
+      return { ok: response.ok, status: response.status, data };
     } catch {
       setMessage("Connection problem — check your internet and try again");
-      return false;
+      return { ok: false, status: 0, data: {} };
     } finally {
       if (businessId) await load(businessId);
       setBusy(false);
