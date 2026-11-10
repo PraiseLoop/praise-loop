@@ -5,7 +5,13 @@ promise: the GitHub issues are the source of truth for scope and acceptance crit
 and this file says which ones to take, in what order, and what is waiting on the owner.
 **Update it in the same PR that finishes or reshapes an item** (see the last section).
 
-Last updated: 2026-11-09. Trackers: #225 (billing and the paid pilot), #99 (mobile plan).
+Last updated: 2026-11-10. Trackers: #225 (billing and the paid pilot), #271 (owner
+approvals, order and costs), #99 (native app, parked).
+
+**Current strategy: validate on the web first, for $0** (decided 2026-11-10, see
+[decisions.md](decisions.md) and [mobile-plan.md](mobile-plan.md)). Pilot owners use the web
+app on their phones. Nothing that costs money (Apple, Google Play) or only serves the native app
+is worked on until the web pilot shows owners use and pay for PraiseLoop.
 
 ## Where we are
 
@@ -21,7 +27,9 @@ Built and on `master`:
   backend, worker publishing with a resumable Instagram flow and a JPEG variant, token-aware
   needs-reconnect marking, and the setup UI on `/connections`. Onboarding no longer requires a
   posting connection.
-- **Phone app:** Expo scaffold, config gate, push registration server side.
+- **Phone app (native, parked):** sign-in (Google, email code, Microsoft, Apple), weekly
+  queue, share-sheet posting, push registration, profile. Built and tested with mocks; never run
+  on a device. Parked under the web-first strategy.
 - **Dev environment:** Dockhand stacks, Stripe CLI forwarder, supervised draft-mode test
   guide in [development.md](development.md).
 
@@ -29,28 +37,39 @@ Built and on `master`:
 
 Take the first item that is not blocked. Each is one PR per issue (see CONTRIBUTING.md).
 
-1. **#234 remaining slices** (direct Instagram/Facebook publishing):
-   - Remove Buffer from onboarding copy and the setup pages, then decide whether to remove
-     Buffer altogether. This waits on the Meta live test. Until direct publishing works,
-     Buffer is the only working automatic posting route and stays available to new owners.
-   - Live connect and publish test on the owner's own accounts. **Blocked** on the owner
-     (Meta app, Business Verification, App Review). Mark as not run until then.
-2. **#29 real scheduler** and **#46 Google Business Profile sync:** blocked on owner access
-   (#91). Do not start without the owner confirming access exists.
-3. **Mobile app, in this order:** #85 sign-in, #86 weekly approval queue, then #87 share
-   sheet, #89 notifications (app side). They depend on #91 (store accounts) for real device
-   testing, and on #90 (pilot hosting) for the pilot.
-4. **#92 Sign in with Apple:** after #91. Invite codes for Apple (so an invited person with a
-   private-relay address can join) are the follow-up recorded in [decisions.md](decisions.md).
-5. **#95 store subscriptions:** before a public App Store release, not before the pilot.
+1. **Web-first validation** (the pilot runs on these):
+   - #273 installable web app (manifest, icons, Add to Home Screen hint)
+   - #274 post approved drafts from the phone browser through the share sheet
+   - #275 weekly "your posts are ready" email (replaces push during validation)
+   - #276 every owner screen works at phone width
+2. **In flight from the 2026-11-09 batch:** #260 sign-in alert email, #92 web Sign in with
+   Apple (code only; owner setup is parked in #268), #86 component tests for the native queue,
+   then #159 email and password sign-in (approved by
+   the owner 2026-11-09; start after #260 merges because both change sign-in).
+3. **#234 remaining:** decide whether to remove Buffer **after** the Meta live test passes.
+   Until then Buffer is the only automatic posting route and stays fully available (plan and
+   account copy is already provider-neutral, #258). The live
+   connect and publish test is **blocked** on #263 (Meta verification and App Review).
+4. **#29 real scheduler** and **#46 Google Business Profile sync:** blocked on owner access
+   (#264). Do not start without the owner confirming access exists.
+5. **Parked until the web pilot is validated:** the native app's device checks and store
+   release (#85, #86, #87, #89 device runs; #270), #95 store subscriptions, and every paid
+   approval (#265 Apple, #266 Google Play). The native code stays on `master` and keeps passing
+   CI; don't add native-only features.
 6. **#98 move production to a VPS** and **#96 AI review replies:** post-MVP.
 
 ## Owner tasks (agents do not do these)
 
-- **#222** Stripe account, CAD product and tax setup (Business price stays unset until then).
-- **#91** App Store and Google Play accounts, Business Profile API access, privacy policy,
-  test distribution. **#78** Google OAuth for owner sign-in.
-- **Meta:** create the Meta app, Business Verification, App Review. Gate for the #234 live test.
+The full ordered list with steps and costs is **#271**. In short:
+
+- **Now (free, needed for the web pilot):** #262 privacy, terms and support pages; #78 last
+  Google sign-in check; #90 production hosting; the invite-gate env below.
+- **Optional during validation (free, slow):** #263 Meta verification and App Review (gate
+  for the #234 live test), #264 Google Business Profile API access, #222 Stripe account, CAD
+  product and tax setup (Business price stays unset until then).
+- **Parked until validated:** #261 individual/organization and D-U-N-S, #265 Apple ($99 USD
+  a year), #266 Google Play ($25 USD once), #267 push credentials, #268 Sign in with Apple
+  setup, #270 store listings and testing, #269 Microsoft publisher verification.
 - **#233 verification:** run a real Google Takeout export on an owned Business Profile and
   upload it. The parser was built against a *guessed* file format (documented in
   [integrations.md](integrations.md)); the issue stays open until a real file imports. Do not
