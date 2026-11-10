@@ -90,7 +90,7 @@ export default function PostingSlots({ businessId, approved, drafts, onAssigned 
       <section aria-labelledby="upcoming-h" className="pl-panel" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <h2 id="upcoming-h" className="pl-h2">Upcoming times</h2>
         {tiles.length ? (
-          <ol style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
+          <ol style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 220px), 1fr))", gap: 10 }}>
             {tiles.map(({ instant, draft }) => {
               const view = draft ? postingView(draft) : null;
               return (

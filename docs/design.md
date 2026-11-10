@@ -4,7 +4,7 @@
 who are about to change it. It summarises and links; the detailed, authoritative text lives in the
 other docs. When you change behaviour, update the detailed doc and the matching line here.
 
-Last reviewed: 2026-11-10 (weekly "posts ready" email, #275; web Sign in with Apple, #92; new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
+Last reviewed: 2026-11-10 (phone-width owner screens, #276; weekly "posts ready" email, #275; web Sign in with Apple, #92; new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
 
 | Doc | What it is the source of truth for |
 | --- | --- |
@@ -184,6 +184,12 @@ Sign-in options: Google, Apple and Microsoft (when configured), email code, dev 
 name editing, plan and usage page, sign-in methods list (link/unlink), delete account.
 Sharing (web): an approved draft posts through the Web Share API from the approval queue, with the
 same download-and-copy fallback and "Did you post it?" confirmation as the phone (#274).
+
+The web is validated as a phone app used in a browser (#271). At 760px and below the sidebar becomes
+a top bar plus a fixed bottom tab bar; every owner page must fit 360×800 and 390×844 without
+horizontal page scrolling, with controls at least 44px, 16px text fields (so iOS does not zoom) and
+enough bottom padding that the tab bar never covers content. The design system in `app/globals.css`
+owns those rules; `scripts/test-phone-width-browser.ts` walks the pages at both sizes (#276).
 
 ### Phone (`mobile/`)
 Expo Router screens: `sign-in`, `queue`, `draft/[id]`, `profile`. Design rules that matter:

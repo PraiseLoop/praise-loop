@@ -1,5 +1,8 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
+/* Keep the browser from inflating text on iOS when a phone rotates; the page is
+   already readable at 16px without zoom. */
+html { -webkit-text-size-adjust: 100%; }
 
 :root {
   --pl-ground: #F5F6F1;
@@ -18,7 +21,11 @@ html, body { margin: 0; padding: 0; }
   --pl-body: "Figtree", system-ui, sans-serif;
 }
 
-body { background: var(--pl-ground); color: var(--pl-ink); font-family: var(--pl-body); font-size: 16px; line-height: 1.45; }
+body { background: var(--pl-ground); color: var(--pl-ink); font-family: var(--pl-body); font-size: 16px; line-height: 1.45; overflow-wrap: break-word; }
+/* break-word keeps normal min-content sizing for buttons, headers and table cells.
+   Data values (emails, ids, URLs) may be one long unbroken string, so those may
+   break anywhere to fit a phone. */
+dd, .pl-break-anywhere { overflow-wrap: anywhere; }
 a { color: var(--pl-green); }
 a:hover { color: var(--pl-green-dark); }
 button, input, select, textarea { font: inherit; color: inherit; }
@@ -30,7 +37,7 @@ h1, h2, h3 { font-family: var(--pl-display); letter-spacing: -0.01em; }
 /* Stay viewport height and in view while the content column scrolls, instead of
    stretching to the full height of a long page. */
 .pl-sidebar { width: 248px; flex-shrink: 0; align-self: flex-start; position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 28px 20px; display: flex; flex-direction: column; gap: 28px; background: var(--pl-surface); border-right: 1px solid var(--pl-line); }
-.pl-brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; font-family: var(--pl-display); font-weight: 700; font-size: 21px; color: var(--pl-ink); text-decoration: none; }
+.pl-brand { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 8px; font-family: var(--pl-display); font-weight: 700; font-size: 21px; color: var(--pl-ink); text-decoration: none; }
 .pl-brand-mark { width: 36px; height: 36px; border-radius: 10px; background: var(--pl-green); color: #FFFFFF; display: inline-flex; align-items: center; justify-content: center; }
 .pl-nav { display: flex; flex-direction: column; gap: 4px; }
 .pl-nav a { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; color: var(--pl-ink); text-decoration: none; font-size: 15px; }
@@ -39,7 +46,7 @@ h1, h2, h3 { font-family: var(--pl-display); letter-spacing: -0.01em; }
 .pl-switcher { display: flex; flex-direction: column; gap: 6px; }
 .pl-switcher label { font-size: 12px; font-weight: 600; color: var(--pl-muted); padding: 0 4px; }
 .pl-account { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding: 0 8px; font-size: 13px; color: var(--pl-muted); }
-.pl-link-button { padding: 0; border: 0; background: none; color: var(--pl-green); font-weight: 600; cursor: pointer; text-align: left; min-height: 32px; }
+.pl-link-button { padding: 0; border: 0; background: none; color: var(--pl-green); font-weight: 600; cursor: pointer; text-align: left; min-height: 44px; }
 
 /* Profile menu (#150): avatar button, menu, and the inline name form. */
 .pl-profile { position: relative; }
@@ -54,7 +61,7 @@ h1, h2, h3 { font-family: var(--pl-display); letter-spacing: -0.01em; }
 .pl-profile-head strong { font-size: 15px; overflow-wrap: anywhere; }
 .pl-profile-head span { overflow-wrap: anywhere; }
 .pl-profile-items { display: flex; flex-direction: column; }
-.pl-profile-items a, .pl-profile-items button { display: flex; align-items: center; min-height: 40px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--pl-ink); font-size: 15px; font-weight: 500; text-align: left; text-decoration: none; cursor: pointer; }
+.pl-profile-items a, .pl-profile-items button { display: flex; align-items: center; min-height: 44px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--pl-ink); font-size: 15px; font-weight: 500; text-align: left; text-decoration: none; cursor: pointer; }
 .pl-profile-items a:hover, .pl-profile-items button:hover { background: var(--pl-ground); color: var(--pl-ink); }
 .pl-profile-signout { color: #A3361F !important; }
 .pl-profile-form { display: flex; flex-direction: column; gap: 10px; padding: 4px 4px 8px; }
@@ -101,6 +108,8 @@ h1, h2, h3 { font-family: var(--pl-display); letter-spacing: -0.01em; }
 .pl-title { margin: 0; font-size: clamp(32px, 4vw, 44px); line-height: 1.05; font-weight: 700; letter-spacing: -0.02em; }
 .pl-lede { margin: 0; font-size: 17px; line-height: 1.5; color: var(--pl-muted); }
 .pl-h2 { margin: 0; font-size: 22px; font-weight: 700; }
+/* A disclosure is a control: give it a full tap target wherever it appears. */
+summary { display: flex; align-items: center; gap: 6px; min-height: 44px; cursor: pointer; }
 .pl-muted { color: var(--pl-muted); }
 .pl-small { font-size: 13px; }
 
@@ -133,7 +142,7 @@ h1, h2, h3 { font-family: var(--pl-display); letter-spacing: -0.01em; }
 .pl-toast:empty { display: none; }
 
 /* Post cards */
-.pl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
+.pl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 24px; }
 .pl-card { display: flex; flex-direction: column; background: var(--pl-surface); border: 1px solid var(--pl-line); border-radius: 18px; overflow: hidden; }
 .pl-card-media { padding: 14px 14px 0; }
 .pl-card-media img { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 12px; background: var(--pl-line-soft); }
@@ -144,18 +153,24 @@ h1, h2, h3 { font-family: var(--pl-display); letter-spacing: -0.01em; }
 .pl-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .pl-card-actions { display: flex; gap: 8px; margin-top: auto; flex-wrap: wrap; }
 .pl-card-actions .pl-grow { flex: 1 1 auto; }
-.pl-caption-text { margin: 0; font-size: 15px; line-height: 1.45; white-space: pre-wrap; }
+.pl-caption-text { margin: 0; font-size: 15px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pl-review { font-size: 14px; color: var(--pl-ink-soft); }
-.pl-review summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; font-weight: 600; color: var(--pl-green); }
-.pl-review p { margin: 6px 0 0; line-height: 1.5; }
+.pl-review summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 600; color: var(--pl-green); }
+.pl-review p { margin: 6px 0 0; line-height: 1.5; overflow-wrap: anywhere; }
 
 /* Fields */
-.pl-field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; }
-.pl-input, .pl-select, .pl-textarea { min-height: 44px; padding: 8px 12px; border: 1px solid var(--pl-field-line); border-radius: 10px; background: var(--pl-surface); color: var(--pl-ink); font-size: 16px; font-weight: 400; }
+.pl-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 14px; font-weight: 600; }
+/* max-width keeps a control's intrinsic width (a file input's filename row is
+   ~375px, wider than a 360px phone) from widening a flex or grid track. */
+.pl-input, .pl-select, .pl-textarea { min-width: 0; max-width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--pl-field-line); border-radius: 10px; background: var(--pl-surface); color: var(--pl-ink); font-size: 16px; font-weight: 400; }
+/* Native file inputs ignore the normal control height; give them a full tap target. */
+input[type="file"].pl-input { width: 100%; min-height: 44px; }
 .pl-textarea { width: 100%; line-height: 1.45; resize: vertical; }
 .pl-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 22px; border: 1px solid var(--pl-field-line); background: var(--pl-surface); font-size: 15px; cursor: pointer; }
 .pl-chip:has(input:checked) { border: 2px solid var(--pl-green); background: var(--pl-green-soft); color: var(--pl-green); font-weight: 600; }
 .pl-chip input[type="checkbox"], .pl-chip input[type="radio"] { accent-color: var(--pl-green); width: 18px; height: 18px; margin: 0; }
+/* Checkboxes and radios are small by nature; the label around them is the tap target. */
+label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { min-height: 44px; }
 
 /* Empty states */
 .pl-empty { padding: 40px 24px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; border-radius: 18px; background: var(--pl-surface); border: 1px solid var(--pl-line); }

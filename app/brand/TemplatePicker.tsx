@@ -59,7 +59,7 @@ export default function TemplatePicker({ value, onChange, primary, secondary, qu
   return (
     <fieldset style={{ margin: 0, padding: 0, border: 0 }}>
       <legend style={{ padding: 0, marginBottom: 10, fontSize: 14, fontWeight: 600 }}>Quote-card design</legend>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))", gap: 10 }}>
         {QUOTE_TEMPLATES.map((template, index) => {
           const available = index < allowed;
           const selected = value === template;

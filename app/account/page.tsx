@@ -182,7 +182,7 @@ export default function AccountPage() {
           <ProfileNameForm initial={profile?.name ?? ""} onSaved={() => setEditing(false)} onCancel={() => setEditing(false)} />
         ) : (
           <>
-            <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "12px 24px" }}>
+            <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))", gap: "12px 24px" }}>
               <div>
                 <dt className="pl-small pl-muted">Name</dt>
                 <dd style={{ margin: 0, fontWeight: 600 }}>{name ?? ADD_NAME_PROMPT}</dd>
@@ -227,7 +227,7 @@ export default function AccountPage() {
           {sources[plan.source]}{plan.expiresAt && plan.plan !== "free" ? `, until ${plan.expiresAt.slice(0, 10)}` : ""}
         </p>
         {note ? <p role="status" style={{ margin: 0, fontWeight: 600 }}>{note}</p> : null}
-        <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "12px 24px" }}>
+        <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))", gap: "12px 24px" }}>
           {rows.map(([label, value]) => (
             <div key={label}><dt className="pl-small pl-muted">{label}</dt><dd style={{ margin: 0, fontWeight: 600 }}>{value}</dd></div>
           ))}

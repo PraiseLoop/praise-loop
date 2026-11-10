@@ -136,7 +136,7 @@ export default function Onboarding() {
           <span />
           <span className="pl-small pl-muted" style={{ fontWeight: 600 }}>Step {step} of 4</span>
           {/* Step 3 puts its exits in the footer, next to the waiting message. */}
-          {business ? (step === 3 ? <span /> : <Link href={`/approval?businessId=${business.id}`} className="pl-small" style={{ fontWeight: 600 }}>Save &amp; exit</Link>) : shell.businesses.length ? <Link href="/approval" className="pl-small" style={{ fontWeight: 600 }}>Cancel</Link> : <span />}
+          {business ? (step === 3 ? <span /> : <Link href={`/approval?businessId=${business.id}`} className="pl-small" style={{ fontWeight: 600, display: "inline-flex", alignItems: "center", minHeight: 44 }}>Save &amp; exit</Link>) : shell.businesses.length ? <Link href="/approval" className="pl-small" style={{ fontWeight: 600, display: "inline-flex", alignItems: "center", minHeight: 44 }}>Cancel</Link> : <span />}
         </div>
         <div role="progressbar" aria-label="Setup progress" aria-valuenow={step} aria-valuemin={0} aria-valuemax={4} className={styles.progress}>
           {[1, 2, 3, 4].map(n => <span key={n} className={n <= step ? styles.done : undefined} />)}
@@ -188,7 +188,7 @@ export default function Onboarding() {
               <span className="pl-small pl-muted">Columns: rating, text, reviewed_at. Optional: author_name, source_review_id, source_url. Up to 1,000 rows / 1 MB.</span>
               <button type="submit" className="pl-btn" disabled={busy}>Import reviews</button>
             </form>
-            <a href="/onboarding-example.csv" download className="pl-small" style={{ fontWeight: 600 }}>Download a sample CSV</a>
+            <a href="/onboarding-example.csv" download className="pl-small" style={{ fontWeight: 600, display: "inline-flex", alignItems: "center", minHeight: 44 }}>Download a sample CSV</a>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 8, borderTop: "1px solid var(--pl-line-soft)" }}>
               <strong>Or import a Google Takeout export</strong>
               <span className="pl-small pl-muted">
