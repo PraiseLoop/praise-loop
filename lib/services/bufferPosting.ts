@@ -20,7 +20,7 @@ import { availableImage, providerDraftTransition } from "./draftLifecycle";
 import { BufferConnectionError, getBufferAccessToken } from "./bufferConnection";
 import { entitlementsFor } from "./entitlements";
 import { ensureDraftJpeg } from "./imageRenderer";
-import { getMetaPageCredentials, markMetaTargetNeedsReconnect, MetaConnectionError } from "./metaConnection";
+import { getMetaPageCredentials, markMetaPageNeedsReconnect, MetaConnectionError } from "./metaConnection";
 import { postingMode, selectPostingProvider, type PostingMode, type PostingProvider } from "./postingGate";
 
 // Posting through Buffer (#29 part 3) and direct Instagram/Facebook publishing (#234).
@@ -131,11 +131,18 @@ async function settle(
 
 export type PostingTickResult = { mode: PostingMode; missed: number; submitted: number; drafted: number; failed: number; unknown: number; requeued: number; checked: number; sent: number };
 
+/** The Page sent to Meta plus the stored ciphertext of the token that call used. */
+export type MetaPageForRequest = {
+  page: MetaPage;
+  /** Opaque encrypted token; kept only to attribute a later auth failure. */
+  encryptedPageToken: string;
+};
+
 export type MetaPostingDeps = {
   /** Builds the Meta client. Tests inject a fake; production fails closed. */
   client?: MetaPublishingClient;
-  /** Resolves the Page and its decrypted token. Tests inject a fake Page. */
-  pageFor?: (args: { ownerId: string; businessId: number; metaPageId: number }) => Promise<MetaPage>;
+  /** Resolves the Page and its decrypted token, plus the stored ciphertext. Tests inject a fake Page. */
+  pageFor?: (args: { ownerId: string; businessId: number; metaPageId: number }) => Promise<MetaPageForRequest>;
 };
 
 export type PostingDeps = {
@@ -152,25 +159,35 @@ async function defaultAdapterFor({ ownerId, channelId, service, mode }: { ownerI
   return new BufferSchedulerAdapter({ accessToken: await getBufferAccessToken(ownerId), channelId, service, mode });
 }
 
-async function defaultMetaPage({ ownerId, metaPageId }: { ownerId: string; businessId: number; metaPageId: number }): Promise<MetaPage> {
+async function defaultMetaPage({ ownerId, metaPageId }: { ownerId: string; businessId: number; metaPageId: number }): Promise<MetaPageForRequest> {
   const credentials = await getMetaPageCredentials(ownerId, metaPageId);
   return {
-    id: credentials.pageId,
-    name: credentials.name,
-    accessToken: credentials.accessToken,
-    instagramBusinessAccountId: credentials.instagramBusinessAccountId,
-    tasks: credentials.tasks
+    page: {
+      id: credentials.pageId,
+      name: credentials.name,
+      accessToken: credentials.accessToken,
+      instagramBusinessAccountId: credentials.instagramBusinessAccountId,
+      tasks: credentials.tasks
+    },
+    encryptedPageToken: credentials.encryptedPageToken
   };
 }
 
-async function metaAdapterFor(reserved: Reserved, mode: "draft" | "live", deps: PostingDeps): Promise<MetaSchedulerAdapter> {
+async function metaAdapterFor(
+  reserved: Reserved,
+  mode: "draft" | "live",
+  deps: PostingDeps
+): Promise<{ adapter: MetaSchedulerAdapter; encryptedPageToken: string }> {
   if (reserved.metaPageId === null || reserved.target === null) throw new MetaConnectionError("not_connected", 409);
-  const page = await (deps.meta?.pageFor ?? defaultMetaPage)({
+  const resolved = await (deps.meta?.pageFor ?? defaultMetaPage)({
     ownerId: reserved.ownerId,
     businessId: reserved.businessId,
     metaPageId: reserved.metaPageId
   });
-  return new MetaSchedulerAdapter({ target: reserved.target, page, client: deps.meta?.client ?? liveMetaClient() });
+  return {
+    adapter: new MetaSchedulerAdapter({ target: reserved.target, page: resolved.page, client: deps.meta?.client ?? liveMetaClient() }),
+    encryptedPageToken: resolved.encryptedPageToken
+  };
 }
 
 /** One pass of the posting worker: expire stale work, submit what is due, then check what was sent. */
@@ -437,8 +454,13 @@ async function submitMeta(reserved: Reserved, now: () => number, deps: PostingDe
   let stage: "create" | "publish" | "facebook" = reserved.target === "instagram"
     ? reserved.containerId ? "publish" : "create"
     : "facebook";
+  // The ciphertext for the token this submission actually used. A reconnect while
+  // the request was in flight replaces it, so the stale failure must not flag the
+  // fresh token. Null until the credentials have been read.
+  let encryptedPageToken: string | null = null;
   try {
-    const adapter = await metaAdapterFor(reserved, reserved.mode, deps);
+    const { adapter, encryptedPageToken: token } = await metaAdapterFor(reserved, reserved.mode, deps);
+    encryptedPageToken = token;
     if (reserved.target === "instagram") {
       let containerId = reserved.containerId;
       if (!containerId) {
@@ -482,9 +504,10 @@ async function submitMeta(reserved: Reserved, now: () => number, deps: PostingDe
       kind: error instanceof Error ? error.constructor.name : "unknown", ...errorFields(error)
     });
     if (error instanceof MetaAuthError) {
-      // Surface "reconnect needed" once; do not retry in a loop.
-      if (reserved.metaPageId !== null) {
-        try { await markMetaTargetNeedsReconnect(reserved.ownerId, reserved.metaPageId); } catch { /* the claim still fails visibly */ }
+      // Surface "reconnect needed" once; do not retry in a loop. Only flag the Page
+      // if it still holds the token that failed: a reconnect in the meantime wins.
+      if (reserved.metaPageId !== null && encryptedPageToken !== null) {
+        try { await markMetaPageNeedsReconnect(reserved.ownerId, reserved.metaPageId, encryptedPageToken); } catch { /* the claim still fails visibly */ }
       }
       await finish((c) => settle(c, reserved.draftId, ["submitting"], "error", "failed", { errorCode: "needs_reconnect", revoke: true, provider: "meta" }));
       return "failed";

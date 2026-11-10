@@ -316,7 +316,7 @@ async function main() {
       assert.equal(await status(s.draft), "failed");
       await reset();
 
-      // 5. A revoked token marks the Page for reconnect and never retries in a loop.
+      // 5. A revoked current token marks the Page for reconnect and never retries in a loop.
       s = await seed();
       meta.failCreate = new MetaAuthError();
       result = await tick("live");
@@ -326,6 +326,30 @@ async function main() {
       assert.equal((await c.query("SELECT status FROM meta_pages WHERE id=$1", [s.page])).rows[0].status, "needs_reconnect");
       await tick("live");
       assert.equal(meta.calls.length, 1, "a reconnect-needed post is not retried");
+      await reset();
+
+      // 5b. A reconnect between reading the token and Meta rejecting it must not
+      // flag the fresh token: only the exact ciphertext that failed is matched.
+      s = await seed();
+      const storedPage = (await c.query("SELECT page_id FROM meta_pages WHERE id=$1", [s.page])).rows[0];
+      const freshCiphertext = encryptCredential("token-reconnected", `meta:page:${s.pageOwner}:${storedPage.page_id}`);
+      meta.createInstagramContainer = async () => {
+        // The owner reconnects while the stale request is in flight.
+        await c.query(
+          "UPDATE meta_pages SET encrypted_page_token=$2,status='active',updated_at=now() WHERE id=$1",
+          [s.page, freshCiphertext]
+        );
+        throw new MetaAuthError();
+      };
+      result = await tick("live");
+      assert.equal(result.failed, 1);
+      row = await claim(s.draft);
+      assert.deepEqual([row.state, row.error_code], ["error", "needs_reconnect"]);
+      assert.equal(
+        (await c.query("SELECT status FROM meta_pages WHERE id=$1", [s.page])).rows[0].status,
+        "active",
+        "a reconnect with a fresh token is left alone"
+      );
       await reset();
 
       // 6. Rate limit: retry later with a wait, then succeed. A permanently
