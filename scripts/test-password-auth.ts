@@ -259,6 +259,10 @@ async function main() {
       assert.equal(mobileUnknown.status, 400);
       assert.deepEqual(await mobileWrong.json(), await mobileUnknown.json());
 
+      // The sign-up already sent a password alert; clear the ten-minute rate
+      // limit so this sign-in can prove its own alert. `fresh()` clears the
+      // in-memory outbox, not that database row.
+      await client.query("DELETE FROM sign_in_alerts");
       await fresh();
       const signedIn = await signinRoute(web("/api/auth/password/signin", { email: "new-password@example.invalid", password: PASSWORD_A }));
       assert.equal(signedIn.status, 200);
