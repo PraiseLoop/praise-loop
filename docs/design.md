@@ -4,7 +4,7 @@
 who are about to change it. It summarises and links; the detailed, authoritative text lives in the
 other docs. When you change behaviour, update the detailed doc and the matching line here.
 
-Last reviewed: 2026-11-10 (web Sign in with Apple, #92; new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
+Last reviewed: 2026-11-10 (weekly "posts ready" email, #275; web Sign in with Apple, #92; new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
 
 | Doc | What it is the source of truth for |
 | --- | --- |
@@ -108,7 +108,7 @@ re-queues generation. Scheduling fails closed. Nothing auto-posts.
 | Business content | `businesses` (brand colours/tone/voice, timezone, weekly target), `reviews`, `draft_posts`, `draft_events` |
 | Generation | `generation_periods`, `generation_jobs`, `posting_slot_claims` |
 | Plans and usage | `owner_plans`, `owner_plan_events`, `owner_subscriptions`, `billing_events`, `owner_usage` |
-| Phone | `device_push_tokens`, `push_deliveries` |
+| Notifications | `device_push_tokens`, `push_deliveries`, `weekly_email_deliveries` |
 | Integrations (stubbed) | `google_connections`, `apify_review_places`, `apify_review_runs` |
 
 Rules: migrations are additive and data-preserving; parallel PRs collide on the number, so renumber
@@ -199,6 +199,9 @@ Expo Router screens: `sign-in`, `queue`, `draft/[id]`, `profile`. Design rules t
   app registers its token, refreshes on launch, unregisters on sign-out, and deep-links to a queue.
   Registration, the toggle and sign-out run through one serialized controller with a pending-cleanup
   record (see [features.md](features.md#phone-notifications-89)).
+- Email: the same worker tick emails the owner once per business and period ("N posts are ready"),
+  to the primary verified address, with a link to the web approval queue and an account-page
+  opt-out ([features.md](features.md#weekly-your-posts-are-ready-email-275)).
 - Builds: development builds and Android APKs through EAS ([android-release.md](android-release.md)).
 
 ## 6. Integrations and external services
@@ -293,6 +296,7 @@ endpoints take the Page token or the User token, to be settled by the owner-appr
 | Microsoft sign-in | shipped; never run live | #158 |
 | Sign in with Apple | phone + server shipped; web shipped (Services ID + `.p8` client secret); never run live | #92 |
 | Native Google sign-in, push notifications | shipped; **need a development build and a device** | #85, #89 |
+| Weekly "your posts are ready" email | shipped; one per business and period, account opt-out, fake transport in tests | #275 |
 | Android APK release pipeline | merged; not yet run | #190 |
 | Real scheduler through Buffer | Paid (Pro and Business) automatic posting; Connect + screen built; worker posting, image links, cancel and the off/draft/live gate built (#29 part 3); **never run live**; status display and `unknown` resolution not built | #29, #216 |
 | Direct Instagram/Facebook publishing | Worker publishing, provider choice, idempotent container resume, JPEG variant, owner status, Connect backend and the `/connections` setup screen built; provider-neutral posting banner, optional onboarding link and plan/account copy built; **live client not built and the live connect/publish test not run** | #234, #244 |

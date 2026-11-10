@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { query } from "./db";
 import { EmailError, sendEmail, type EmailTemplate, type EmailTransport } from "./email";
 import { log } from "./log";
+import { verifiedOwnerEmails } from "./verifiedEmails";
 
 // New-sign-in alerts (#260). They are best-effort: the sign-in has already
 // succeeded and created its session, so nothing here may fail or delay it. The
@@ -142,23 +143,8 @@ export function newSignInEmail(input: NewSignInEmailInput): EmailTemplate {
   };
 }
 
-// Only addresses the sign-in policy already treated as verified are eligible:
-// the owner row's address and Google/email methods. Apple's address is verified
-// by Apple even when it is a private relay. Microsoft's address is deliberately
-// excluded because it is not guaranteed to belong to the account holder.
-async function recipientEmails(ownerId: string) {
-  const rows = (await query<{ email: string }>(
-    `SELECT DISTINCT lower(email) AS email FROM (
-       SELECT email FROM auth_users WHERE id=$1 AND email IS NOT NULL AND "emailVerified" IS NOT NULL
-       UNION ALL
-       SELECT email FROM auth_accounts
-       WHERE owner_id=$1 AND email IS NOT NULL AND provider IN ('google','email','apple')
-     ) known WHERE email <> '' AND length(email) <= 254 ORDER BY email`,
-    [ownerId]
-  )).rows;
-  return rows.map(row => row.email);
-}
-
+// Verified addresses come from the shared helper (#260/#275), so a security alert
+// and a weekly notice can never disagree about who is reachable.
 async function businessTimeZone(ownerId: string) {
   const row = (await query<{ timezone: string }>(
     "SELECT timezone FROM businesses WHERE owner_id=$1 ORDER BY created_at, id LIMIT 1",
@@ -186,7 +172,7 @@ function failureReason(error: unknown) {
 export async function deliverSignInAlert(input: SignInAlertInput): Promise<void> {
   const method = safeMethod(input.method);
   const at = input.now ?? new Date();
-  const recipients = await recipientEmails(input.ownerId);
+  const recipients = await verifiedOwnerEmails(input.ownerId);
   if (recipients.length === 0) {
     log.debug("sign_in_alert_skipped", { method, client: input.client, reason: "no_verified_address" });
     return;

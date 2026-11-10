@@ -1098,6 +1098,45 @@ phone copy has no purchase link or prompt.
 - Rollback: no schema change is involved. Restoring a deleted account is not
   possible; stop deploying the route to disable the feature.
 
+## Weekly "your posts are ready" email (#275)
+
+Web-first validation has no push notification on the web, so the worker emails the
+owner when a business's weekly batch finishes. The email step runs in the same
+worker tick as the push step (`worker/index.ts`) and both read one definition of
+a finished batch (`readyPeriods` in `lib/services/push.ts`), so a business with
+no registered device still gets told, and a business that is still generating
+gets neither.
+
+- **Recipient and content.** One plain-text email to the owner's primary verified
+  address (the account address first, then a verified Google/email/Apple method;
+  a Microsoft address is excluded because it is not guaranteed to be the
+  owner's). The choice lives in `lib/verifiedEmails.ts`, shared with the new-sign-in
+  alert. It says how many posts are ready for that business and links to
+  `${NEXTAUTH_URL}/approval?businessId=<id>`. It carries no review text, caption
+  or token, and nothing logs the address.
+- **Idempotency.** Migration 031 adds `weekly_email_deliveries`, one row per
+  business and weekly period. The row is claimed with `INSERT … ON CONFLICT DO
+  NOTHING` before the transport is called, so a restart, a duplicate delivery or a
+  second worker sends nothing again. A provider failure marks the row `failed`
+  and is not retried, keeping the email at-most-once; Resend also receives the
+  deterministic idempotency key `weekly-ready-<business>-<period>`.
+- **Opt out.** `auth_users.weekly_email_enabled` defaults to true. The **Emails**
+  section on `/account` (`/account#weekly-email`) toggles it through
+  `GET`/`PATCH /api/account/preferences`, and every email links to that section.
+  Turning it off stops future emails; it does not delete past delivery rows.
+- **Best effort.** Generation has already finished, so `emailTick` catches a
+  missing transport, a missing `NEXTAUTH_URL`, an absent verified address and
+  provider errors. A failure is logged with the business id and a sanitised error
+  code only; the worker step cannot fail the generation tick.
+- Covered by `scripts/test-weekly-email.ts`: the template and links, one email
+  per business and period on the fake transport, no email while a job is still
+  running, the owner switch, the verified-recipient fallback, a provider failure
+  that records `failed`, leaves generation untouched and is not retried, two
+  businesses each getting their own email, missing `NEXTAUTH_URL`, the preference
+  API, and no address in the log lines.
+- Rollback: remove the worker step and the account section; the email is
+  independent of posting, and dropping the table removes only delivery history.
+
 ## Phone notifications (#89)
 
 Push is the weekly way back into the app: the worker sends "posts are ready" for

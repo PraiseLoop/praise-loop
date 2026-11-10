@@ -16,7 +16,7 @@ const DEV = { MOBILE_DEV_AUTH: "1", NODE_ENV: "development" };
 async function snapshot(client: PoolClient, media: string) {
   const rows = async (sql: string) => (await client.query(sql)).rows;
   return {
-    owners: await rows("SELECT id,email,name FROM auth_users ORDER BY id"),
+    owners: await rows("SELECT id,email,name,weekly_email_enabled FROM auth_users ORDER BY id"),
     methods: await rows("SELECT owner_id,provider,provider_account_id,email FROM auth_accounts ORDER BY owner_id,provider"),
     plans: await rows("SELECT owner_id,plan,source FROM owner_plans ORDER BY owner_id"),
     subscriptions: await rows("SELECT owner_id,provider,external_id,plan,status FROM owner_subscriptions ORDER BY owner_id"),
