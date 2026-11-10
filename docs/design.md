@@ -4,7 +4,7 @@
 who are about to change it. It summarises and links; the detailed, authoritative text lives in the
 other docs. When you change behaviour, update the detailed doc and the matching line here.
 
-Last reviewed: 2026-11-10 (new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
+Last reviewed: 2026-11-10 (web Sign in with Apple, #92; new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
 
 | Doc | What it is the source of truth for |
 | --- | --- |
@@ -180,7 +180,7 @@ transactional.
 
 ### Web
 Server-rendered shell (`app/AppShell.tsx`) holding the session, businesses and profile in context.
-Sign-in options: Google, Microsoft (when configured), email code, dev demo owners. Profile menu with
+Sign-in options: Google, Apple and Microsoft (when configured), email code, dev demo owners. Profile menu with
 name editing, plan and usage page, sign-in methods list (link/unlink), delete account.
 
 ### Phone (`mobile/`)
@@ -210,7 +210,7 @@ Expo Router screens: `sign-in`, `queue`, `draft/[id]`, `profile`. Design rules t
 | Cloudflare Tunnel | reaches the home server; the `praiseloop-dev` tunnel serves the dev environment at `dev.praiseloop.ca` (all paths to `http://praiseloop-web:3000`, 404 for any other host) and runs as its own cloudflared stack on the shared `edge` Docker network; the app stack (`docker-compose.standalone.yml`, for Dockhand) deliberately does not contain it | tunnel, DNS and routing created; the tunnel's public hostname must point at `praiseloop-web:3000` once its stack is up. A Cloudflare firewall rule `dev_home_only` blocks every request to that host that is not from the home IP, except `/api/mobile/*` (the phone's bearer-token API). If the home IP changes the web side locks out until the rule is edited. `NEXTAUTH_URL` is `https://dev.praiseloop.ca`; `app.praiseloop.ca` is reserved for production and not set up |
 | Expo push | "posts ready" notifications | built; needs EAS project id, APNs/FCM, a device test |
 | Google OAuth (web) | sign-in | **live and verified** |
-| Google native, Apple, Microsoft | phone sign-in; Microsoft also on web | built, tested with local keys only, never run live |
+| Google native, Apple, Microsoft | phone sign-in; Apple and Microsoft also on web | built, tested with local keys only, never run live |
 | Buffer | automatic posting for Pro and Business owners with a Business/Creator Instagram or a Facebook Page (#29, #216) | **feasibility spike done 2026-11-01**: live API key works, an app client exists; adapter and encrypted credentials built against mocks only; **Connect backend built (#29 part 1)**: OAuth, encrypted tokens, channel selection; **web Connect screen built (#29 part 2)**: connect/reconnect/disconnect and one channel per business, posting still off; **automatic posting is now paid (#216)**: Free and expired plans are refused on every write path and the worker fails a queued post closed; **worker submission, media-URL policy and the off/draft/live gate built (#29 part 3)**; phone UI **not built**; never run live; see below |
 | Direct Meta publishing | replacement for Buffer (#234) | feasibility checked 2026-11-05; stub and fake adapter built behind the existing `SchedulerAdapter`; OAuth connect/disconnect, encrypted Page tokens and one target per business built; **worker publishing, the JPEG variant and the `/connections` setup screen built and tested with a fake client**; live Graph client and the owner-approved live connect/publish test **not built/run**; app review and business verification are owner tasks |
 | Google Business Profile | review sync (#46) | stubbed client; live client fails closed until access is approved |
@@ -289,7 +289,7 @@ endpoints take the Page token or the User token, to be settled by the owner-appr
 | Demo owner picker, dev seeder | shipped | #129, #154 |
 | Brand voice from a website (Pro) | shipped | #97 |
 | Microsoft sign-in | shipped; never run live | #158 |
-| Sign in with Apple | phone + server shipped; **web not built** | #92 |
+| Sign in with Apple | phone + server shipped; web shipped (Services ID + `.p8` client secret); never run live | #92 |
 | Native Google sign-in, push notifications | shipped; **need a development build and a device** | #85, #89 |
 | Android APK release pipeline | merged; not yet run | #190 |
 | Real scheduler through Buffer | Paid (Pro and Business) automatic posting; Connect + screen built; worker posting, image links, cancel and the off/draft/live gate built (#29 part 3); **never run live**; status display and `unknown` resolution not built | #29, #216 |
@@ -378,13 +378,13 @@ Open work and blockers are tracked in GitHub issues; this table is a snapshot.
 
 - **Owner setup not done**: Microsoft Entra app, Apple developer account and keys, Expo/EAS and
   Firebase for push, Google Business Profile API access, hosting/domain for the pilot (#90, #91).
-- **Apple-only owners** can't set up a business: the web has no Apple sign-in and the phone has no
-  setup flow. They must link Google first. A phone-to-web session handoff (or web Apple sign-in) is
-  the proper fix.
+- **Apple-only owners** can now set up a business on the web with Apple sign-in (#92); the phone
+  still has no setup flow. Linking Apple from a signed-in session remains the API/phone path, and a
+  phone-to-web session handoff is still the convenient follow-up.
 - **Store subscriptions** (#95) and a VPS (#98) are not started; paid web plans come from Stripe
   checkout (#223) and Business pricing is still open (#222).
 - **Replies to Google reviews** (#96) need a decision on the write API before any code posts.
-- **Manual checks never run on hardware**: native Google/Apple/Microsoft sign-in, push, Save to
+- **Manual checks never run on hardware**: native Google/Apple/Microsoft sign-in, web Apple sign-in and Apple domain verification, push, Save to
   Photos and the Instagram/Facebook share behaviour (#85–#89, #92).
 - **Buffer (#29)** has its Connect backend built (#29 part 1): OAuth with PKCE, encrypted access and
   refresh tokens, and one selected Instagram/Facebook channel per business. The web connections

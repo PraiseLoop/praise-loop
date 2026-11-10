@@ -19,10 +19,11 @@ Built and on `master`:
 
 - **Core pipeline:** review import (CSV, Apify fetch, Google Takeout file), quote selection,
   weekly generation with quotas, rendered images, approval queue, draft lifecycle.
-- **Accounts:** Google, email-code, Microsoft sign-in; mobile bearer sessions; account
-  deletion; invite-only sign-up gate (`SIGNUP_MODE`, `INVITED_EMAILS`, #195); a
-  best-effort new-sign-in alert email with a per-owner/per-method rate limit (#260).
-  A "sign out of all devices" action is **not** built (follow-up from #260).
+- **Accounts:** Google, email-code, Microsoft sign-in; Sign in with Apple on the phone and
+  the web (web needs owner keys, #268); mobile bearer sessions; account deletion; invite-only
+  sign-up gate (`SIGNUP_MODE`, `INVITED_EMAILS`, #195); a best-effort new-sign-in alert email
+  with a per-owner/per-method rate limit (#260). A "sign out of all devices" action is **not**
+  built (follow-up from #260).
 - **Billing:** plans, entitlements, Stripe checkout, webhook and portal (test mode works
   end to end on dev), Business tier, paid automatic posting.
 - **Posting:** Buffer (draft mode only so far) and direct Instagram/Facebook: connect
@@ -44,9 +45,7 @@ Take the first item that is not blocked. Each is one PR per issue (see CONTRIBUT
    - #274 post approved drafts from the phone browser through the share sheet
    - #275 weekly "your posts are ready" email (replaces push during validation)
    - #276 every owner screen works at phone width
-2. **In flight from the 2026-11-09 batch:** #92 web Sign in with
-   Apple (code only; owner setup is parked in #268), #86 component tests for the native queue,
-   then #159 email and password sign-in (approved by
+2. **In flight from the 2026-11-09 batch:** #86 component tests for the native queue, then #159 email and password sign-in (approved by
    the owner 2026-11-09; start after #260 merges because both change sign-in).
 3. **#234 remaining:** decide whether to remove Buffer **after** the Meta live test passes.
    Until then Buffer is the only automatic posting route and stays fully available (plan and

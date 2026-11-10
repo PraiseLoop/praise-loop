@@ -726,7 +726,8 @@ CA$29.99 a month plus tax and an **Upgrade to Pro** button; Business says
 page links to it from the header and the call to action, and also offers an
 "Email me a sign-in code" option (#157) for owners without Google. When the server
 has Microsoft credentials, the landing page adds "Continue with Microsoft" too
-(#158); the button is hidden otherwise. `AppShell`
+(#158), and when all four Apple web values are set it adds "Continue with Apple"
+(#92); each button is hidden otherwise. `AppShell`
 treats `/plans` as a bare route, like `/` and onboarding, so the signed-out
 sign-in wall does not hide it.
 
@@ -864,6 +865,37 @@ instead of spreading account things through the nav and the business switcher.
 - The demo seeder's Pro owner is named and its Free owner has no name, so both
   states can be walked with `npm run dev:seed`.
 
+
+## Sign in with Apple on the web (#92)
+
+The landing page shows **Continue with Apple** only when the server has all four web
+values; the provider is omitted from NextAuth and the button disappears otherwise,
+as with Microsoft. The button starts NextAuth's built-in Apple provider, which
+returns to `${NEXTAUTH_URL}/api/auth/callback/apple`.
+
+- `APPLE_WEB_CLIENT_ID` is the Services ID (the OAuth client id). `APPLE_TEAM_ID`,
+  `APPLE_KEY_ID` and the `.p8` key in `APPLE_PRIVATE_KEY` complete it. The native
+  app keeps using `APPLE_CLIENT_ID`; no Services ID is needed there.
+- Apple requires a client secret JWT rather than a static secret. `lib/appleClientSecret.ts`
+  builds an ES256 JWT with `node:crypto` (no new dependency), with the Team ID as
+  issuer, the Services ID as subject, Apple as audience and a one-hour expiry. The
+  provider regenerates it per NextAuth request.
+- Apple posts the callback (`response_mode=form_post`), so the PKCE/state cookies
+  are `SameSite=None; Secure` on HTTPS. A local HTTP deployment stays Lax and cannot
+  finish the flow; Apple needs an HTTPS return URL anyway.
+- The web sign-in uses `provider = 'apple'` and Apple's stable `sub`, the same
+  identity the phone writes, so an owner is found on both clients. Apple's address
+  (often a private relay) is recorded on the method row and is never used to find an
+  existing owner by email; an Apple sign-in always creates or returns its own Apple
+  owner. Linking Apple to an existing owner is the explicit signed-in
+  `POST /api/account/methods` path.
+- The invite gate applies: in `SIGNUP_MODE=invite`, a new Apple identity is refused
+  unless its verified address (including a relay) is in `INVITED_EMAILS`; returning
+  Apple identities and existing owners are unaffected.
+- Covered by `scripts/test-apple-web.ts` (client-secret shape/claims/expiry and
+  signature, hidden provider, `form_post` cookie attributes, owner creation/reuse,
+  no private-relay email linking, and the invite gate). A real Apple sign-in and
+  domain verification were **not** run; they wait on the owner's developer account.
 
 ## Phone sign-in (#85, #92, #158)
 

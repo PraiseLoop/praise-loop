@@ -1,8 +1,10 @@
 import type { NextAuthOptions } from "next-auth";
 import { cookies } from "next/headers";
+import AppleProvider from "next-auth/providers/apple";
 import GoogleProvider from "next-auth/providers/google";
 import AzureADProvider from "next-auth/providers/azure-ad";
 import { authAdapter } from "./auth-adapter";
+import { appleWebConfig, createAppleClientSecret } from "./appleClientSecret";
 import { signInWithIdentity, type AuthIdentity } from "./authLinking";
 import { microsoftEmail, microsoftSubject } from "./microsoftIdToken";
 import { callerUserAgent, canonicalSignInMethod, notifyNewSignIn } from "./signInAlerts";
@@ -20,6 +22,13 @@ type MicrosoftProfile = {
   sub?: unknown;
   email?: unknown;
   preferred_username?: unknown;
+  name?: unknown;
+};
+
+type AppleProfile = {
+  sub?: unknown;
+  email?: unknown;
+  email_verified?: unknown;
   name?: unknown;
 };
 
@@ -45,15 +54,32 @@ function inviteOnlyRedirect() {
   return `${base}/?error=invite_only`;
 }
 
-// Google and Microsoft are optional: an owner can sign in by email even when an
-// organisation has no provider credentials. NextAuth still handles sessions and
-// sign-out with an empty provider list, which keeps the email session's sign-out
-// button working.
+// Google, Apple and Microsoft are optional: an owner can sign in by email even
+// when an organisation has no provider credentials. NextAuth still handles
+// sessions and sign-out with an empty provider list, which keeps the email
+// session's sign-out button working.
 const googleConfigured = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+// A Services ID plus the team's `.p8` key are needed only for the web flow. The
+// native app keeps using APPLE_CLIENT_ID on the phone exchange.
+const appleWeb = appleWebConfig();
+const appleConfigured = !!appleWeb;
 // MICROSOFT_CLIENT_ID may list several ids for the phone token check. The web flow needs exactly one
 // application, and it is the first id in the list, so the web registration goes first.
 const microsoftWebClientId = (process.env.MICROSOFT_CLIENT_ID ?? "").split(",")[0].trim();
 const microsoftConfigured = !!(microsoftWebClientId && process.env.MICROSOFT_CLIENT_SECRET);
+
+// Apple answers with response_mode=form_post, a cross-site POST. A Lax cookie is
+// not sent on that request, so the PKCE verifier (and the state cookie, if a
+// future NextAuth Apple provider checks it) must be SameSite=None; Secure.
+// Without HTTPS there is no valid Apple return URL, so local HTTP keeps Lax and
+// simply cannot complete the flow.
+const secureCookies = (process.env.NEXTAUTH_URL ?? "").startsWith("https://");
+const formPostSameSite: "none" | "lax" = secureCookies ? "none" : "lax";
+const formPostCookieOptions = { httpOnly: true, sameSite: formPostSameSite, path: "/", secure: secureCookies, maxAge: 15 * 60 };
+const formPostCookies = appleConfigured ? {
+  pkceCodeVerifier: { name: `${secureCookies ? "__Secure-" : ""}next-auth.pkce.code_verifier`, options: formPostCookieOptions },
+  state: { name: `${secureCookies ? "__Secure-" : ""}next-auth.state`, options: formPostCookieOptions }
+} : undefined;
 
 // NextAuth's provider id is `azure-ad`; auth_accounts uses the canonical
 // `microsoft` name, so lib/auth-adapter.ts maps between them. The subject is
@@ -64,6 +90,17 @@ if (googleConfigured) {
     clientId: process.env.GOOGLE_CLIENT_ID ?? "",
     clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? ""
   }));
+}
+if (appleWeb) {
+  // Apple's client secret is a short-lived ES256 JWT. Keep a getter on the options
+  // object so every NextAuth request (including a callback minutes after the page
+  // loaded) gets a fresh signature instead of the one frozen at process start.
+  const appleOptions = { clientId: appleWeb.clientId, clientSecret: "" };
+  Object.defineProperty(appleOptions, "clientSecret", {
+    enumerable: true,
+    get: () => createAppleClientSecret(appleWeb)
+  });
+  providers.push(AppleProvider(appleOptions));
 }
 if (microsoftConfigured) {
   providers.push(AzureADProvider({
@@ -89,6 +126,7 @@ export const authOptions: NextAuthOptions = {
   adapter: authAdapter, secret: process.env.NEXTAUTH_SECRET,
   session: { strategy: "database", maxAge: 8 * 60 * 60 },
   providers,
+  cookies: formPostCookies,
   // Every provider sign-in goes through the shared linking policy before NextAuth
   // creates a session. The adapter row is written first, so NextAuth's callback
   // handler finds the same owner the policy chose instead of making a second one.
@@ -108,6 +146,29 @@ export const authOptions: NextAuthOptions = {
           email: google.email,
           emailVerified: true,
           name: typeof google.name === "string" ? google.name : null
+        };
+        const linkToOwner = await signedInOwner();
+        const result = await signInWithIdentity(identity, linkToOwner ? { linkToOwner } : {});
+        if (result.ok) return true;
+        return result.reason === "invite_only" ? inviteOnlyRedirect() : false;
+      }
+      if (account?.provider === "apple") {
+        const apple = profile as AppleProfile | undefined;
+        const subject = typeof account.providerAccountId === "string" && account.providerAccountId
+          ? account.providerAccountId
+          : typeof apple?.sub === "string" ? apple.sub : "";
+        if (!subject) return false;
+        const identity: AuthIdentity = {
+          provider: "apple",
+          subject,
+          email: typeof apple?.email === "string" && apple.email.trim() ? apple.email : null,
+          // Apple always sends verified addresses (including a private relay). The
+          // shared policy still never uses an Apple address to find an owner by
+          // email (#92, #156); it is only the pilot invite gate's input (#195).
+          emailVerified: apple?.email_verified === true || apple?.email_verified === "true",
+          // The id_token has no name; Apple sends the first-sign-in name only in a
+          // form field, which the web provider does not expose.
+          name: typeof apple?.name === "string" ? apple.name : null
         };
         const linkToOwner = await signedInOwner();
         const result = await signInWithIdentity(identity, linkToOwner ? { linkToOwner } : {});
@@ -146,8 +207,9 @@ export const authOptions: NextAuthOptions = {
   logger: { error: code => console.error("auth_error", code), warn: code => console.warn("auth_warning", code), debug: () => {} }
 };
 
-// Session and sign-out endpoints only need the session machinery. Google and
-// Microsoft sign-in additionally need their own clients, checked below.
+// Session and sign-out endpoints only need the session machinery. Google, Apple
+// and Microsoft sign-in additionally need their own clients, checked below.
 export function authConfigured() { return !!(process.env.NEXTAUTH_SECRET && process.env.NEXTAUTH_URL); }
 export function googleSignInConfigured() { return googleConfigured; }
+export function appleSignInConfigured() { return appleConfigured; }
 export function microsoftSignInConfigured() { return microsoftConfigured; }

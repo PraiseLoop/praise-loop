@@ -63,7 +63,9 @@ QR code (or enter the URL under "Enter URL manually"), then see the demo flow be
   project id and APNs/FCM credentials listed in `mobile/README.md#push-notifications`,
   Apple needs iOS 13+ and `APPLE_CLIENT_ID` on the server, and Microsoft needs
   `MICROSOFT_CLIENT_ID` on the server plus `EXPO_PUBLIC_MICROSOFT_CLIENT_ID` in the
-  app; a button stays hidden elsewhere. Expo only sees variables in its own environment, so the
+  app; a button stays hidden elsewhere. Web Apple sign-in is separate and needs
+  `APPLE_WEB_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID` and `APPLE_PRIVATE_KEY`
+  (all four, or the button is hidden). Expo only sees variables in its own environment, so the
   dev compose stack passes the `EXPO_PUBLIC_*` values from `.env` to the `mobile` service
   (`EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` defaults to `GOOGLE_CLIENT_ID`); restart the `mobile` service
   after changing them. For phone Google sign-in the server must also accept the web client id:
@@ -365,7 +367,11 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | no | Caption generation through [OpenRouter](https://openrouter.ai) when `OPENAI_API_KEY` is unset (OpenAI wins if both are set). `OPENROUTER_MODEL` is required with the key and has no default: pick an id at openrouter.ai/models (ids ending in `:free` cost nothing but are rate limited, roughly 20 requests/minute and 50/day on a free account, and some providers log prompts, which contain reviewer quotes). The request asks the provider to turn reasoning off, because thinking models such as DeepSeek V4.1 Flash otherwise use the whole 400-token budget and return empty text. Weaker models fail the JSON/length checks more often; those drafts are marked `failed` and can be retried |
 | `OPENAI_TIMEOUT_MS` | no | Caption provider timeout in milliseconds (default `20000`, applies to either provider); on timeout the draft is marked `failed` with an actionable error |
 | `DRAFT_PIPELINE_INTERVAL_MS` | no | Worker sweep interval (default `60000`) |
-| `APPLE_CLIENT_ID` | for Apple sign-in | Comma-separated audiences accepted from Apple identity tokens. The native app uses its bundle id `ca.visda.praiseloop`; a Services ID is added only when web Apple sign-in exists. Empty fails closed with 401 (see [auth.md](auth.md)) |
+| `APPLE_CLIENT_ID` | for phone Apple sign-in | Comma-separated audiences accepted from native Apple identity tokens. The app uses its bundle id `ca.visda.praiseloop`. It does not configure web sign-in. Empty fails closed with 401 (see [auth.md](auth.md)) |
+| `APPLE_WEB_CLIENT_ID` | for web Apple sign-in | The Apple **Services ID**, used as NextAuth's Apple client id. The web button is hidden unless `APPLE_WEB_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID` and `APPLE_PRIVATE_KEY` are all set (see [auth.md](auth.md)) |
+| `APPLE_TEAM_ID` | for web Apple sign-in | Apple Developer Team ID, the `iss` claim of the generated client-secret JWT |
+| `APPLE_KEY_ID` | for web Apple sign-in | Key ID of the Sign in with Apple `.p8` key, the JWT header `kid` |
+| `APPLE_PRIVATE_KEY` | for web Apple sign-in | PKCS#8 PEM contents of the `.p8` key; literal `\n` escapes are accepted for environment files. Never commit the value |
 | `MICROSOFT_CLIENT_ID` | for Microsoft sign-in | Entra ID application (client) id, also the comma-separated audience list for phone ID tokens (the web sign-in uses the first id). The same id goes in the app's `EXPO_PUBLIC_MICROSOFT_CLIENT_ID`. Empty hides the web button and fails the phone exchange closed with 401 (see [auth.md](auth.md)) |
 | `MICROSOFT_CLIENT_SECRET` | for web Microsoft sign-in | Client secret for the NextAuth `azure-ad` provider. The phone uses PKCE and never needs it. Never commit the value |
 | `SIGNUP_MODE` | no (production: `invite`) | `open` (default) lets any completed provider sign-in create an owner; `invite` allows only a new owner whose address is in `INVITED_EMAILS`. An invalid value fails closed to `invite` with one warning. Existing owners, returning identities and linking a method to a signed-in owner are never blocked (see [auth.md](auth.md#invite-only-sign-up-for-the-pilot-195)) |

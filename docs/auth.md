@@ -1,10 +1,11 @@
 # Owner authentication and access (#42)
 
-Uses maintained NextAuth 4.24.15 (Next 15/React 19 support) with Google and Microsoft
+Uses maintained NextAuth 4.24.15 (Next 15/React 19 support) with Google, Apple and Microsoft
 (Entra ID) OAuth and a small Postgres adapter. Sources: https://next-auth.js.org/configuration/providers/google,
+https://next-auth.js.org/configuration/providers/apple,
 https://next-auth.js.org/configuration/providers/azure-ad,
 https://support.google.com/cloud/answer/15549945
-and https://next-auth.js.org/tutorials/creating-a-database-adapter (checked 2026-10-15).
+and https://next-auth.js.org/tutorials/creating-a-database-adapter (checked 2026-11-10).
 The adapter stores provider identity only, discards provider access/refresh tokens,
 and hashes opaque session tokens. Eight-hour sessions are checked in Postgres on
 EVERY protected request; sign-out deletes the server session, including copied tokens.
@@ -22,8 +23,8 @@ Owner setup (no accounts, credentials, or production config created by this PR):
    bytes), and canonical `NEXTAUTH_URL`; use HTTPS in production. Never commit values.
    Login and sign-out return an actionable 503 if `NEXTAUTH_URL` or `NEXTAUTH_SECRET`
    is missing. Google sign-in additionally needs the client variables; email sign-in
-   does not, and its session can still be signed out when Google is unset. Use
-   Sign in / Sign out in nav.
+   does not, and its session can still be signed out when Google is unset. Apple's
+   four values are listed below. Use Sign in / Sign out in nav.
 4. Keep DATABASE_URL private to the app/worker/operator. Worker runs in a separate
    process with direct DB access; no bearer token bypass or public worker endpoint.
 5. Verify an existing business belongs to the signed-in owner, locate their
@@ -241,30 +242,29 @@ verifies the RS256 signature against Apple's published keys
 (https://appleid.apple.com/auth/keys, cached by `jose`), the issuer
 (`https://appleid.apple.com`), expiry, and that the audience is one of the
 comma-separated values in `APPLE_CLIENT_ID` (the app's bundle id
-`ca.visda.praiseloop`; a Services ID is added only when web sign-in exists). Missing
-`APPLE_CLIENT_ID` returns 401 for every request (fail closed), and every other
-invalid token gets the same generic 401. It then finds or creates the owner through
-`auth_accounts` (`provider = apple`, `provider_account_id = sub`), the same row a
-future web Apple login will use. The Apple token is never stored or logged. Failed
-attempts share the Google limiter: 10 per 15 minutes per client IP, in process
-memory, as described above.
+`ca.visda.praiseloop`). Missing `APPLE_CLIENT_ID` returns 401 for every request
+(fail closed), and every other invalid token gets the same generic 401. It then
+finds or creates the owner through `auth_accounts` (`provider = apple`,
+`provider_account_id = sub`), the same row the web Apple login uses. The Apple
+token is never stored or logged. Failed attempts share the Google limiter: 10 per
+15 minutes per client IP, in process memory, as described above.
 
-Apple-only owners and web setup: the web app has no Apple sign-in yet and the phone has
-no business setup, so an owner who only signed in with Apple cannot set up a business
-until they link Google (Profile, Sign-in methods) and sign in to the web with it. The
-phone's "no business yet" screen says so. A session handoff from the phone to the web is
-a possible follow-up.
+Apple's `sub` is stable for the person across our App ID and Services ID (it is
+scoped to the developer team, not the client id), so an owner who first signed in
+on the phone is the same owner when they sign in on the web, and the reverse.
 
-Apple only sends the owner's name on the first authorization, outside the token. The
-optional `fullName` is trimmed and capped at 80 characters and passed to
-`fillProviderName`, so it can fill a missing name but never replaces a name the owner
-edited. Apple's address (possibly an `@privaterelay.appleid.com` relay) is recorded on
-the method row but Apple never auto-links an existing owner by email, as the issue
-requires; a new Apple sign-in creates its own owner. A signed-in owner can link Apple through
+Apple only sends the owner's name on the first authorization, outside the token.
+The phone's optional `fullName` is trimmed and capped at 80 characters and passed
+to `fillProviderName`, so it can fill a missing name but never replaces a name the
+owner edited. The web provider does not expose that form field, so a web-first
+Apple owner starts without a name and can set one on `/account`. Apple's address
+(possibly an `@privaterelay.appleid.com` relay) is recorded on the method row but
+Apple never auto-links an existing owner by email, as the issue requires; a new
+Apple sign-in creates its own owner. A signed-in owner can link Apple through
 `POST /api/account/methods` with `{ "provider": "apple", "idToken": "..." }` (the
-phone API; no Apple linking button is shown on the web or phone yet), which uses
-the same verified token and subject rules and also allows a relay address because
-the live session already proves control of the account.
+phone/API path; `/account` shows no Apple link button), which uses the same
+verified token and subject rules and also allows a relay address because the live
+session already proves control of the account.
 
 Owner setup for the native app: in the Apple Developer portal create an App ID for
 `ca.visda.praiseloop` with the **Sign in with Apple** capability (or let Xcode/EAS
@@ -272,22 +272,60 @@ enable it), then add the same bundle id to `APPLE_CLIENT_ID`. No key, secret or
 Services ID is needed for the native token flow. Nothing was run on a device or
 simulator in this change; the live check waits on the owner's Apple account.
 
-Web Apple sign-in: not built yet. NextAuth would need an Apple provider with a
-Services ID and a client secret JWT signed by a `.p8` key, and the browser redirect
-domain must be verified with Apple. That work is a follow-up; the native flow above
-does not depend on it. Owner steps when it is built:
+Web Apple sign-in (#92): the landing page offers **Continue with Apple** when all
+four web values are set; otherwise the provider is omitted from NextAuth and the
+button is hidden, like Microsoft. The web uses NextAuth's built-in Apple provider
+(id `apple`, callback `${NEXTAUTH_URL}/api/auth/callback/apple`). NextAuth reads
+Apple's discovery document, validates the returned identity token (signature,
+issuer, expiry and audience = the Services ID), then the shared `signIn` callback
+calls `signInWithIdentity` with `provider = 'apple'` exactly like the phone.
+
+- `APPLE_WEB_CLIENT_ID` is the **Services ID**, used as the OAuth client id.
+  `APPLE_TEAM_ID`, `APPLE_KEY_ID` and `APPLE_PRIVATE_KEY` complete the set;
+  `APPLE_PRIVATE_KEY` is the PKCS#8 PEM contents and literal `\n` escapes are
+  accepted for environment files. `APPLE_CLIENT_ID` stays the native audience
+  list and is not used by the web button.
+- Apple requires a client secret to be an ES256 JWT, not a static string.
+  `lib/appleClientSecret.ts` signs one with `node:crypto` (no new dependency):
+  header `{alg:"ES256", kid: APPLE_KEY_ID}`, claims `iss = APPLE_TEAM_ID`,
+  `sub = APPLE_WEB_CLIENT_ID`, `aud = https://appleid.apple.com`, `iat` and a
+  one-hour `exp`. The provider exposes it through a getter, so every NextAuth
+  request gets a fresh signature instead of one that expires with the process.
+- Apple answers with `response_mode=form_post`, a cross-site POST to the callback.
+  A Lax cookie is not sent on that request, so when `NEXTAUTH_URL` is HTTPS the
+  PKCE (and state) cookies are `SameSite=None; Secure`; on local HTTP they stay
+  Lax and the flow cannot complete, which is fine because Apple only accepts an
+  HTTPS return URL. The callback is a NextAuth route, not an `ownerRoute`
+  handler; the CSRF/origin rule for cookie writes does not apply to it, and PKCE
+  plus Apple's verified identity token protect the callback. `proxy.ts` only
+  blocks legacy `/generated/*`, so nothing intercepts the callback.
+- The callback is a cross-site POST, so the ordinary session cookie is not sent
+  either. The web callback therefore never treats an Apple sign-in as a link to
+  the owner whose browser started it: an Apple address (including a relay) always
+  creates or returns its own Apple owner. Linking a second method while signed in
+  is the explicit `POST /api/account/methods` path above.
+- `scripts/test-apple-web.ts` covers the JWT shape/claims/expiry and signature,
+  the provider being hidden when any value is missing, the form_post cookie
+  attributes, a new owner from an Apple subject, reuse of the same subject,
+  no email linking even for a matching private-relay address, and the invite gate
+  for listed, unlisted, relay, unverified and missing addresses.
+
+Owner steps for web Apple sign-in (nothing was run against Apple's live service in
+this change; the owner must complete them):
 
 1. Create (or reuse) the App ID above with **Sign in with Apple** enabled.
-2. Create a **Services ID** for the web hostname, configure its return URL as
+2. Create a **Services ID** for the web hostname. Configure its return URL as
    `${NEXTAUTH_URL}/api/auth/callback/apple`, and add the domain (and any subdomain)
    under **Sign in with Apple > Configure > Domains and Subdomains**, then verify the
    domain by downloading Apple's file and serving it at
    `/.well-known/apple-developer-domain-association.txt`.
 3. Create a **Key** with Sign in with Apple enabled, download the `.p8` once, note
-   its Key ID and the Team ID, and generate the short-lived client secret JWT from
-   it at runtime (never commit the key).
-4. Add the Services ID to `APPLE_CLIENT_ID` alongside the bundle id so the server
-   verifier accepts web identity tokens too.
+   its Key ID and the Team ID, and set `APPLE_KEY_ID`, `APPLE_TEAM_ID` and
+   `APPLE_PRIVATE_KEY` in the runtime environment only (never commit the key).
+4. Set `APPLE_WEB_CLIENT_ID` to the Services ID. No Services ID is needed in
+   `APPLE_CLIENT_ID`, which remains the native app's audience list.
+5. Restart the web service and confirm the button appears. Run a real sign-in with
+   an Apple account once the owner's developer account exists; it was not run here.
 
 ## Sign in with Microsoft (Entra ID, #158)
 
