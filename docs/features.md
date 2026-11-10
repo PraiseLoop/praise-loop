@@ -1015,9 +1015,14 @@ and says the post changed somewhere else, like the web queue.
   still start without it, and it is unavailable there rather than fatal.
 - Covered by `mobile/__tests__/queueState.test.ts`,
   `mobile/__tests__/drafts.test.ts`, `mobile/__tests__/shareFlow.test.ts`,
-  `mobile/__tests__/regenerateFlow.test.ts` and
-  `mobile/__tests__/saveToPhotosFlow.test.ts`. Manual iOS and Android checks
-  with Instagram and Facebook installed are still recorded in the PR.
+  `mobile/__tests__/regenerateFlow.test.ts`,
+  `mobile/__tests__/saveToPhotosFlow.test.ts`,
+  `mobile/__tests__/queueScreen.test.tsx` (loading, empty week, generation in
+  progress, server/offline errors and the last loaded queue staying visible when
+  a refresh fails) and `mobile/__tests__/draftScreen.test.tsx` (loading, load
+  error, caption validation, approve, archive, a 409 that reloads the post, and
+  the version sent with each mutation). Manual iOS and Android checks with
+  Instagram and Facebook installed are still recorded in the PR.
 
 ## Delete account (#93)
 

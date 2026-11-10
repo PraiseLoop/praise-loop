@@ -273,7 +273,9 @@ export default function QueueScreen() {
         ) : null}
         {error && !offline ? <Banner message={error} tone="danger" /> : null}
 
-        {!loaded && !noBusiness && !error && !offline ? <ActivityIndicator style={styles.loading} /> : null}
+        {!loaded && !noBusiness && !error && !offline ? (
+          <ActivityIndicator style={styles.loading} accessibilityLabel="Loading this week's posts" />
+        ) : null}
 
         {view ? (
           <>
