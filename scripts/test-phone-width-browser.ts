@@ -141,6 +141,13 @@ async function main() {
             await signIn.getByRole("button", { name: "Email me a sign-in code" }).click();
             await signIn.getByLabel("Email address").waitFor();
             await assertPhoneLayout(signIn, "Sign-in (email code)", width);
+
+            // Public legal and support pages (#262) are readable without a session too.
+            for (const [path, heading] of [["/privacy", "Privacy Policy"], ["/terms", "Terms of Service"], ["/support", "Support"]] as const) {
+              await signIn.goto(`${base}${path}`);
+              await signIn.getByRole("heading", { name: heading, level: 1 }).waitFor();
+              await assertPhoneLayout(signIn, `Public ${path}`, width);
+            }
             await anonymous.close();
           }
           assert.equal((await c.query("SELECT status FROM draft_posts WHERE id=$1", [archived])).rows[0].status, "archived");

@@ -22,3 +22,6 @@
 .notes h2 { margin: 0; font-size: 20px; }
 .notes ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; color: var(--pl-ink-soft); font-size: 15px; line-height: 1.5; }
 .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.footer { width: 100%; max-width: 1120px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px; padding-top: 20px; border-top: 1px solid var(--pl-line); }
+.footerLinks { display: flex; flex-wrap: wrap; gap: 0 18px; }
+.footerLinks a { display: inline-flex; align-items: center; min-height: 44px; }

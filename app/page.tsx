@@ -367,6 +367,10 @@ export default function HomePage() {
               </form>
             ) : null}
             <span className="pl-muted pl-small">Nothing posts without your OK.</span>
+            <p className={`${styles.agreement} pl-small pl-muted`}>
+              By continuing you agree to our <Link href="/terms">Terms of Service</Link> and{" "}
+              <Link href="/privacy">Privacy Policy</Link>.
+            </p>
             <Link href="/plans" className="pl-small">See what each plan includes</Link>
             {demoOwners.length > 0 ? (
               <div className={styles.demo}>
@@ -394,6 +398,15 @@ export default function HomePage() {
           <div key={title} className={styles.step}><strong>{title}</strong><span>{body}</span></div>
         ))}
       </section>
+      <footer className={styles.footer}>
+        <span className="pl-small pl-muted">PraiseLoop, Ontario, Canada</span>
+        <nav className={styles.footerLinks} aria-label="Legal and help">
+          <Link href="/privacy" className="pl-small">Privacy</Link>
+          <Link href="/terms" className="pl-small">Terms</Link>
+          <Link href="/support" className="pl-small">Support</Link>
+          <Link href="/plans" className="pl-small">Plans</Link>
+        </nav>
+      </footer>
     </div>
   );
 }

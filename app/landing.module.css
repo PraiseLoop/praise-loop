@@ -19,3 +19,8 @@
 .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
 .step { padding: 22px; border-radius: 16px; background: var(--pl-surface); border: 1px solid var(--pl-line); display: flex; flex-direction: column; gap: 8px; font-size: 15px; line-height: 1.5; color: var(--pl-ink-soft); }
 .step strong { font-family: var(--pl-display); color: var(--pl-green); }
+.agreement { margin: 0; max-width: 380px; }
+.agreement a { font-weight: 600; }
+.footer { width: 100%; max-width: 1200px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px; padding-top: 20px; border-top: 1px solid var(--pl-line); }
+.footerLinks { display: flex; flex-wrap: wrap; gap: 0 18px; }
+.footerLinks a { display: inline-flex; align-items: center; min-height: 44px; }
