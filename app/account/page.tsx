@@ -328,6 +328,12 @@ export default function AccountPage() {
           </button>
         </div>
       </section>
+
+      <p className="pl-small pl-muted" style={{ margin: 0 }}>
+        Need help? Visit <Link href="/support">Support</Link>. Read our{" "}
+        <Link href="/privacy">Privacy Policy</Link> and{" "}
+        <Link href="/terms">Terms of Service</Link>.
+      </p>
     </>
   );
 }

@@ -75,6 +75,15 @@ export default function PlansPage() {
           <span className="pl-muted pl-small">Free to start. Nothing posts without your OK.</span>
         </section>
       </main>
+      <footer className={styles.footer}>
+        <span className="pl-small pl-muted">PraiseLoop, Ontario, Canada</span>
+        <nav className={styles.footerLinks} aria-label="Legal and help">
+          <Link href="/privacy" className="pl-small">Privacy</Link>
+          <Link href="/terms" className="pl-small">Terms</Link>
+          <Link href="/support" className="pl-small">Support</Link>
+          <Link href="/" className="pl-small">Home</Link>
+        </nav>
+      </footer>
     </div>
   );
 }

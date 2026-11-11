@@ -5,7 +5,7 @@ promise: the GitHub issues are the source of truth for scope and acceptance crit
 and this file says which ones to take, in what order, and what is waiting on the owner.
 **Update it in the same PR that finishes or reshapes an item** (see the last section).
 
-Last updated: 2026-11-10 (set a password while signed in and breached-password check, #286; sign out of all other devices, #285). Trackers: #225 (billing and the paid pilot), #271 (owner
+Last updated: 2026-11-10 (public privacy, terms and support pages, #262; set a password while signed in and breached-password check, #286; sign out of all other devices, #285). Trackers: #225 (billing and the paid pilot), #271 (owner
 approvals, order and costs), #99 (native app, parked).
 
 **Current strategy: validate on the web first, for $0** (decided 2026-11-10, see
@@ -47,6 +47,9 @@ Built and on `master`:
 - **Web on phones:** every owner page fits 360×800 and 390×844 with no horizontal page
   scrolling, 44px controls, 16px text fields and tab-bar clearance; the browser test
   (`scripts/test-phone-width-browser.ts`) walks them at both sizes (#276).
+- **Public legal and support pages:** `/privacy`, `/terms` and `/support` are public, use the
+  final owner-approved wording and are linked from the landing/sign-in, plans and account pages
+  (#262). Publishing them on the production domain remains an owner task.
 - **Dev environment:** Dockhand stacks, Stripe CLI forwarder, supervised draft-mode test
   guide in [development.md](development.md).
 
@@ -71,7 +74,7 @@ Take the first item that is not blocked. Each is one PR per issue (see CONTRIBUT
 
 The full ordered list with steps and costs is **#271**. In short:
 
-- **Now (free, needed for the web pilot):** #262 privacy, terms and support pages; #78 last
+- **Now (free, needed for the web pilot):** #262 privacy, terms and support pages (built; the owner still has to publish them on the production domain); #78 last
   Google sign-in check; #90 production hosting; the invite-gate env below.
 - **Optional during validation (free, slow):** #263 Meta verification and App Review (gate
   for the #234 live test), #264 Google Business Profile API access, #222 Stripe account, CAD

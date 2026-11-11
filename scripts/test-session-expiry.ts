@@ -34,6 +34,10 @@ async function pure() {
   assert.equal(isSessionExpiry({ status: 401, url: "/api/businesses", pathname: "/" }), false);
   // The public plans page also loads business state; a signed-out visitor must stay there.
   assert.equal(isSessionExpiry({ status: 401, url: "/api/businesses", pathname: "/plans" }), false);
+  // The public legal and support pages (#262) also load the shell; a signed-out visitor stays.
+  for (const pathname of ["/privacy", "/terms", "/support"]) {
+    assert.equal(isSessionExpiry({ status: 401, url: "/api/businesses", pathname }), false, pathname);
+  }
   // The development email outbox is read while signed out, so its shell reload must not redirect.
   assert.equal(isSessionExpiry({ status: 401, url: "/api/businesses", pathname: "/dev/outbox" }), false);
   for (const url of ["/api/auth/session", "/api/auth/csrf", "/api/auth/signout", "/api/auth", "/api/mobile/config", "/api/mobile/session", "https://example.invalid/api/drafts", "//example.invalid/api/drafts", "/other"]) {

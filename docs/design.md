@@ -4,7 +4,7 @@
 who are about to change it. It summarises and links; the detailed, authoritative text lives in the
 other docs. When you change behaviour, update the detailed doc and the matching line here.
 
-Last reviewed: 2026-11-10 (set a password while signed in and breached-password check, #286; sign out of all other devices, #285; email and password sign-in, #159; phone-width owner screens, #276; weekly "posts ready" email, #275; web Sign in with Apple, #92; new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
+Last reviewed: 2026-11-10 (public privacy, terms and support pages, #262; set a password while signed in and breached-password check, #286; sign out of all other devices, #285; email and password sign-in, #159; phone-width owner screens, #276; weekly "posts ready" email, #275; web Sign in with Apple, #92; new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
 
 | Doc | What it is the source of truth for |
 | --- | --- |
@@ -52,7 +52,7 @@ business has reviews, a brand, drafts and a weekly target.
 
 - **Web app** (`app/`): Next.js (App Router) UI and the API. Pages: landing/sign-in, onboarding,
   approval ("This week"), schedule, brand, reviews/import, quotes, plan and profile (`/account`),
-  public `/plans`.
+  public `/plans`, and the public `/privacy`, `/terms` and `/support` pages.
 - **API** (`app/api/**`): the only way any client writes data. No client talks to Postgres, the AI
   provider, Google, Resend or Expo directly.
 - **Domain logic** (`lib/`, `lib/services/`): everything with rules lives here, not in route files
@@ -322,6 +322,7 @@ endpoints take the Page token or the User token, to be settled by the owner-appr
 | Google Takeout review import | built; assumed format **unverified**, needs a real-export check before announcing | #233 |
 | Business tier | planned, see [billing.md](billing.md) | #222, #225 |
 | Store subscriptions, VPS, pilot hosting, store accounts | not started / owner tasks | #95, #98, #90, #91 |
+| Public privacy, terms and support pages | built; publishing on the production domain remains an owner task | #262 |
 | Email + password | web sign-up (verified email), sign-in, reset, change and signed-in set-password shipped; breached-password check with fail-open behind `PASSWORD_BREACH_CHECK`; phone bearer route shipped, **phone UI not built** | #159, #286 |
 
 Open work and blockers are tracked in GitHub issues; this table is a snapshot.

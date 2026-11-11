@@ -1337,6 +1337,46 @@ Progressive Web App: installable, but deliberately not offline-capable.
   running until the site is revisited or the shortcut is removed; no owner data
   or database row depends on this feature.
 
+## Public privacy, terms and support pages (#262)
+
+`/privacy`, `/terms` and `/support` are public, static server components. They give Meta App
+Review, Google OAuth verification, the app stores and Stripe the privacy, terms and support URLs
+those programs require. The wording is final; the owner does not edit it in the app.
+
+- **Reachability.** `app/AppShell.tsx` treats the three routes as bare pages, like `/plans` and
+  the reset page, so a signed-out visitor is never shown the sign-in wall. `lib/sessionExpiry.ts`
+  also lists them as public, so the shell's `/api/businesses` 401 cannot bounce a visitor to the
+  landing page. `proxy.ts` only blocks `/generated/*` and does not intercept them.
+- **What they commit to.** The privacy policy names PraiseLoop as an individual sole proprietor
+  in Ontario, names `admin@praiseloop.ca` as the PIPEDA privacy contact, inventories account,
+  session, business, review, draft, connection, billing, email and usage data, lists each service
+  provider and purpose (Stripe, Resend, OpenAI/OpenRouter, Buffer, Meta, Google, Microsoft, Apple,
+  Apify, Cloudflare, Expo, Have I Been Pwned), says some providers process data outside Canada,
+  lists only the essential cookies and local/session-storage keys, describes what account
+  deletion removes and the 14-day backup window, and gives the 30-day access/correction answer.
+  It describes only real security measures (HTTPS, AES-256-GCM token encryption, scrypt password
+  hashing, hashed sessions, invite-only pilot sign-up, sign-in alerts) and makes no certification
+  or uptime claim.
+- **Terms.** Business-only use, 18+, the approval promise, plan prices from `PLAN_PRICING` (Pro
+  CA$29.99 a month plus tax; Business arranged with us), Stripe billing, cancellation from the
+  account page with access to the end of the paid period, no partial refunds except where the law
+  requires, 30-day price-change notice, acceptable use, the pilot's "as is" service with no
+  uptime guarantee, third-party platform terms, liability limited to the prior 12 months' fees as
+  permitted by law, suspension for abuse, 30-day notice of material changes and Ontario/Canada
+  governing law.
+- **Support.** `admin@praiseloop.ca`, what to include, a 2-business-day reply target and short
+  FAQ answers that match the real UI: approval on **This week**, **Manage subscription** on
+  `/account`, **Delete account** on `/account` (type `DELETE`), **Disconnect** on `/connections`,
+  the **Emails** toggle on `/account#weekly-email`, and **Sign out of all other devices** on
+  `/account`.
+- **Links.** The landing/sign-in footer and the "By continuing you agree to the Terms of Service
+  and Privacy Policy" line, the plans footer, the account page footer and the three pages' shared
+  footer all link to them. The phone-width browser test loads the three pages signed out at
+  360×800 and 390×844; `scripts/test-legal-pages.ts` checks the final wording has no placeholders
+  and `scripts/test-legal-pages-browser.ts` checks they render signed out over HTTP.
+- **Rollback:** remove the three route folders and the footer links. No schema or API change is
+  involved.
+
 ## Demo owner picker (#154)
 
 In a development process with `MOBILE_DEV_AUTH=1`, the phone sign-in screen and
