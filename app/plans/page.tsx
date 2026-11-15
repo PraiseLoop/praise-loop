@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PLAN_LIMITS, type Plan } from "../../lib/services/entitlements";
 import { PLAN_ORDER, PLAN_PRICING, planComparison, planNotes, publicPlanName } from "../../lib/plansDisplay";
-import Icon from "../ui/Icon";
+import BrandMark from "../ui/BrandMark";
 import PlanCta, { ProPlanCta } from "./PlanCta";
 import styles from "./plans.module.css";
 
@@ -27,7 +27,7 @@ export default function PlansPage() {
   return (
     <div className={styles.page}>
       <header className={styles.bar}>
-        <Link href="/" className="pl-brand"><span className="pl-brand-mark"><Icon name="loop" strokeWidth={2.2} /></span>PraiseLoop</Link>
+        <Link href="/" className="pl-brand"><span className="pl-brand-mark"><BrandMark /></span>PraiseLoop</Link>
         <Link href="/" className="pl-small">Back to home</Link>
       </header>
       <main className={styles.main}>

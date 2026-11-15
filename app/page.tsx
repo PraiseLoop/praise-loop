@@ -6,7 +6,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { landingNotice } from "../lib/sessionExpiry";
 import { INVITE_ONLY_MESSAGE } from "../lib/signupMessages";
 import { useBusiness } from "./AppShell";
-import Icon from "./ui/Icon";
+import BrandMark from "./ui/BrandMark";
 import styles from "./landing.module.css";
 
 const steps = [
@@ -237,7 +237,7 @@ export default function HomePage() {
   return (
     <div className={styles.page}>
       <header className={styles.bar}>
-        <Link href="/" className="pl-brand"><span className="pl-brand-mark"><Icon name="loop" strokeWidth={2.2} /></span>PraiseLoop</Link>
+        <Link href="/" className="pl-brand"><span className="pl-brand-mark"><BrandMark /></span>PraiseLoop</Link>
         <Link href="/plans" className="pl-small">Plans</Link>
       </header>
       <main className={styles.hero}>
