@@ -1,5 +1,5 @@
 import Link from "next/link";
-import Icon from "./Icon";
+import BrandMark from "./BrandMark";
 import styles from "./legal.module.css";
 
 // The three public legal pages (#262) share one chrome so the footer links, the
@@ -22,7 +22,7 @@ export default function LegalPage({
   return (
     <div className={styles.page}>
       <header className={styles.bar}>
-        <Link href="/" className="pl-brand"><span className="pl-brand-mark"><Icon name="loop" strokeWidth={2.2} /></span>PraiseLoop</Link>
+        <Link href="/" className="pl-brand"><span className="pl-brand-mark"><BrandMark /></span>PraiseLoop</Link>
         <nav className={styles.nav} aria-label="Site">
           <Link href="/plans" className="pl-small">Plans</Link>
           <Link href="/support" className="pl-small">Support</Link>

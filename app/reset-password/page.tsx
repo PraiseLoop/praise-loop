@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
-import Icon from "../ui/Icon";
+import BrandMark from "../ui/BrandMark";
 
 // Public password recovery (#159). The email link carries a single-use,
 // 30-minute token; this page only ever sends the token back to our own API. It
@@ -70,7 +70,7 @@ export default function ResetPasswordPage() {
   return (
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
       <main className="pl-panel" style={{ width: "100%", maxWidth: 460, display: "flex", flexDirection: "column", gap: 14 }}>
-        <Link href="/" className="pl-brand"><span className="pl-brand-mark"><Icon name="loop" strokeWidth={2.2} /></span>PraiseLoop</Link>
+        <Link href="/" className="pl-brand"><span className="pl-brand-mark"><BrandMark /></span>PraiseLoop</Link>
         <h1 className="pl-h2" style={{ margin: 0 }}>{done ? "Password changed" : token ? "Choose a new password" : "Reset your password"}</h1>
 
         {done ? (

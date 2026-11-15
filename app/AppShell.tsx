@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react";
 import { apiFetch } from "./apiFetch";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import Icon, { type IconName } from "./ui/Icon";
+import BrandMark from "./ui/BrandMark";
 import InstallHint from "./ui/InstallHint";
 import ProfileMenu from "./ProfileMenu";
 import type { Profile } from "../lib/services/profile";
@@ -169,7 +170,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (bare) return <BusinessContext.Provider value={value}>{children}</BusinessContext.Provider>;
 
   const current = (item: typeof nav[number]) => item.match.some(path => pathname.startsWith(path)) ? "page" : undefined;
-  const brand = <Link href="/approval" className="pl-brand"><span className="pl-brand-mark"><Icon name="loop" strokeWidth={2.2} /></span><span className="pl-brand-text">PraiseLoop</span></Link>;
+  const brand = <Link href="/approval" className="pl-brand"><span className="pl-brand-mark"><BrandMark /></span><span className="pl-brand-text">PraiseLoop</span></Link>;
 
   return (
     <BusinessContext.Provider value={value}>

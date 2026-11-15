@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 354 100" role="img" aria-label="PraiseLoop">
+  <title>PraiseLoop</title>
+  <g transform="translate(6 6) scale(0.88)"><path d="M82.68 45.41A33 33 0 1 1 66.5 21.42" fill="none" stroke="#0E5A48" stroke-width="9" stroke-linecap="round"/>
+  <path d="M61.5 30.08 L 79.06 28.67 L 71.5 12.76Z" fill="#0E5A48" stroke="#0E5A48" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M50 32.7 L 54.47 45.05 L 67.59 45.48 L 57.23 53.55 L 60.87 66.17 L 50 58.8 L 39.13 66.17 L 42.77 53.55 L 32.41 45.48 L 45.53 45.05Z" fill="#F4B731" stroke="#F4B731" stroke-width="1.6" stroke-linejoin="round"/></g>
+  <text x="103" y="51" dominant-baseline="central" font-family="'Bricolage Grotesque', system-ui, sans-serif" font-size="47" font-weight="700" letter-spacing="-1.1" fill="#17201C">PraiseLoop</text>
+</svg>

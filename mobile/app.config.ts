@@ -65,7 +65,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     package: bundleIdentifier,
     adaptiveIcon: {
       foregroundImage: "./assets/icon.png",
-      backgroundColor: "#123456"
+      backgroundColor: "#0E5A48"
     }
   },
   plugins: [

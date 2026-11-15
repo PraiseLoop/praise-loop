@@ -39,6 +39,7 @@ h1, h2, h3 { font-family: var(--pl-display); letter-spacing: -0.01em; }
 .pl-sidebar { width: 248px; flex-shrink: 0; align-self: flex-start; position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 28px 20px; display: flex; flex-direction: column; gap: 28px; background: var(--pl-surface); border-right: 1px solid var(--pl-line); }
 .pl-brand { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 8px; font-family: var(--pl-display); font-weight: 700; font-size: 21px; color: var(--pl-ink); text-decoration: none; }
 .pl-brand-mark { width: 36px; height: 36px; border-radius: 10px; background: var(--pl-green); color: #FFFFFF; display: inline-flex; align-items: center; justify-content: center; }
+.pl-brand-mark svg { display: block; }
 .pl-nav { display: flex; flex-direction: column; gap: 4px; }
 .pl-nav a { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; color: var(--pl-ink); text-decoration: none; font-size: 15px; }
 .pl-nav a:hover { background: var(--pl-ground); }
