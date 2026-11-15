@@ -74,7 +74,7 @@ Take the first item that is not blocked. Each is one PR per issue (see CONTRIBUT
 
 The full ordered list with steps and costs is **#271**. In short:
 
-- **Now (free, needed for the web pilot):** #262 privacy, terms and support pages (built; the owner still has to publish them on the production domain); #78 last
+- **Now (free, needed for the web pilot):** #262 privacy, terms and support pages (the public URLs are `https://praiseloop.ca/privacy/`, `/terms/` and `/support/`, served by the separate `praiseloop.github.io` repo; see the legal-pages item below); #78 last
   Google sign-in check; #90 production hosting; the invite-gate env below.
 - **Optional during validation (free, slow):** #263 Meta verification and App Review (gate
   for the #234 live test), #264 Google Business Profile API access, #222 Stripe account, CAD
@@ -90,6 +90,15 @@ The full ordered list with steps and costs is **#271**. In short:
   on every environment that should be gated (dev stack and production). The default is
   `open`, so nothing is gated until they are set. Redeploy with an image pull after each
   merge to `master`; migrations run on start (latest at time of writing: `032`).
+- **Legal pages: the website copy is the public one (decided 2026-11-14).** `praiseloop.ca` is a
+  static GitHub Pages site from `PraiseLoop/praiseloop.github.io`, not the app. Give Meta, Google
+  and Stripe `https://praiseloop.ca/privacy/`, `/terms/` and `/support/` (support added 2026-11-14).
+  Support contact is `hello@praiseloop.ca`; privacy requests go to `privacy@praiseloop.ca`.
+  The app's own `/privacy`, `/terms` and `/support` (#262) still disagree with the website and must
+  be reconciled or removed: they claim a nightly backup with a 14-day window (**no backups exist
+  yet**; the website says so), describe billing, refunds and Stripe that the website terms say are
+  not live, list Apify, and use `admin@praiseloop.ca`. The website pages are still dated
+  "2026-11-01 (draft)" and carry `TODO(owner)` lawyer-review markers.
 - **Housekeeping on the dev stack:** delete the old Stripe dashboard webhook endpoint for
   `dev.praiseloop.ca` (it causes 403s; the CLI forwarder replaces it), and regenerate any
   Dockhand webhook secret that was ever pasted into a chat.
