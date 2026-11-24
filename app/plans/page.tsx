@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PLAN_LIMITS, type Plan } from "../../lib/services/entitlements";
+import { PRIVACY_URL, SUPPORT_URL, TERMS_URL } from "../../lib/legalLinks";
 import { PLAN_ORDER, PLAN_PRICING, planComparison, planNotes, publicPlanName } from "../../lib/plansDisplay";
 import BrandMark from "../ui/BrandMark";
 import PlanCta, { ProPlanCta } from "./PlanCta";
@@ -78,9 +79,9 @@ export default function PlansPage() {
       <footer className={styles.footer}>
         <span className="pl-small pl-muted">PraiseLoop, Ontario, Canada</span>
         <nav className={styles.footerLinks} aria-label="Legal and help">
-          <Link href="/privacy" className="pl-small">Privacy</Link>
-          <Link href="/terms" className="pl-small">Terms</Link>
-          <Link href="/support" className="pl-small">Support</Link>
+          <a href={PRIVACY_URL} className="pl-small">Privacy</a>
+          <a href={TERMS_URL} className="pl-small">Terms</a>
+          <a href={SUPPORT_URL} className="pl-small">Support</a>
           <Link href="/" className="pl-small">Home</Link>
         </nav>
       </footer>

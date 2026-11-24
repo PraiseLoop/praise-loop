@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { query } from "./db";
 import { EmailError, sendEmail, type EmailTemplate, type EmailTransport } from "./email";
+import { SUPPORT_EMAIL } from "./legalLinks";
 import { log } from "./log";
 import { verifiedOwnerEmails } from "./verifiedEmails";
 
@@ -127,8 +128,8 @@ export type NewSignInEmailInput = {
 export function newSignInEmail(input: NewSignInEmailInput): EmailTemplate {
   const accountUrl = input.accountUrl && /^https?:\/\//.test(input.accountUrl) ? input.accountUrl : null;
   const action = accountUrl
-    ? `sign in at ${accountUrl}, use “Sign out of all other devices” on the account page, then contact us at admin@praiseloop.ca.`
-    : "review your account, use “Sign out of all other devices” on the account page, then contact us at admin@praiseloop.ca.";
+    ? `sign in at ${accountUrl}, use “Sign out of all other devices” on the account page, then contact us at ${SUPPORT_EMAIL}.`
+    : `review your account, use “Sign out of all other devices” on the account page, then contact us at ${SUPPORT_EMAIL}.`;
   return {
     subject: "New sign-in to your Praise Loop account",
     text: [

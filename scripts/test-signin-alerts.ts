@@ -139,8 +139,8 @@ async function main() {
   assert.match(template.text, /America\/Toronto/);
   assert.match(template.text, /https:\/\/dev\.praiseloop\.ca\/account/);
   assert.match(template.text, /Sign out of all other devices/);
-  assert.match(template.text, /admin@praiseloop\.ca/);
-  assert.match(template.text, /If this was not you, sign in at https:\/\/dev\.praiseloop\.ca\/account, use “Sign out of all other devices” on the account page, then contact us at admin@praiseloop\.ca\./);
+  assert.match(template.text, /hello@praiseloop\.ca/);
+  assert.match(template.text, /If this was not you, sign in at https:\/\/dev\.praiseloop\.ca\/account, use “Sign out of all other devices” on the account page, then contact us at hello@praiseloop\.ca\./);
   assert.doesNotMatch(template.text, /tok|code is|eyJ/i);
   assert.doesNotMatch(template.text, /<a\s|<img|https?:\/\/[^\s]+\.(png|jpg)/i);
   assert.ok(template.text.length < 700);
@@ -154,7 +154,7 @@ async function main() {
   assert.equal(formatSignInTime(at, "Not/AZone"), "2026-11-09 23:59 UTC");
   const withoutUrl = newSignInEmail({ method: "email", client: "mobile", at, accountUrl: null });
   assert.match(withoutUrl.text, /use “Sign out of all other devices” on the account page/);
-  assert.match(withoutUrl.text, /contact us at admin@praiseloop\.ca/);
+  assert.match(withoutUrl.text, /contact us at hello@praiseloop\.ca/);
   assert.doesNotMatch(withoutUrl.text, /https?:\/\//);
   const hostile = newSignInEmail({ method: "google\r\nX-Evil: 1", client: "web", userAgent: "x".repeat(100_000), at, accountUrl: "javascript:alert(1)" });
   assert.match(hostile.text, /Method: unknown/);

@@ -6,6 +6,7 @@ import ProfileNameForm from "../ProfileNameForm";
 import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
 import { ADD_NAME_HINT, ADD_NAME_PROMPT, displayName } from "../../lib/profileDisplay";
+import { PRIVACY_URL, SUPPORT_URL, TERMS_URL } from "../../lib/legalLinks";
 import { expiryNote, formatLocalDate, pausedBusinessMessage, planName, quotaMetMessage } from "../../lib/planDisplay";
 import { usePlan } from "../ui/usePlan";
 import BillingActions from "./BillingActions";
@@ -330,9 +331,9 @@ export default function AccountPage() {
       </section>
 
       <p className="pl-small pl-muted" style={{ margin: 0 }}>
-        Need help? Visit <Link href="/support">Support</Link>. Read our{" "}
-        <Link href="/privacy">Privacy Policy</Link> and{" "}
-        <Link href="/terms">Terms of Service</Link>.
+        Need help? Visit <a href={SUPPORT_URL}>Support</a>. Read our{" "}
+        <a href={PRIVACY_URL}>Privacy Policy</a> and{" "}
+        <a href={TERMS_URL}>Terms of Service</a>.
       </p>
     </>
   );
