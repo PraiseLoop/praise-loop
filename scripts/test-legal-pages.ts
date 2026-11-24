@@ -1,106 +1,55 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { PLAN_PRICING } from "../lib/plansDisplay";
+import { LEGAL_SITE, PRIVACY_URL, SUPPORT_EMAIL, SUPPORT_URL, TERMS_URL } from "../lib/legalLinks";
 
-// The owner-approved wording of the public legal pages (#262) is final, so this
-// suite guards the commitments that must not quietly disappear: no placeholders,
-// the real contact address, the prices from PLAN_PRICING, the 14-day backup
-// window from ops/backup.sh, the provider inventory, the essential-cookie list
-// and the UI paths in the support FAQ. The browser suite proves they render
-// signed out; this one fails before a build when the copy drifts.
+// The privacy policy, terms and support page live on the praiseloop.ca website,
+// not in the app (#292), so there is one copy to keep true. This suite guards that
+// the app does not grow a second copy again, that every entry point links to the
+// website, and that the app's old paths redirect there so URLs already given to
+// Meta, Google and Stripe keep working. The browser suite checks the redirects live.
 const root = join(__dirname, "..");
 const read = (file: string) => readFileSync(join(root, file), "utf8");
 
-const pages = {
-  privacy: read("app/privacy/page.tsx"),
-  terms: read("app/terms/page.tsx"),
-  support: read("app/support/page.tsx")
-};
-// Collapse JSX line breaks so a sentence that wraps in source still reads as one
-// string to the assertions below.
-const flat = Object.fromEntries(Object.entries(pages).map(([name, text]) => [name, text.replace(/\s+/g, " ")])) as typeof pages;
-const shared = read("app/ui/LegalPage.tsx");
-const allCopy = [shared, ...Object.values(pages)].join("\n");
+assert.equal(LEGAL_SITE, "https://praiseloop.ca");
+assert.equal(PRIVACY_URL, "https://praiseloop.ca/privacy/");
+assert.equal(TERMS_URL, "https://praiseloop.ca/terms/");
+assert.equal(SUPPORT_URL, "https://praiseloop.ca/support/");
+assert.equal(SUPPORT_EMAIL, "hello@praiseloop.ca");
 
-// Final wording: no template leftovers.
-for (const pattern of [/TODO/i, /\[insert/i, /lorem ipsum/i, /\bTBD\b/, /\bXXX\b/, /placeholder/i, /example\.com/i]) {
-  assert.doesNotMatch(allCopy, pattern, `legal copy still contains a placeholder: ${pattern}`);
+// No in-app copy.
+for (const page of ["privacy", "terms", "support"]) {
+  assert.equal(existsSync(join(root, "app", page)), false, `app/${page} must not come back; the page lives on praiseloop.ca`);
 }
-assert.match(shared, /LEGAL_LAST_UPDATED = "2026-11-10"/, "all three pages show the same last-updated date");
-assert.match(shared, /Last updated:/, "the date is labelled");
-for (const [name, page] of Object.entries(pages)) {
-  assert.match(page, /title: "/, `${name} has a page title`);
-  assert.match(page, /<LegalPage/, `${name} uses the shared public page chrome`);
-}
+assert.equal(existsSync(join(root, "app/ui/LegalPage.tsx")), false, "the in-app legal page chrome is gone");
 
-// Public reachability: the shell must not put a sign-in wall in front of them and a
-// signed-out 401 from /api/businesses must not bounce a visitor off the page.
-const shell = read("app/AppShell.tsx");
-for (const route of ["/privacy", "/terms", "/support"]) {
-  assert.ok(shell.includes(`pathname === "${route}"`), `${route} is a bare route in AppShell`);
-  assert.ok(read("lib/sessionExpiry.ts").includes(`"${route}"`), `${route} is a public page in sessionExpiry`);
-}
-assert.match(shell, /public legal and support pages/, "the bare-route reason is documented");
+// Old app paths redirect to the website, temporarily so the move is reversible.
+const config = read("next.config.mjs");
+assert.match(config, /redirects\(\)/);
+assert.match(config, /const legalSite = "https:\/\/praiseloop\.ca"/, "next.config.mjs and lib/legalLinks.ts name the same site");
+assert.match(config, /\["privacy", "terms", "support"\]/);
+assert.match(config, /destination: `\$\{legalSite\}\/\$\{page\}\/`/);
+assert.match(config, /permanent: false/);
 
-// Privacy policy: identity, PIPEDA contact, data inventory and providers.
-for (const fact of [
-  "sole proprietor", "Ontario, Canada", "PIPEDA", "admin@praiseloop.ca", "30 days", "14 days",
-  "AES-256-GCM", "scrypt", "invite-only", "first five characters",
-  "Stripe", "Resend", "OpenAI", "OpenRouter", "Buffer", "Meta", "Google", "Microsoft", "Apple",
-  "Apify", "Cloudflare", "Expo", "Have I Been Pwned", "outside Canada",
-  "next-auth.session-token", "__Secure-next-auth.session-token", "praise-business",
-  "praise-install-hint-dismissed", "praise-onboarding", "do not use analytics"
-]) {
-  assert.ok(flat.privacy.includes(fact), `privacy policy is missing: ${fact}`);
-}
-// The deletion promise points at the real account-deletion behaviour.
-assert.match(flat.privacy, /cancel any live web subscription/i);
-assert.match(flat.privacy, /no recovery period/i);
-assert.match(flat.privacy, /nightly backup/i);
-const backup = read("ops/backup.sh");
-assert.match(backup, /RETENTION_DAYS:-14/, "backup retention still matches the 14 days in the policy");
-assert.match(flat.privacy, /up to 14 days/);
-
-// Terms: prices from PLAN_PRICING, cancellation/refund rules, pilot disclaimer,
-// acceptable use, third-party terms, liability and governing law.
-assert.equal(PLAN_PRICING.pro, "CA$29.99 a month, plus tax");
-for (const fact of [
-  "CA$29.99 a month", "plus applicable tax", "Business pricing is not published",
-  "Stripe", "Manage subscription", "end of the period", "do not refund partial periods",
-  "except where the law requires it", "30 days’ notice", "18 years",
-  "fake", "scrape", "as is", "uptime", "12 months", "Instagram", "Facebook", "Buffer", "Google",
-  "Ontario", "federal laws of Canada"
-]) {
-  assert.ok(flat.terms.includes(fact), `terms are missing: ${fact}`);
-}
-assert.match(flat.terms, /Nothing is posted without your approval/);
-assert.match(flat.terms, /fees you paid us for PraiseLoop in the 12 months/);
-
-// Support: contact, reply target and the real UI paths for each FAQ answer.
-for (const fact of [
-  "admin@praiseloop.ca", "within 2 business days", "What to include",
-  "This week", "Manage subscription", "Delete account", "type", "Disconnect",
-  "Connections", "Emails", "Email me when my weekly posts are ready",
-  "Sign out of all other devices", "Google Takeout", "invite-only"
-]) {
-  assert.ok(flat.support.includes(fact), `support page is missing: ${fact}`);
+// Every entry point links to the website copy.
+const landing = read("app/page.tsx");
+assert.match(landing, /By continuing you agree/);
+for (const file of ["app/page.tsx", "app/plans/page.tsx", "app/account/page.tsx"]) {
+  const text = read(file);
+  for (const name of ["PRIVACY_URL", "TERMS_URL", "SUPPORT_URL"]) {
+    assert.ok(text.includes(`href={${name}}`), `${file} links to ${name}`);
+  }
+  assert.doesNotMatch(text, /href="\/(privacy|terms|support)"/, `${file} must not link to the removed in-app pages`);
 }
 
-// Every entry point links to the pages.
-assert.match(read("app/page.tsx"), /By continuing you agree/);
-assert.match(read("app/page.tsx"), /href="\/terms"/);
-assert.match(read("app/page.tsx"), /href="\/privacy"/);
-assert.match(read("app/page.tsx"), /href="\/support"/);
-assert.match(read("app/plans/page.tsx"), /href="\/privacy"/);
-assert.match(read("app/plans/page.tsx"), /href="\/support"/);
-assert.match(read("app/account/page.tsx"), /href="\/privacy"/);
-assert.match(read("app/account/page.tsx"), /href="\/terms"/);
-assert.match(read("app/account/page.tsx"), /href="\/support"/);
+// The old contact address is gone from everything owners see.
+for (const file of ["app/page.tsx", "app/plans/page.tsx", "app/account/page.tsx", "lib/signInAlerts.ts"]) {
+  assert.doesNotMatch(read(file), /admin@praiseloop\.ca/, `${file} uses the support address`);
+}
 
 // No analytics or advertising tracker slipped into the public pages or the shell.
-for (const file of ["app/page.tsx", "app/plans/page.tsx", "app/account/page.tsx", "app/AppShell.tsx", "app/ui/LegalPage.tsx"]) {
+for (const file of ["app/page.tsx", "app/plans/page.tsx", "app/account/page.tsx", "app/AppShell.tsx"]) {
   assert.doesNotMatch(read(file), /gtag|googletagmanager|posthog|mixpanel|hotjar|plausible|fathom|fbq\(/i, `${file} must not load a tracker`);
 }
 
-console.log("Public legal pages content test passed: final wording, public routes, providers, prices and support paths");
+console.log("Legal pages test passed: one copy on praiseloop.ca, links and redirects point there");

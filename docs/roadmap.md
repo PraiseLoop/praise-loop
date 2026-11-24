@@ -5,7 +5,7 @@ promise: the GitHub issues are the source of truth for scope and acceptance crit
 and this file says which ones to take, in what order, and what is waiting on the owner.
 **Update it in the same PR that finishes or reshapes an item** (see the last section).
 
-Last updated: 2026-11-10 (public privacy, terms and support pages, #262; set a password while signed in and breached-password check, #286; sign out of all other devices, #285). Trackers: #225 (billing and the paid pilot), #271 (owner
+Last updated: 2026-11-23 (legal pages: the app links to praiseloop.ca, #292; public privacy, terms and support pages, #262; set a password while signed in and breached-password check, #286; sign out of all other devices, #285). Trackers: #225 (billing and the paid pilot), #271 (owner
 approvals, order and costs), #99 (native app, parked).
 
 **Current strategy: validate on the web first, for $0** (decided 2026-11-10, see
@@ -47,9 +47,9 @@ Built and on `master`:
 - **Web on phones:** every owner page fits 360×800 and 390×844 with no horizontal page
   scrolling, 44px controls, 16px text fields and tab-bar clearance; the browser test
   (`scripts/test-phone-width-browser.ts`) walks them at both sizes (#276).
-- **Public legal and support pages:** `/privacy`, `/terms` and `/support` are public, use the
-  final owner-approved wording and are linked from the landing/sign-in, plans and account pages
-  (#262). Publishing them on the production domain remains an owner task.
+- **Legal and support pages:** one copy, on the `praiseloop.ca` website. The app links there from
+  the landing/sign-in, plans and account pages and redirects its old `/privacy`, `/terms` and
+  `/support` paths (#262, #292).
 - **Dev environment:** Dockhand stacks, Stripe CLI forwarder, supervised draft-mode test
   guide in [development.md](development.md).
 
@@ -90,15 +90,15 @@ The full ordered list with steps and costs is **#271**. In short:
   on every environment that should be gated (dev stack and production). The default is
   `open`, so nothing is gated until they are set. Redeploy with an image pull after each
   merge to `master`; migrations run on start (latest at time of writing: `032`).
-- **Legal pages: the website copy is the public one (decided 2026-11-14).** `praiseloop.ca` is a
-  static GitHub Pages site from `PraiseLoop/praiseloop.github.io`, not the app. Give Meta, Google
-  and Stripe `https://praiseloop.ca/privacy/`, `/terms/` and `/support/` (support added 2026-11-14).
-  Support contact is `hello@praiseloop.ca`; privacy requests go to `privacy@praiseloop.ca`.
-  The app's own `/privacy`, `/terms` and `/support` (#262) still disagree with the website and must
-  be reconciled or removed: they claim a nightly backup with a 14-day window (**no backups exist
-  yet**; the website says so), describe billing, refunds and Stripe that the website terms say are
-  not live, list Apify, and use `admin@praiseloop.ca`. The website pages are still dated
-  "2026-11-01 (draft)" and carry `TODO(owner)` lawyer-review markers.
+- **Legal pages live only on the website (decided 2026-11-14 and 2026-11-23, #292).** `praiseloop.ca`
+  is a static GitHub Pages site from `PraiseLoop/praiseloop.github.io`. Give Meta, Google and
+  Stripe `https://praiseloop.ca/privacy/`, `/terms/` and `/support/`. Support contact is
+  `hello@praiseloop.ca`; privacy requests go to `privacy@praiseloop.ca`. The app no longer has its
+  own copy, so wording changes happen in the website repo. Still to do there: state the real
+  backups (the whole server is backed up weekly and two backups are kept, so deleted data can
+  survive about two weeks; there is no separate database backup and `ops/backup.sh` is not
+  scheduled), list Apify as a processor while the stopgap exists, update billing when Stripe goes
+  live (#222), and finish the `TODO(owner)` lawyer-review markers and the "draft" date.
 - **Housekeeping on the dev stack:** delete the old Stripe dashboard webhook endpoint for
   `dev.praiseloop.ca` (it causes 403s; the CLI forwarder replaces it), and regenerate any
   Dockhand webhook secret that was ever pasted into a chat.

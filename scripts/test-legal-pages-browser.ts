@@ -1,15 +1,23 @@
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
+import { PRIVACY_URL, SUPPORT_URL, TERMS_URL } from "../lib/legalLinks";
 import { webFixture } from "./web-fixture";
 
-// The three legal pages must render for a signed-out visitor, not redirect to the
-// sign-in landing page and not hide behind AppShell's sign-in wall (#262). Run
-// after `npm run build` with TEST_BROWSER=1; no database or provider is called by
-// the pages themselves.
+// The legal pages live on praiseloop.ca (#292). The app's old /privacy, /terms and
+// /support paths must redirect there for a signed-out visitor, and the landing page
+// must link to the website. No request leaves the test machine: redirects are read
+// with redirect: "manual" and links by their href. Run after `npm run build` with
+// TEST_BROWSER=1.
 async function main() {
   if (process.env.TEST_BROWSER !== "1") { console.log("Legal pages browser test skipped: build and set TEST_BROWSER=1"); return; }
 
   await webFixture(async base => {
+    for (const [route, target] of [["/privacy", PRIVACY_URL], ["/terms", TERMS_URL], ["/support", SUPPORT_URL]] as const) {
+      const response = await fetch(`${base}${route}`, { redirect: "manual" });
+      assert.equal(response.status, 307, `${route} redirects temporarily`);
+      assert.equal(response.headers.get("location"), target, `${route} redirects to ${target}`);
+    }
+
     const browser = await chromium.launch({
       executablePath: process.env.CHROMIUM_PATH === "playwright" ? undefined : process.env.CHROMIUM_PATH ?? "/usr/bin/chromium",
       headless: true,
@@ -17,50 +25,18 @@ async function main() {
     });
     try {
       const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      // Never load the real website from a test.
+      await context.route(/^https:\/\/praiseloop\.ca\//, route => route.abort());
       const page = await context.newPage();
-      const routeHeadings = [
-        ["/privacy", "Privacy Policy"],
-        ["/terms", "Terms of Service"],
-        ["/support", "Support"]
-      ] as const;
-
-      for (const [route, heading] of routeHeadings) {
-        const response = await page.goto(`${base}${route}`);
-        assert.equal(response?.status(), 200, `${route} answers 200 signed out`);
-        assert.equal(new URL(page.url()).pathname, route, `${route} does not redirect to sign-in`);
-
-        await page.getByRole("heading", { name: heading, level: 1 }).waitFor();
-        await page.getByText("Last updated: 2026-11-10").waitFor();
-        await page.getByText("PraiseLoop, Ontario, Canada").waitFor();
-        assert.equal(await page.getByText("Sign in to see your posts").count(), 0, `${route} must not show the sign-in wall`);
-        assert.ok((await page.getByRole("link", { name: "Privacy" }).first().getAttribute("href"))?.includes("/privacy"));
-        assert.ok((await page.getByRole("link", { name: "Terms" }).first().getAttribute("href"))?.includes("/terms"));
-        assert.ok((await page.getByRole("link", { name: "Support" }).first().getAttribute("href"))?.includes("/support"));
-        assert.ok((await page.locator("main").innerText()).includes("admin@praiseloop.ca"), `${route} names the contact address`);
-
-        const layout = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth }));
-        assert.ok(layout.scrollWidth <= layout.innerWidth, `${route} overflows at 390px: ${layout.scrollWidth} > ${layout.innerWidth}`);
-      }
-
-      // The privacy policy and terms are reachable from each other without a session.
-      await page.goto(`${base}/privacy`);
-      await page.getByRole("link", { name: "Terms", exact: true }).click();
-      await page.getByRole("heading", { name: "Terms of Service", level: 1 }).waitFor();
-      assert.equal(new URL(page.url()).pathname, "/terms");
-
-      // A plain HTTP request (no browser) also gets the page, as the app stores and
-      // Meta/Google review checks will see it.
-      for (const route of ["/privacy", "/terms", "/support"]) {
-        const response = await fetch(`${base}${route}`, { redirect: "manual" });
-        assert.equal(response.status, 200, `${route} is public over HTTP`);
-        assert.match(response.headers.get("content-type") ?? "", /text\/html/);
-        const html = await response.text();
-        assert.ok(html.includes("Last updated") && html.includes("2026-11-10"), `${route} serves the dated copy`);
-        assert.ok(html.includes("admin@praiseloop.ca"), `${route} serves the contact address`);
-      }
-
+      await page.goto(`${base}/`);
+      const footer = page.getByRole("navigation", { name: "Legal and help" });
+      assert.equal(await footer.getByRole("link", { name: "Privacy" }).getAttribute("href"), PRIVACY_URL);
+      assert.equal(await footer.getByRole("link", { name: "Terms" }).getAttribute("href"), TERMS_URL);
+      assert.equal(await footer.getByRole("link", { name: "Support" }).getAttribute("href"), SUPPORT_URL);
+      assert.equal(await page.getByRole("link", { name: "Terms of Service" }).getAttribute("href"), TERMS_URL);
+      assert.equal(await page.getByRole("link", { name: "Privacy Policy" }).getAttribute("href"), PRIVACY_URL);
       await context.close();
-      console.log("Public legal pages render signed out at phone width: /privacy, /terms and /support");
+      console.log("Legal pages browser test passed: old paths redirect to praiseloop.ca and the landing page links there");
     } finally {
       await browser.close();
     }

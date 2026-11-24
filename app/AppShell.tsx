@@ -162,9 +162,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   // The landing page, public plans, the public legal and support pages (#262), the
   // reset page, the development email outbox and onboarding wizard are full-screen
-  // flows without app navigation; the plans, reset and legal pages must stay
-  // readable when signed out.
-  const bare = pathname === "/" || pathname === "/plans" || pathname === "/privacy" || pathname === "/terms" || pathname === "/support" || pathname === "/reset-password" || pathname === "/dev/outbox" || pathname.startsWith("/onboarding");
+  // flows without app navigation; the plans and reset pages must stay readable
+  // when signed out. The legal pages live on praiseloop.ca (#292).
+  const bare = pathname === "/" || pathname === "/plans" || pathname === "/reset-password" || pathname === "/dev/outbox" || pathname.startsWith("/onboarding");
   const value = { status, businesses, business, select, reload };
   const profileValue = { profile, loaded: profileLoaded, saveName };
   if (bare) return <BusinessContext.Provider value={value}>{children}</BusinessContext.Provider>;

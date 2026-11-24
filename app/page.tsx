@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { getProviders, signIn } from "next-auth/react";
 import { useEffect, useState, type FormEvent } from "react";
 import { landingNotice } from "../lib/sessionExpiry";
+import { PRIVACY_URL, SUPPORT_URL, TERMS_URL } from "../lib/legalLinks";
 import { INVITE_ONLY_MESSAGE } from "../lib/signupMessages";
 import { useBusiness } from "./AppShell";
 import BrandMark from "./ui/BrandMark";
@@ -368,8 +369,8 @@ export default function HomePage() {
             ) : null}
             <span className="pl-muted pl-small">Nothing posts without your OK.</span>
             <p className={`${styles.agreement} pl-small pl-muted`}>
-              By continuing you agree to our <Link href="/terms">Terms of Service</Link> and{" "}
-              <Link href="/privacy">Privacy Policy</Link>.
+              By continuing you agree to our <a href={TERMS_URL}>Terms of Service</a> and{" "}
+              <a href={PRIVACY_URL}>Privacy Policy</a>.
             </p>
             <Link href="/plans" className="pl-small">See what each plan includes</Link>
             {demoOwners.length > 0 ? (
@@ -401,9 +402,9 @@ export default function HomePage() {
       <footer className={styles.footer}>
         <span className="pl-small pl-muted">PraiseLoop, Ontario, Canada</span>
         <nav className={styles.footerLinks} aria-label="Legal and help">
-          <Link href="/privacy" className="pl-small">Privacy</Link>
-          <Link href="/terms" className="pl-small">Terms</Link>
-          <Link href="/support" className="pl-small">Support</Link>
+          <a href={PRIVACY_URL} className="pl-small">Privacy</a>
+          <a href={TERMS_URL} className="pl-small">Terms</a>
+          <a href={SUPPORT_URL} className="pl-small">Support</a>
           <Link href="/plans" className="pl-small">Plans</Link>
         </nav>
       </footer>
