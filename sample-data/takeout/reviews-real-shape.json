@@ -1,0 +1,37 @@
+{
+  "reviews": [
+    {
+      "reviewer": {
+        "displayName": "Morgan Example"
+      },
+      "starRating": "FIVE",
+      "comment": "Synthetic review in the confirmed export shape: quick turnaround and a flawless finish.",
+      "createTime": "2026-06-01T14:03:27.512094Z",
+      "updateTime": "2026-06-01T14:03:27.512094Z",
+      "name": "accounts/1000000002/locations/2000000002/reviews/RealShapeReview001",
+      "reviewReply": {
+        "comment": "Synthetic owner reply that must not be imported.",
+        "updateTime": "2026-06-02T09:00:00.000000Z"
+      }
+    },
+    {
+      "reviewer": {
+        "displayName": "Quinn"
+      },
+      "starRating": "FIVE",
+      "createTime": "2026-05-20T08:15:00.000000Z",
+      "updateTime": "2026-05-20T08:15:00.000000Z",
+      "name": "accounts/1000000002/locations/2000000002/reviews/RealShapeReview002"
+    },
+    {
+      "reviewer": {
+        "displayName": "Riley Ann Example"
+      },
+      "starRating": "FOUR",
+      "comment": "Another synthetic review with a single-word and a three-word reviewer name nearby.",
+      "createTime": "2025-11-03T19:45:10.000001Z",
+      "updateTime": "2025-11-04T07:00:00.000000Z",
+      "name": "accounts/1000000002/locations/2000000002/reviews/RealShapeReview003"
+    }
+  ]
+}

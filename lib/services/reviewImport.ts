@@ -10,6 +10,7 @@ export type ReviewImportSummary = {
   duplicates: number;
   failedRows: number;
   skippedEmpty: number;
+  skippedNoText: number;
   rejectedInvalid: number;
   errors: { row: number; error: string }[];
 };
@@ -28,6 +29,7 @@ export async function importReviewRows(
   let imported = 0, duplicates = 0, failedRows = 0;
   const errors: { row: number; error: string }[] = [];
   let skippedEmpty = 0;
+  let skippedNoText = 0;
   let rejectedInvalid = 0;
 
   for (const { row, candidate } of rows) {
@@ -35,6 +37,11 @@ export async function importReviewRows(
 
     if (checked.status === "empty") {
       skippedEmpty += 1;
+      continue;
+    }
+
+    if (checked.status === "no_text") {
+      skippedNoText += 1;
       continue;
     }
 
@@ -62,7 +69,7 @@ export async function importReviewRows(
     }
   }
 
-  return { imported, duplicates, failedRows, skippedEmpty, rejectedInvalid, errors };
+  return { imported, duplicates, failedRows, skippedEmpty, skippedNoText, rejectedInvalid, errors };
 }
 
 export async function importReviewsCsv(businessId: number, csvText: string): Promise<ReviewImportSummary> {

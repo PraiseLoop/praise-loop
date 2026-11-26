@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { databaseFixture } from "./db-fixture";
 import { mapTakeoutRating, parseTakeoutReviews } from "../lib/takeout";
 import { MAX_REVIEW_IMPORT_BYTES } from "../lib/services/reviewImport";
+import { validateReviewRow } from "../lib/services/reviewValidation";
 
 // The route reads the owner from ownerRoute; replace it with fixed synthetic context.
 const boundary = require("../lib/authorization");
@@ -12,6 +13,10 @@ boundary.currentOwner = () => "synthetic-owner";
 const { POST } = require("../app/api/reviews/import-takeout/route");
 
 const FIXTURE_TEXT = readFileSync("sample-data/takeout/reviews.json", "utf8");
+// Mirrors the structure of a real Business Profile Takeout export checked on 2026-11-25
+// (#233): no reviewId, the review resource path in `name`, microsecond timestamps,
+// owner replies and star-only reviews with no `comment`. Content is invented.
+const REAL_SHAPE_TEXT = readFileSync("sample-data/takeout/reviews-real-shape.json", "utf8");
 
 function upload(json: string, businessId: number) {
   const form = new FormData();
@@ -44,6 +49,19 @@ async function main() {
   assert.equal(parseTakeoutReviews(FIXTURE_TEXT)[3].sourceReviewId, parsed[3].sourceReviewId, "the no-id hash is stable across parses");
   assert.equal(parsed[0].reviewedAt, "2026-10-01T12:00:00.000Z");
   assert.equal(parsed[0].sourceUrl, null);
+
+  // The confirmed real export shape parses: ID from `name`, microsecond time, and a
+  // star-only review left with empty text for validation to count as "no text".
+  const real = parseTakeoutReviews(REAL_SHAPE_TEXT);
+  assert.deepEqual(real.map(review => review.rating), ["5", "5", "4"]);
+  assert.deepEqual(real.map(review => review.sourceReviewId), [
+    "accounts/1000000002/locations/2000000002/reviews/RealShapeReview001",
+    "accounts/1000000002/locations/2000000002/reviews/RealShapeReview002",
+    "accounts/1000000002/locations/2000000002/reviews/RealShapeReview003"
+  ]);
+  assert.equal(real[0].reviewedAt, "2026-06-01T14:03:27.512Z");
+  assert.equal(real[1].text, "");
+  assert.deepEqual(real.map(review => validateReviewRow(review).status), ["valid", "no_text", "valid"]);
 
   // A top-level array is accepted too, along with alternate field names from an
   // unverified export, and only http(s) review URLs survive.
@@ -150,7 +168,24 @@ async function main() {
     }), business)).json();
     assert.deepEqual([ratingChanged.imported, ratingChanged.duplicates], [0, 1]);
 
-    // Invalid rows are counted and reported with their array position; an all-empty row is skipped.
+    // The real export shape imports end to end; the star-only review is skipped as
+    // "no text", not reported as an invalid row, and the owner reply is not stored.
+    const realBusiness = (await client.query(
+      "INSERT INTO businesses(name,timezone) VALUES('Synthetic Takeout Real Shape','UTC') RETURNING id"
+    )).rows[0].id as number;
+    const realImport = await (await upload(REAL_SHAPE_TEXT, realBusiness)).json();
+    assert.deepEqual(
+      [realImport.imported, realImport.duplicates, realImport.rejectedInvalid, realImport.skippedNoText, realImport.skippedEmpty, realImport.failedRows],
+      [2, 0, 0, 1, 0, 0]
+    );
+    assert.deepEqual(realImport.errors, []);
+    const realStored = JSON.stringify((await client.query("SELECT * FROM reviews WHERE business_id=$1", [realBusiness])).rows);
+    assert.equal(realStored.includes("Synthetic owner reply"), false, "owner replies are not imported");
+    const realAgain = await (await upload(REAL_SHAPE_TEXT, realBusiness)).json();
+    assert.deepEqual([realAgain.imported, realAgain.duplicates, realAgain.skippedNoText], [0, 2, 1]);
+
+    // Invalid rows are counted and reported with their array position; an all-empty row
+    // is skipped, and a star-only row is counted as "no text" rather than invalid.
     const mixed = await (await upload(JSON.stringify({
       reviews: [
         {
@@ -185,10 +220,10 @@ async function main() {
       ]
     }), business)).json();
     assert.deepEqual(
-      [mixed.imported, mixed.duplicates, mixed.rejectedInvalid, mixed.skippedEmpty, mixed.failedRows],
-      [1, 0, 3, 1, 0]
+      [mixed.imported, mixed.duplicates, mixed.rejectedInvalid, mixed.skippedNoText, mixed.skippedEmpty, mixed.failedRows],
+      [1, 0, 2, 1, 1, 0]
     );
-    assert.deepEqual(mixed.errors.map((error: { row: number }) => error.row), [2, 3, 4]);
+    assert.deepEqual(mixed.errors.map((error: { row: number }) => error.row), [2, 3]);
 
     // A top-level array reaches the database through the same route.
     const arrayBusiness = (await client.query(

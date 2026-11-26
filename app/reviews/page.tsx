@@ -6,7 +6,7 @@ import { useBusiness } from "../AppShell";
 import Icon from "../ui/Icon";
 
 type Review = { id: number; rating: number; author_name: string | null; text: string; reviewed_at: string; source: string; status: string };
-type ImportResult = { imported: number; duplicates: number; failedRows: number; skippedEmpty: number; rejectedInvalid: number; errors?: { row: number; error: string }[] };
+type ImportResult = { imported: number; duplicates: number; failedRows: number; skippedEmpty: number; skippedNoText?: number; rejectedInvalid: number; errors?: { row: number; error: string }[] };
 type Filter = "all" | "ready" | "used" | "unfit";
 type ApifyRun = {
   id: number; status: string; startedAt: string; importedAt: string | null;
@@ -285,6 +285,7 @@ export default function ReviewsPage() {
           <h2 id="import-h" className="pl-h2" style={{ fontSize: 18 }}>Import finished</h2>
           <p style={{ margin: 0 }}>
             {result.imported} imported · {result.duplicates} duplicates skipped
+            {result.skippedNoText ? ` · ${result.skippedNoText} without text` : null}
             {problems ? <> · <span style={{ color: "#A3361F", fontWeight: 600 }}>{problems} rows couldn’t be used</span></> : null}
           </p>
           {result.errors?.length ? (
