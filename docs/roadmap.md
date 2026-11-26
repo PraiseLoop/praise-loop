@@ -5,7 +5,7 @@ promise: the GitHub issues are the source of truth for scope and acceptance crit
 and this file says which ones to take, in what order, and what is waiting on the owner.
 **Update it in the same PR that finishes or reshapes an item** (see the last section).
 
-Last updated: 2026-11-25 (Google Takeout format confirmed on a real export, #233; website privacy policy: real backups and Apify, no lawyer review; legal pages: the app links to praiseloop.ca, #292; public privacy, terms and support pages, #262; set a password while signed in and breached-password check, #286; sign out of all other devices, #285). Trackers: #225 (billing and the paid pilot), #271 (owner
+Last updated: 2026-11-26 (demo accounts reset on dev deploys, #300; Google Takeout format confirmed on a real export, #233; website privacy policy: real backups and Apify, no lawyer review; legal pages: the app links to praiseloop.ca, #292; public privacy, terms and support pages, #262; set a password while signed in and breached-password check, #286; sign out of all other devices, #285). Trackers: #225 (billing and the paid pilot), #271 (owner
 approvals, order and costs), #99 (native app, parked).
 
 **Current strategy: validate on the web first, for $0** (decided 2026-11-10, see
@@ -97,6 +97,10 @@ The full ordered list with steps and costs is **#271**. In short:
   not scheduled) and lists Apify. The owner decided against a lawyer review, so those markers are
   gone. Still to do there: add Meta publishing, password sign-in with the breached-password check,
   and the Resend emails to the privacy policy, and update billing when Stripe goes live (#222).
+- **Demo reset on dev deploys (#300):** in the dev stack's environment set `DEMO_SEED=1`,
+  `DEMO_SEED_HOSTS=dev.praiseloop.ca` and a `DEMO_SEED_PASSWORD` of 12+ characters (keep it out of
+  chat and the repo), confirm `APP_ENV=dev`, then redeploy. The `seed` container's log should show
+  `demo_seed_complete`. Never set these on production. See development.md.
 - **Housekeeping on the dev stack:** delete the old Stripe dashboard webhook endpoint for
   `dev.praiseloop.ca` (it causes 403s; the CLI forwarder replaces it), and regenerate any
   Dockhand webhook secret that was ever pasted into a chat.

@@ -4,13 +4,24 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PoolClient } from "pg";
 import { databaseFixture } from "./db-fixture";
-import { assertSeedable } from "./seed/guard";
+import { assertDeploySeedable, assertSeedable } from "./seed/guard";
 import { SEED_BUSINESSES } from "./seed/fixtures";
 import { runSeed } from "./seed/seed";
 import { entitlementsFor } from "../lib/services/entitlements";
 import { QUOTE_TEMPLATES } from "../lib/branding";
 
 const DEV = { MOBILE_DEV_AUTH: "1", NODE_ENV: "development" };
+// A dev-stack deploy (#300): production build, explicit flag and an allow-listed host.
+const DEPLOY_PASSWORD = "synthetic-deploy-password-300";
+const DEPLOY = {
+  NODE_ENV: "production",
+  DEMO_SEED: "1",
+  APP_ENV: "dev",
+  NEXTAUTH_URL: "https://dev.example.invalid",
+  DEMO_SEED_HOSTS: "dev.example.invalid",
+  DEMO_SEED_PASSWORD: DEPLOY_PASSWORD,
+  DATABASE_URL: "postgresql://u:p@postgres:5432/d"
+};
 
 // Everything a person can see, without row ids (a re-seed rebuilds rows, so ids move).
 async function snapshot(client: PoolClient, media: string) {
@@ -49,6 +60,25 @@ async function main() {
   for (const local of ["postgres://u:p@localhost:55432/d", "postgres://u:p@127.0.0.1/d", "postgres://u:p@[::1]:5432/d", "postgresql://u:p@postgres:5432/d", "postgres:///d"]) {
     assert.doesNotThrow(() => assertSeedable({ ...DEV, DATABASE_URL: local }), local);
   }
+
+  // The deploy guard: every condition is required, production hosts are refused even
+  // when listed, and the repo's documented demo password is never accepted.
+  assert.equal(assertDeploySeedable(DEPLOY), DEPLOY_PASSWORD);
+  assert.throws(() => assertDeploySeedable({ ...DEPLOY, DEMO_SEED: undefined }), /DEMO_SEED is not 1/);
+  assert.throws(() => assertDeploySeedable({ ...DEPLOY, APP_ENV: "prod" }), /APP_ENV must be dev/);
+  assert.throws(() => assertDeploySeedable({ ...DEPLOY, APP_ENV: undefined }), /APP_ENV must be dev/);
+  assert.throws(() => assertDeploySeedable({ ...DEPLOY, NEXTAUTH_URL: "not a url" }), /NEXTAUTH_URL is not a valid URL/);
+  assert.throws(() => assertDeploySeedable({ ...DEPLOY, DEMO_SEED_HOSTS: "" }), /not listed in DEMO_SEED_HOSTS/);
+  assert.throws(() => assertDeploySeedable({ ...DEPLOY, NEXTAUTH_URL: "https://other.example.invalid" }), /not listed in DEMO_SEED_HOSTS/);
+  for (const prod of ["praiseloop.ca", "app.praiseloop.ca", "www.praiseloop.ca"]) {
+    assert.throws(() => assertDeploySeedable({ ...DEPLOY, NEXTAUTH_URL: `https://${prod}`, DEMO_SEED_HOSTS: prod }), /production host/, prod);
+  }
+  assert.throws(() => assertDeploySeedable({ ...DEPLOY, DATABASE_URL: "postgres://u:p@db.example.com:5432/d" }), /not a local development database/);
+  assert.throws(() => assertDeploySeedable({ ...DEPLOY, DEMO_SEED_PASSWORD: "synthetic-demo-password-159" }), /documented in the repo/);
+  assert.throws(() => assertDeploySeedable({ ...DEPLOY, DEMO_SEED_PASSWORD: "short" }), /password rules/);
+  assert.throws(() => assertDeploySeedable({ ...DEPLOY, DEMO_SEED_PASSWORD: undefined }), /password rules/);
+  // The local seeder still refuses a production build even with the deploy flags set.
+  assert.throws(() => assertSeedable({ ...DEPLOY, MOBILE_DEV_AUTH: "1" }), /production/);
 
   if (!process.env.TEST_DATABASE_URL) {
     console.log("Dev seed database tests skipped: set TEST_DATABASE_URL");
@@ -155,6 +185,25 @@ async function main() {
       assert.deepEqual(two, one);
       assert.equal((await client.query("SELECT count(*) n FROM businesses")).rows[0].n, String(Number(before) + SEED_BUSINESSES.length));
       assert.equal((await client.query("SELECT count(*) n FROM businesses WHERE owner_id='real-owner'")).rows[0].n, "1");
+
+      // Deploy mode (#300) on a production build: a refused guard writes nothing, then a
+      // run gives every demo owner the environment password and turns the weekly email off.
+      const fixtureDb = process.env.DATABASE_URL;
+      const deployEnv = { ...DEPLOY, DATABASE_URL: fixtureDb };
+      await assert.rejects(runSeed({ ...deployEnv, APP_ENV: "prod" }, "deploy"), /APP_ENV must be dev/);
+      assert.deepEqual(await snapshot(client, media), one);
+      await client.query("UPDATE password_credentials SET failed_attempts=3, locked_until=now() + interval '1 hour' WHERE owner_id='dev-owner-password'");
+      const deployed = await runSeed(deployEnv, "deploy");
+      assert.deepEqual(deployed.businesses, first.businesses, "deploy mode seeds the same synthetic data");
+      const credentials = (await client.query("SELECT owner_id,email,failed_attempts,locked_until FROM password_credentials ORDER BY owner_id")).rows;
+      assert.deepEqual(credentials.map(c => c.owner_id), ["dev-owner", "dev-owner-business", "dev-owner-email", "dev-owner-free", "dev-owner-password"]);
+      assert.ok(credentials.every(c => c.failed_attempts === 0 && c.locked_until === null), "a deploy clears lockouts from earlier testing");
+      const { signInWithPassword } = require("../lib/passwordAuth");
+      assert.deepEqual(await signInWithPassword("demo-business@praiseloop.invalid", DEPLOY_PASSWORD, "203.0.113.30"), { ok: true, ownerId: "dev-owner-business" });
+      assert.equal((await signInWithPassword("demo-password@praiseloop.invalid", "synthetic-demo-password-159", "203.0.113.31")).ok, false, "the repo password no longer works after a deploy seed");
+      assert.equal((await client.query("SELECT count(*)::int n FROM auth_users WHERE id LIKE 'dev-owner%' AND weekly_email_enabled")).rows[0].n, 0);
+      assert.equal((await client.query("SELECT count(*) n FROM businesses WHERE owner_id='real-owner'")).rows[0].n, "1", "deploy mode leaves real owners alone");
+      assert.equal((await client.query("SELECT count(*)::int n FROM password_credentials WHERE owner_id='real-owner'")).rows[0].n, 0);
     });
   } finally {
     for (const [key, value] of Object.entries(saved)) {

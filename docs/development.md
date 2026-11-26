@@ -538,6 +538,39 @@ runs as its own stack and reaches the app over a shared Docker network.
   without them. The rest match `.env.example`. If the images are private, add `ghcr.io`
   registry credentials to the tool first.
 - Pin `PRAISELOOP_TAG` to a release tag, or leave it at `latest` to follow master.
+
+#### Resetting the demo accounts on every dev deploy (#300)
+
+The stack's one-shot `seed` service runs after `migrate` on every deploy. On the dev stack it
+resets the demo owners to the synthetic seed data (the same businesses, reviews and drafts as
+`npm run dev:seed`, from `scripts/seed/fixtures.ts` and `sample-data/csv/`). Anything done to
+those accounts since the last deploy is lost; other owners are never touched. Set these in
+the **dev** stack's environment only:
+
+| Variable | Value |
+| --- | --- |
+| `DEMO_SEED` | `1` |
+| `APP_ENV` | `dev` (already set for verbose logs on the dev stack) |
+| `DEMO_SEED_HOSTS` | `dev.praiseloop.ca`: must equal the host in `NEXTAUTH_URL` |
+| `DEMO_SEED_PASSWORD` | 12+ characters, not the repo's documented demo password. Keep it in the stack environment only |
+
+Then sign in on the dev site with **Sign in with a password**, using that password and one of:
+
+| Email | Plan | Businesses |
+| --- | --- | --- |
+| `demo@praiseloop.invalid` | Pro | Copper Kettle Café |
+| `demo-business@praiseloop.invalid` | Business (web subscription) | Copper Kettle Café Riverside, Hespeler Powder Coating |
+| `demo-free@praiseloop.invalid` | Free | Harbour Bike Repair |
+| `demo-email@praiseloop.invalid`, `demo-password@praiseloop.invalid` | Free | None |
+
+Safety: without `DEMO_SEED=1` the service logs `demo_seed_skipped` and exits 0, so production
+runs the same file harmlessly. With it, the service refuses (logs `demo_seed_refused`, exits 1,
+writes nothing) unless `APP_ENV=dev`, the `NEXTAUTH_URL` host is in `DEMO_SEED_HOSTS` and is
+not `praiseloop.ca`, `www.praiseloop.ca` or `app.praiseloop.ca`, the database is the stack's
+own `postgres`, and the password passes the rules. `web` and `worker` don't wait for it, so a
+refused seed never blocks a deploy. The demo addresses are `.invalid`, so the weekly email is
+turned off for them and the Resend transport drops any mail to `@praiseloop.invalid`. The
+one-click demo buttons stay off on the dev site (they need a non-production build).
 - Keep it in step with `docker-compose.yml`. `scripts/test-tooling.ts` fails when a
   variable it passes to a service is missing from the standalone file.
 - `ops/backup.sh` and `ops/restore.sh` use `docker compose ... exec`, which needs the

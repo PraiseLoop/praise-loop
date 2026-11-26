@@ -208,6 +208,14 @@ async function main() {
     assert.equal(body.html, undefined, "plain text only, no HTML or tracking");
     assert.doesNotMatch(logs.join("\n"), /re_synthetic_key_never_log_me|owner@example\.invalid/);
 
+    // The seeded demo owners' reserved domain never reaches Resend (#300).
+    const demo = await sendEmail(
+      { to: "demo-business@praiseloop.invalid", ...oneTimeCodeEmail("482913") },
+      { throttle: freshThrottle() },
+    );
+    assert.deepEqual([demo.transport, demo.accepted], ["resend", false]);
+    assert.equal(calls.length, 1, "no request for a demo owner address");
+
     const providerError = async (status: number, code: EmailError["code"], headers?: Record<string, string>, name?: string) => {
       globalThis.fetch = (async () => new Response(JSON.stringify({ name, message: "synthetic provider detail" }), { status, headers })) as typeof fetch;
       await assert.rejects(
