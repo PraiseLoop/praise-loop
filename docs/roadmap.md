@@ -5,7 +5,7 @@ promise: the GitHub issues are the source of truth for scope and acceptance crit
 and this file says which ones to take, in what order, and what is waiting on the owner.
 **Update it in the same PR that finishes or reshapes an item** (see the last section).
 
-Last updated: 2026-11-24 (website privacy policy: real backups and Apify, no lawyer review; legal pages: the app links to praiseloop.ca, #292; public privacy, terms and support pages, #262; set a password while signed in and breached-password check, #286; sign out of all other devices, #285). Trackers: #225 (billing and the paid pilot), #271 (owner
+Last updated: 2026-11-25 (Google Takeout format confirmed on a real export, #233; website privacy policy: real backups and Apify, no lawyer review; legal pages: the app links to praiseloop.ca, #292; public privacy, terms and support pages, #262; set a password while signed in and breached-password check, #286; sign out of all other devices, #285). Trackers: #225 (billing and the paid pilot), #271 (owner
 approvals, order and costs), #99 (native app, parked).
 
 **Current strategy: validate on the web first, for $0** (decided 2026-11-10, see
@@ -17,7 +17,8 @@ is worked on until the web pilot shows owners use and pay for PraiseLoop.
 
 Built and on `master`:
 
-- **Core pipeline:** review import (CSV, Apify fetch, Google Takeout file), quote selection,
+- **Core pipeline:** review import (CSV, Apify fetch, Google Takeout file, format confirmed
+  on a real export 2026-11-25, #233), quote selection,
   weekly generation with quotas, rendered images, approval queue, draft lifecycle.
 - **Accounts:** Google, email-code, Microsoft and email+password sign-in; Sign in with Apple on
   the phone and the web (web needs owner keys, #268); mobile bearer sessions; account deletion;
@@ -82,10 +83,6 @@ The full ordered list with steps and costs is **#271**. In short:
 - **Parked until validated:** #261 individual/organization and D-U-N-S, #265 Apple ($99 USD
   a year), #266 Google Play ($25 USD once), #267 push credentials, #268 Sign in with Apple
   setup, #270 store listings and testing, #269 Microsoft publisher verification.
-- **#233 verification:** run a real Google Takeout export on an owned Business Profile and
-  upload it. The parser was built against a *guessed* file format (documented in
-  [integrations.md](integrations.md)); the issue stays open until a real file imports. Do not
-  announce the feature before this.
 - **Deployment of the invite gate:** `SIGNUP_MODE=invite` and `INVITED_EMAILS=...` must be set
   on every environment that should be gated (dev stack and production). The default is
   `open`, so nothing is gated until they are set. Redeploy with an image pull after each

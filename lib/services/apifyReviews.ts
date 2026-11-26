@@ -186,7 +186,7 @@ async function importItems(businessId: number, items: unknown[]): Promise<ApifyI
         // The review URL is deliberately discarded, as are the reviewer's id, profile and photo.
         sourceUrl: null
       });
-      if (checked.status === "empty") {
+      if (checked.status === "empty" || checked.status === "no_text") {
         summary.skipped += 1;
         continue;
       }

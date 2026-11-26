@@ -4,7 +4,7 @@
 who are about to change it. It summarises and links; the detailed, authoritative text lives in the
 other docs. When you change behaviour, update the detailed doc and the matching line here.
 
-Last reviewed: 2026-11-23 (legal and support pages moved to praiseloop.ca, #292; public privacy, terms and support pages, #262; set a password while signed in and breached-password check, #286; sign out of all other devices, #285; email and password sign-in, #159; phone-width owner screens, #276; weekly "posts ready" email, #275; web Sign in with Apple, #92; new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
+Last reviewed: 2026-11-25 (Google Takeout format confirmed, #233; legal and support pages moved to praiseloop.ca, #292; public privacy, terms and support pages, #262; set a password while signed in and breached-password check, #286; sign out of all other devices, #285; email and password sign-in, #159; phone-width owner screens, #276; weekly "posts ready" email, #275; web Sign in with Apple, #92; new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
 
 | Doc | What it is the source of truth for |
 | --- | --- |
@@ -320,7 +320,7 @@ endpoints take the Page token or the User token, to be settled by the owner-appr
 | Direct Instagram/Facebook publishing | Worker publishing, provider choice, idempotent container resume, JPEG variant, owner status, Connect backend and the `/connections` setup screen built; provider-neutral posting banner, optional onboarding link and plan/account copy built; **live client not built and the live connect/publish test not run** | #234, #244 |
 | Google review sync, AI review replies | blocked on access/policy | #46, #96 |
 | Apify Google reviews stopgap | built; client proven with one live run, full flow not yet run live; hidden without `APIFY_TOKEN` | #232 |
-| Google Takeout review import | built; assumed format **unverified**, needs a real-export check before announcing | #233 |
+| Google Takeout review import | built; format confirmed on a real export (2026-11-25) | #233 |
 | Business tier | planned, see [billing.md](billing.md) | #222, #225 |
 | Store subscriptions, VPS, pilot hosting, store accounts | not started / owner tasks | #95, #98, #90, #91 |
 | Privacy, terms and support pages | on the `praiseloop.ca` website; the app links and redirects there | #262, #292 |

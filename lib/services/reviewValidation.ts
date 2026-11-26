@@ -22,6 +22,7 @@ export type ValidReviewRow = {
 
 export type ReviewRowResult =
   | { status: "empty" }
+  | { status: "no_text" }
   | { status: "invalid" }
   | { status: "valid"; review: ValidReviewRow };
 
@@ -35,7 +36,11 @@ export function validateReviewRow(row: ReviewCandidate): ReviewRowResult {
     return { status: "empty" };
   }
 
-  if (!ratingText || !text.trim()) return { status: "invalid" };
+  // A star-only review (Google allows a rating with no comment) is not a broken row:
+  // there is just no quote to use. Count it separately so the owner isn't told their
+  // file is invalid (#233; real Takeout exports contain these).
+  if (!text.trim()) return { status: "no_text" };
+  if (!ratingText) return { status: "invalid" };
 
   const rating = Number(ratingText);
   const date = new Date(reviewedAt);

@@ -12,7 +12,7 @@ import styles from "./onboarding.module.css";
 
 type Draft = { id: string; version: number; quote_text: string; caption_text: string; image_path: string | null; status: string; job_state?: string; error_code?: string };
 type Progress = { business: { id: string; name: string; timezone: string; weekly_target: number } | null; reviews: number; drafts: Draft[]; period?: { reason: string; allocated: number; target: number }; postsPerWeek?: number };
-type ImportResult = { imported: number; duplicates: number; rejectedInvalid: number; skippedEmpty: number; failedRows: number; errors?: { row: number; error: string }[] };
+type ImportResult = { imported: number; duplicates: number; rejectedInvalid: number; skippedEmpty: number; skippedNoText?: number; failedRows: number; errors?: { row: number; error: string }[] };
 
 // A successful request can still queue nothing; say why instead of appearing to do nothing.
 const noDrafts: Record<string, string> = {
@@ -209,6 +209,7 @@ export default function Onboarding() {
             {result ? (
               <section aria-label="Import results" className="pl-panel" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 6 }}>
                 <strong>{result.imported} imported · {result.duplicates} duplicates skipped</strong>
+                {result.skippedNoText ? <span className="pl-small pl-muted">{result.skippedNoText} star-only {result.skippedNoText === 1 ? "review" : "reviews"} without text skipped</span> : null}
                 {result.rejectedInvalid + result.skippedEmpty + result.failedRows ? (
                   <span style={{ color: "#A3361F" }}>{result.rejectedInvalid} invalid · {result.skippedEmpty} empty · {result.failedRows} couldn’t be saved</span>
                 ) : null}

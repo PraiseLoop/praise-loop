@@ -444,31 +444,45 @@ reconciled against the official import without touching official rows. Remove th
 UI, provider and token setting once the official path is live. No review text, real place link or
 real business name is committed in tests or sample data.
 
-## Google Takeout review import (#233) — format unverified, checked 2026-11-05
+## Google Takeout review import (#233) — format confirmed 2026-11-25
 
-Status: built, **not verified against a real export**. No Google API access, OAuth
+Status: built and **verified against a real export** on 2026-11-25. No Google API access, OAuth
 grant, scraping or provider call is involved: the owner downloads their own Business
 Profile data from Google Takeout and uploads the `reviews.json` file to the reviews
-page or onboarding. The parser and docs are based on third-party descriptions of the
-Takeout archive and Google's documented Review fields; one real export must be run
-before announcing the feature.
+page or onboarding.
 
 ### What Takeout gives an owner
 
 [Google Takeout](https://takeout.google.com) exports Business Profile data as JSON
 only. The owner signs in as a profile owner or manager, deselects everything, selects
-**Business Profile** and exports once. The archive nests one `reviews.json` per
-account/location. Takeout covers only profiles the account owns or manages, and it
-does not include review photos. The separate **Maps** export contains reviews the
-person wrote about other businesses, not reviews customers left for them.
+**Google Business Profile** and exports once. The archive is
+`Takeout/Google Business Profile/account-<id>/location-<id>/reviews.json`, one file per
+location that has reviews, beside `data.json`, `additionalData.json`, media and admin files
+that the import ignores. An owner reached through a business group gets the group's
+locations. Takeout does not include review photos. The separate **Maps** export contains
+reviews the person wrote about other businesses, not reviews customers left for them.
 
-Third-party guides describe each review as an object shaped like the Business Profile
-API `Review`: `reviewer.displayName`, `starRating` as `ONE`..`FIVE`, `comment`,
-`createTime`/`updateTime`, and `name` as an
-`accounts/.../locations/.../reviews/...` resource path (some variants also carry
-`reviewId`). The exact top-level shape (array or `{ "reviews": [...] }`) is part of
-what the real-export check must confirm. The parser accepts both, plus a `reviewData`
-array, and tolerates unknown fields.
+### Confirmed file shape
+
+Checked on a real export (19 reviews on one location, 1 on another); only the structure is
+recorded here, never the content:
+
+- Top level is an object, `{ "reviews": [ ... ] }`.
+- Each review has `reviewer.displayName` (one to three words; no email or profile link
+  appeared), `starRating` as `ONE`..`FIVE`, `createTime` and `updateTime` as
+  `YYYY-MM-DDTHH:MM:SS.ffffffZ` (microseconds), and `name` as
+  `accounts/<id>/locations/<id>/reviews/<id>`. There is **no** `reviewId` field; the parser
+  uses `name` as the stable source ID.
+- `comment` is **absent** on star-only reviews (2 of 19). These are counted as "without
+  text" and skipped, not reported as invalid rows.
+- `reviewReply` (`comment`, `updateTime`) appears on reviews the owner answered; it is
+  ignored. No "(Translated by Google)" text appeared in this export.
+
+The real file imported end to end on the dev stack (17 imported, 2 without text) and a
+second upload of the same file imported 0 with 17 duplicates skipped.
+`sample-data/takeout/reviews-real-shape.json` mirrors this structure with invented content.
+The parser still accepts a top-level array, a `reviewData` array and alternate field names,
+in case other exports differ.
 
 ### Scope and safety
 
@@ -480,21 +494,22 @@ array, and tolerates unknown fields.
   on a deterministic reviewer/date/text hash when the file has no ID.
 - Validation and storage are shared with CSV import (`lib/services/reviewImport.ts`):
   integer 1–5 stars, text, a valid date, bounded text/source ID/URL. The same 1 MB
-  and 1,000-row limits apply, and empty, invalid and storage-failed rows are counted
-  and reported.
+  and 1,000-row limits apply. Empty rows, rows without text (`skippedNoText`), invalid
+  rows and storage failures are counted separately; only invalid rows are listed as
+  problems.
 - The file is untrusted. Unknown fields are ignored, and reviewer email, profile
   links, photos and owner replies are never stored.
 - Tests use only synthetic data (`@example.invalid`): `scripts/test-takeout-import.ts`
-  and `sample-data/takeout/reviews.json`. No real export or review content is
-  committed.
+  with `sample-data/takeout/reviews.json` (broad, forgiving variants) and
+  `sample-data/takeout/reviews-real-shape.json` (the confirmed real structure). No real
+  export or review content is committed.
 
-### Before announcing
+### Verification (done)
 
-1. Run a real Business Profile export and import one `reviews.json` end to end.
-2. Confirm the top-level shape, field names, rating enum/numbers and timestamp
-   format; update `lib/takeout.ts`, the fixture and this section if they differ.
-3. Confirm the same file re-imports with zero duplicates and correct invalid-row
-   counts. Keep #233 blocked until those checks are recorded.
+The three pre-announcement checks passed on 2026-11-25: a real export imported end to end,
+the shape above was confirmed (no parser change was needed; star-only reviews now count as
+"without text" instead of invalid), and a re-upload added no rows. The feature can be
+announced.
 
 ## Direct Instagram and Facebook publishing (#234) — checked 2026-11-05
 

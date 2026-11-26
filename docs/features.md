@@ -515,10 +515,10 @@ Google.
   `Google Business Profile/account-.../location-.../reviews.json`. Takeout only
   covers profiles the account owns or manages. The Maps export is different: it
   holds reviews the person wrote about other businesses.
-- **Format is unverified:** the real Takeout file has not been run in this repo.
-  The parser is built from third-party descriptions and Google's documented
-  review fields, so verify it with a real export before announcing the feature.
-  See [integrations.md](integrations.md#google-takeout-review-import-233--format-unverified-checked-2026-11-05).
+- **Format confirmed (2026-11-25):** a real export imported end to end and re-imported
+  with no new rows. Real files are `{ "reviews": [...] }` with no `reviewId` (the
+  `name` path is the ID), microsecond timestamps, and no `comment` on star-only
+  reviews. See [integrations.md](integrations.md#google-takeout-review-import-233--format-confirmed-2026-11-25).
 - **Accepted shape:** a top-level JSON array, or an object with a `reviews`
   array (also `reviewData`). Each review may use `reviewer.displayName`,
   `starRating` (`ONE`..`FIVE` or a number), `comment`/`text`,
@@ -530,10 +530,12 @@ Google.
   makes a re-import a duplicate; a review without either gets a deterministic
   hash of reviewer, date and text (rating excluded, so an edited rating still
   matches). Limits match
-  the CSV import: 1 MB and 1,000 rows. Empty, invalid and storage-failed rows
-  are counted and reported, with at most 20 redacted errors.
-- **Tests:** `scripts/test-takeout-import.ts`, the synthetic fixture at
-  `sample-data/takeout/reviews.json`, the authorization check for another
+  the CSV import: 1 MB and 1,000 rows. Empty rows, rows without text
+  (`skippedNoText`, e.g. star-only Google reviews), invalid rows and storage
+  failures are counted separately; only invalid and failed rows are listed, with at
+  most 20 redacted errors. The import summary shows "N without text" neutrally.
+- **Tests:** `scripts/test-takeout-import.ts`, the synthetic fixtures at
+  `sample-data/takeout/reviews.json` and `reviews-real-shape.json`, the authorization check for another
   owner's business, and the onboarding browser walkthrough.
 - **Rollback:** hide the second picker and remove the route. Migration 029 only
   widens the `reviews.source` check, so existing `google_takeout` rows can stay.

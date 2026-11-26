@@ -6,10 +6,11 @@ templates for the pilot, and the inputs the dev seeder and tests read.
 - `csv/` holds review exports you can upload through the app's CSV import, one
   file per business or business type, named after the business
   (`<business-name>.csv`).
-- `takeout/` holds a synthetic Google Takeout Business Profile export in the
-  assumed shape read by `scripts/test-takeout-import.ts` and the onboarding
-  browser walkthrough. The real export format is unverified; see
-  [docs/integrations.md](../docs/integrations.md#google-takeout-review-import-233--format-unverified-checked-2026-11-05).
+- `takeout/` holds synthetic Google Takeout Business Profile `reviews.json` files read by
+  `scripts/test-takeout-import.ts` and the onboarding browser walkthrough:
+  `reviews.json` covers forgiving variants, and `reviews-real-shape.json` mirrors the
+  structure confirmed on a real export (2026-11-25); see
+  [docs/integrations.md](../docs/integrations.md#google-takeout-review-import-233--format-confirmed-2026-11-25).
 - `pilot/` holds the synthetic pilot ledger used as a template in
   [docs/pilot.md](../docs/pilot.md) and read by `scripts/test-pilot.ts`.
 
@@ -39,6 +40,7 @@ recognised as duplicates instead of adding rows. Limits: 1 MB, 1000 rows; see
 | `csv/copper-kettle-cafe.csv` | Copper Kettle Café, an invented neighbourhood café (21 reviews, ratings 1-5, `sample-cafe-NNN`) |
 | `csv/harbour-bike-repair.csv` | Harbour Bike Repair, an invented bike shop (17 reviews, ratings 2-5, `sample-bike-NNN`) |
 | `takeout/reviews.json` | A synthetic Google Takeout Business Profile `reviews.json` (four reviews, enum and numeric ratings, one without an ID) |
+| `takeout/reviews-real-shape.json` | Synthetic reviews in the confirmed real export shape (`name` as ID, microsecond times, an owner reply, one star-only review) |
 | `pilot/pilot-synthetic.json` | Example pilot ledger entries for synthetic businesses |
 
 The "download a sample" file in the app's onboarding is separate on purpose:
