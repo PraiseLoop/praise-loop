@@ -22,6 +22,8 @@ COPY --from=builder /app/dist-worker ./dist-worker
 COPY --from=builder /app/db ./db
 # Quote-card font, resolved from the working directory by the image renderer.
 COPY --from=builder /app/assets ./assets
+# Synthetic review CSVs read by the dev-stack deploy seed (#300); no real data.
+COPY --from=builder /app/sample-data/csv ./sample-data/csv
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 CMD ["node", "dist-worker/worker/index.js"]

@@ -161,6 +161,10 @@ export function resendTransport(options: ResendOptions): EmailTransport {
     name: "resend",
     from,
     async send(envelope, sendOptions = {}) {
+      // The seeded demo owners use @praiseloop.invalid (`.invalid` is reserved and never
+      // receives mail). On the dev stack they sign in through the real transport (#300),
+      // so a sign-in alert or reset email for them is dropped here, not sent to bounce.
+      if (/@praiseloop\.invalid$/i.test(envelope.to)) return { transport: "resend", accepted: false };
       const headers: Record<string, string> = {
         authorization: `Bearer ${apiKey}`,
         "content-type": "application/json",

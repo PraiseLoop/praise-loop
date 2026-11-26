@@ -35,6 +35,28 @@ services:
         condition: service_healthy
     restart: "no"
 
+  # Dev stack only (#300): resets the demo owners to synthetic data on every deploy.
+  # Does nothing unless DEMO_SEED=1; then it also needs APP_ENV=dev, NEXTAUTH_URL's
+  # host listed in DEMO_SEED_HOSTS (never a production host) and a 12+ character
+  # DEMO_SEED_PASSWORD, or it refuses and exits 1. Web and worker don't wait for it.
+  seed:
+    logging: *logging
+    image: ghcr.io/praiseloop/praise-loop-worker:${PRAISELOOP_TAG:-latest}
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-effective_memory}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:?set NEXTAUTH_URL to the public https address}
+      - APP_ENV=${APP_ENV:-prod}
+      - DEMO_SEED=${DEMO_SEED:-}
+      - DEMO_SEED_HOSTS=${DEMO_SEED_HOSTS:-}
+      - DEMO_SEED_PASSWORD=${DEMO_SEED_PASSWORD:-}
+    volumes: ["generated_media:/app/private-media"]
+    command: ["node", "dist-worker/scripts/deploy-seed.js"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
   web:
     logging: *logging
     image: ghcr.io/praiseloop/praise-loop-web:${PRAISELOOP_TAG:-latest}

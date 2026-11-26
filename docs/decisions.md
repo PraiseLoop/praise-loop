@@ -12,6 +12,10 @@ Decision log to capture architecture/product calls and why they were made.
 
 ## Log
 
+- Date: 2026-11-26
+  Decision: Reset the demo owners on every dev-stack deploy with a password from the stack environment (#300)
+  Why: The owner wants testing on dev.praiseloop.ca to start from known data after each deploy. The existing seeder refused there because the dev stack runs production builds (`NODE_ENV=production`), and its local-database check cannot tell dev from production (both use the `postgres` service). A separate deploy guard requires the explicit `DEMO_SEED=1`, `APP_ENV=dev`, an allow-listed `NEXTAUTH_URL` host that is not a production host, the stack's own database and a strong `DEMO_SEED_PASSWORD` that is not the repo's documented one; anything else refuses before writing. Sign-in uses ordinary email-and-password sign-in rather than enabling the one-click demo buttons on an internet-facing production build, and the password lives only in the stack environment because the repo is public. Data stays synthetic (repo rule). The seed service runs after `migrate`, and `web`/`worker` don't depend on it, so a refused seed never blocks a deploy. Mail to `@praiseloop.invalid` is dropped by the Resend transport and the demo owners' weekly email is off.
+
 - Date: 2026-11-23
   Decision: Keep the privacy policy, terms and support page only on the praiseloop.ca website; the app links and redirects there (#292)
   Why: The app had its own copies (#262) that disagreed with the website: they promised a nightly database backup kept 14 days when only a weekly whole-server backup exists (two kept), described live billing the website says is not live, and used a different contact address. Two copies will keep drifting, and the website is the URL already given to Meta, Google and Stripe. The app's `/privacy`, `/terms` and `/support` become temporary 307 redirects (`next.config.mjs`) so old links work and the move stays reversible; links and the support address come from `lib/legalLinks.ts`. The owner does not want a nightly backup now, so the website must describe the weekly server backup rather than the app adding one.

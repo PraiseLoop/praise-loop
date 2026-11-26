@@ -8,10 +8,13 @@ import { generationWeek } from "../../lib/services/generation";
 import { renderDraftImage } from "../../lib/services/imageRenderer";
 import { mediaRoot } from "../../lib/services/media";
 import { importReviewsCsv } from "../../lib/services/reviewImport";
-import { assertSeedable } from "./guard";
+import { assertDeploySeedable, assertSeedable } from "./guard";
 import { SEED_BUSINESSES, SEED_PUSH_TOKEN, type BusinessSeed, type DraftSeed, type DraftStatus } from "./fixtures";
 
-const CSV_DIR = resolve(__dirname, "..", "..", "sample-data", "csv");
+// From source the CSVs sit at the repo root; the compiled worker image runs from
+// dist-worker/ with sample-data/ copied beside it in the working directory (#300).
+const SOURCE_CSV_DIR = resolve(__dirname, "..", "..", "sample-data", "csv");
+const CSV_DIR = existsSync(SOURCE_CSV_DIR) ? SOURCE_CSV_DIR : resolve(process.cwd(), "sample-data", "csv");
 const OWNER_PLANS: Record<DevOwnerKey, Plan> = { pro: "pro", business: "business", free: "free", email: "free", password: "free" };
 // The Business demo owner walks a provider subscription rather than a manual grant,
 // so the account screen can show a web subscription (#219). The fake adapter never
@@ -78,8 +81,8 @@ async function ensureSubscription(ownerId: string, subscription: { provider: str
 // Keeps one synthetic password credential for the password demo owner (#159). It
 // uses the production hashing path, resets any lock/counter left by earlier
 // manual testing, and never writes the plaintext anywhere.
-async function ensureDemoPassword(ownerId: string, email: string) {
-  const stored = await hashPassword(DEV_OWNER_PASSWORD);
+async function ensureDemoPassword(ownerId: string, email: string, password: string = DEV_OWNER_PASSWORD) {
+  const stored = await hashPassword(password);
   await query(
     `INSERT INTO password_credentials(owner_id,email,password_hash,scrypt_n,scrypt_r,scrypt_p,salt,key_length,verified_at,created_at,updated_at)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8,now(),now(),now())
@@ -200,14 +203,28 @@ async function seedBusiness(seed: BusinessSeed, owner: string, plan: Plan) {
   return businessId;
 }
 
-// Replaces everything owned by the four seeded demo owners and nothing else. Safe to
+export type SeedMode = "dev" | "deploy";
+
+// Replaces everything owned by the seeded demo owners and nothing else. Safe to
 // repeat: a second run rebuilds the same rows (new ids, same content).
-export async function runSeed(env: Record<string, string | undefined> = process.env): Promise<SeedSummary> {
-  assertSeedable(env);
+//
+// "dev" is the local seeder (MOBILE_DEV_AUTH, the one-click demo buttons, the password
+// owner on the documented repo password). "deploy" runs on every dev-stack deploy (#300):
+// every demo owner gets DEMO_SEED_PASSWORD so they can sign in with email and password
+// on a production build, and the weekly email is off because the addresses are .invalid.
+export async function runSeed(env: Record<string, string | undefined> = process.env, mode: SeedMode = "dev"): Promise<SeedSummary> {
+  const deployPassword = mode === "deploy" ? assertDeploySeedable(env) : (assertSeedable(env), null);
 
   const owners = {} as Record<DevOwnerKey, string>;
   for (const key of Object.keys(DEV_OWNERS) as DevOwnerKey[]) owners[key] = await ensureDevOwner(key);
-  await ensureDemoPassword(owners.password, DEV_OWNERS.password.email);
+  if (deployPassword) {
+    for (const key of Object.keys(DEV_OWNERS) as DevOwnerKey[]) {
+      await ensureDemoPassword(owners[key], DEV_OWNERS[key].email, deployPassword);
+    }
+    await query("UPDATE auth_users SET weekly_email_enabled=false WHERE id = ANY($1)", [OWNER_IDS]);
+  } else {
+    await ensureDemoPassword(owners.password, DEV_OWNERS.password.email);
+  }
   // Keep the Free demo owner nameless on every run, so the profile empty state
   // (#149) stays visible even when a previous seed or demo edit filled it in.
   await query("UPDATE auth_users SET name=$2, name_source='provider' WHERE id=$1", [owners.free, DEV_OWNERS.free.name]);
