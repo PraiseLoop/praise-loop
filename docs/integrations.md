@@ -377,10 +377,52 @@ v1 APIs (including `nextPageToken` paging), and review listing through the v4
 `GOOGLE_CLIENT_SECRET` from Google sign-in, with optional `GOOGLE_BUSINESS_REDIRECT_URI`
 defaulting to `${NEXTAUTH_URL}/api/google/callback`; all values are read at request
 time and a missing one fails closed. `liveClient()` returns this client only when
-configured. Still missing: OAuth connect routes and the location picker, sync status
-in the UI, scheduling the sync in the worker, and the mandatory live test with
+configured. The connect routes, picker and status view are described below. Still
+missing: scheduling the sync in the worker, and the mandatory live test with
 sanitized evidence. The offline suite (`scripts/test-google-business.ts`) injects a
 fake fetch; no Google endpoint has been called for real.
+
+### Owner connect, location picker and status — 2026-11-27
+
+The connect slice is built behind `GOOGLE_REVIEW_SYNC=1` (unset means off), which
+also requires the OAuth client above and `GOOGLE_TOKEN_KEY` (32 base64 bytes).
+With the flag off the reviews card is hidden and every Google write fails closed
+with `not_configured`. The flag is read at request time, so turning it off after
+connecting leaves the owner able to disconnect: that path drops the local token
+and revokes at Google best-effort only if a client can still be built.
+
+`POST /api/businesses/[id]/google/connect` stores a single-use, SHA-256-hashed
+state bound to both the signed-in owner and the business (10 minute TTL) and
+returns the Google consent URL. `GET /api/google/callback` is public to the route
+guard but requires the same signed-in owner, exchanges the code for a refresh
+token and lists locations with `listLocations`. A refused consent is `denied`;
+`missing_scope` and `missing_refresh_token` are short outcomes rather than
+stored connections; zero locations is `no_locations`. One location connects
+immediately. Several locations are held for 15 minutes in `google_pending_grants`
+(encrypted token plus name/title/address only) and the browser is sent back to
+the picker. The owner chooses one through `POST /api/businesses/[id]/google/location`,
+matched against the stored list — a client-supplied name alone is never trusted —
+and the chosen title is saved on `google_connections` for display.
+
+Every write path (start, callback completion, location choice, and any later
+manual sync) checks `entitlementsFor(ownerId).limits.reviewSync` and refuses a
+free plan with `plan_required`; disconnect is always allowed. The limit still
+reads as planned in the plan table (#218): it is enforced by this flow but not
+sold as an included benefit yet. `GET /api/businesses/[id]/google/connection`
+returns only status, saved title, last sync time/count and a sanitized error
+code (`access_revoked`, `google_<status>` or `sync_failed`), which the UI turns
+into plain sentences. Tokens, codes, state values and provider error text are
+never returned, stored in plaintext or logged.
+
+**Register both redirect URIs on the Google OAuth client** (they must match
+exactly): `https://dev.praiseloop.ca/api/google/callback` for the dev tunnel and
+`http://localhost:3000/api/google/callback` for local development. The default
+is `${NEXTAUTH_URL}/api/google/callback`; `GOOGLE_BUSINESS_REDIRECT_URI` overrides
+it. The worker schedule is deliberately not part of this slice, so the UI says
+reviews arrive within a few hours. `scripts/test-google-connect.ts` covers the
+flag, plan gate, state isolation, expiry, one/many/zero locations, the picker,
+disconnect, cascade deletion and routes with an injected fake client; no Google
+endpoint is called in tests.
 
 ## Apify Google reviews stopgap (#232) — accepted 2026-11-04
 

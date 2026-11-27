@@ -2,11 +2,22 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { query, transaction } from "../db";
 import { GoogleApiError, googleBusinessClient, googleBusinessConfig } from "./googleBusiness";
 
+type Env = Record<string, string | undefined>;
+
 // The REST client owns the error class and the shared read-only contract; the
 // sync keeps importing them from here so existing callers do not change.
 export { GoogleApiError };
 export type { GoogleReview, GoogleReviewsClient } from "./googleBusiness";
 import type { GoogleReviewsClient } from "./googleBusiness";
+
+/**
+ * Connect and sync stay off until the operator opt-ins: the flag must be `1` and
+ * the Business Profile OAuth client must be configured. Read at request time so
+ * switching the flag off hides the UI and fails every write path closed.
+ */
+export function googleReviewSyncEnabled(env: Env = process.env): boolean {
+  return env.GOOGLE_REVIEW_SYNC === "1" && googleBusinessConfig(env) !== null;
+}
 
 /** Read-only view of the Business Profile review API (#46), live when configured. */
 export function liveClient(): GoogleReviewsClient {
@@ -37,14 +48,15 @@ export function decryptToken(blob: string, owner: string, business: number) {
 }
 
 /** Owner-authorized connect. Returns null when the owner does not own the business. */
-export async function connect(owner: string, businessId: number, location: string, refreshToken: string) {
+export async function connect(owner: string, businessId: number, location: string, refreshToken: string, locationTitle?: string | null) {
   const own = await query("SELECT 1 FROM businesses WHERE id=$1 AND owner_id=$2", [businessId, owner]);
   if (!own.rowCount) return null;
   const r = await query<{ id: string }>(
-    `INSERT INTO google_connections(business_id,owner_id,location_name,encrypted_refresh_token)
-     VALUES($1,$2,$3,$4) ON CONFLICT(business_id) DO UPDATE SET location_name=$3, encrypted_refresh_token=$4,
-     status='active', page_checkpoint=NULL, last_error_code=NULL WHERE google_connections.owner_id=$2 RETURNING id`,
-    [businessId, owner, location, encryptToken(refreshToken, owner, businessId)]);
+    `INSERT INTO google_connections(business_id,owner_id,location_name,encrypted_refresh_token,location_title)
+     VALUES($1,$2,$3,$4,$5) ON CONFLICT(business_id) DO UPDATE SET location_name=$3, encrypted_refresh_token=$4,
+     location_title=$5, status='active', page_checkpoint=NULL, last_error_code=NULL
+     WHERE google_connections.owner_id=$2 RETURNING id`,
+    [businessId, owner, location, encryptToken(refreshToken, owner, businessId), locationTitle ?? null]);
   return r.rows[0]?.id ?? null;
 }
 

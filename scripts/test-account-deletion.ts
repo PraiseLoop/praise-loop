@@ -107,6 +107,17 @@ async function seedOwner(client: PoolClient, owner: string, label: string, withD
     "INSERT INTO google_connections(business_id,owner_id,location_name) VALUES($1,$2,'accounts/1/locations/2')",
     [business, owner]
   );
+  // Google connect (#46): the OAuth state and pending location grant must not
+  // outlive the owner or the business they were created for.
+  await client.query(
+    "INSERT INTO google_oauth_states(state_hash,owner_id,business_id,expires_at) VALUES($1,$2,$3,now()+interval '10 minutes')",
+    [`state-${owner}`, owner, business]
+  );
+  await client.query(
+    `INSERT INTO google_pending_grants(owner_id,business_id,encrypted_refresh_token,locations,expires_at)
+     VALUES($1,$2,$3,$4,now()+interval '15 minutes')`,
+    [owner, business, `v1.synthetic-${owner}`, JSON.stringify([{ name: "accounts/1/locations/2", title: "Synthetic", address: null }])]
+  );
   // Apify stopgap (#232): a confirmed place and one run must cascade with the business.
   await client.query(
     "INSERT INTO apify_review_places(business_id,place_input,place_kind,confirmed_by) VALUES($1,$2,'place_id',$3)",
@@ -277,6 +288,7 @@ async function main() {
         "auth_accounts", "auth_sessions", "owner_usage", "owner_plans",
         "owner_plan_events", "owner_subscriptions", "billing_events",
         "device_push_tokens", "sign_in_alerts", "businesses", "google_connections",
+        "google_oauth_states", "google_pending_grants",
         "buffer_connections", "buffer_oauth_states", "business_buffer_channels",
         "apify_review_places", "apify_review_runs",
         "reviews", "draft_posts", "generation_periods", "generation_jobs",
