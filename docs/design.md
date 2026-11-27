@@ -236,7 +236,7 @@ Expo Router screens: `sign-in`, `queue`, `draft/[id]`, `profile`. Design rules t
 | Google native, Apple, Microsoft | phone sign-in; Apple and Microsoft also on web | built, tested with local keys only, never run live |
 | Buffer | automatic posting for Pro and Business owners with a Business/Creator Instagram or a Facebook Page (#29, #216) | **feasibility spike done 2026-11-01**: live API key works, an app client exists; adapter and encrypted credentials built against mocks only; **Connect backend built (#29 part 1)**: OAuth, encrypted tokens, channel selection; **web Connect screen built (#29 part 2)**: connect/reconnect/disconnect and one channel per business, posting still off; **automatic posting is now paid (#216)**: Free and expired plans are refused on every write path and the worker fails a queued post closed; **worker submission, media-URL policy and the off/draft/live gate built (#29 part 3)**; phone UI **not built**; never run live; see below |
 | Direct Meta publishing | replacement for Buffer (#234) | feasibility checked 2026-11-05; stub and fake adapter built behind the existing `SchedulerAdapter`; OAuth connect/disconnect, encrypted Page tokens and one target per business built; **worker publishing, the JPEG variant and the `/connections` setup screen built and tested with a fake client**; live Graph client and the owner-approved live connect/publish test **not built/run**; app review and business verification are owner tasks |
-| Google Business Profile | review sync (#46) | stubbed client; live client fails closed until access is approved |
+| Google Business Profile | review sync (#46) | access approved 2026-11-27; live REST client built (`googleBusiness.ts`), fails closed without `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`; connect routes, UI and worker schedule not built yet |
 | Apify | owner's own Google reviews, removable stopgap (#232) | client proven with one live run; full flow tested with the fake adapter only; hidden without `APIFY_TOKEN`; Google can block scraping at any time |
 
 ### Buffer (#29): findings and decisions, 2026-11-01
@@ -318,7 +318,7 @@ endpoints take the Page token or the User token, to be settled by the owner-appr
 | Android APK release pipeline | merged; not yet run | #190 |
 | Real scheduler through Buffer | Paid (Pro and Business) automatic posting; Connect + screen built; worker posting, image links, cancel and the off/draft/live gate built (#29 part 3); **never run live**; status display and `unknown` resolution not built | #29, #216 |
 | Direct Instagram/Facebook publishing | Worker publishing, provider choice, idempotent container resume, JPEG variant, owner status, Connect backend and the `/connections` setup screen built; provider-neutral posting banner, optional onboarding link and plan/account copy built; **live client not built and the live connect/publish test not run** | #234, #244 |
-| Google review sync, AI review replies | blocked on access/policy | #46, #96 |
+| Google review sync, AI review replies | in progress: API access approved, live client built; review-reuse policy answer still open | #46, #96 |
 | Apify Google reviews stopgap | built; client proven with one live run, full flow not yet run live; hidden without `APIFY_TOKEN` | #232 |
 | Google Takeout review import | built; format confirmed on a real export (2026-11-25) | #233 |
 | Business tier | planned, see [billing.md](billing.md) | #222, #225 |

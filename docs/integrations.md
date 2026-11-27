@@ -365,6 +365,23 @@ review-reuse/retention policy confirmation from Google, key rotation, and the
 mandatory live test with sanitized evidence. Add `GOOGLE_TOKEN_KEY` to deploy secrets
 before use.
 
+### Live client built — 2026-11-27
+
+Google has approved Business Profile API access. `lib/integrations/googleBusiness.ts`
+now implements the read-only live client behind `GoogleReviewsClient`: owner consent
+at `accounts.google.com/o/oauth2/v2/auth` with the `business.manage` scope and
+`access_type=offline`, token exchange/refresh/revoke at `oauth2.googleapis.com`,
+account and location lookup through the Account Management and Business Information
+v1 APIs (including `nextPageToken` paging), and review listing through the v4
+`accounts/{a}/locations/{l}/reviews` endpoint. It reuses `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET` from Google sign-in, with optional `GOOGLE_BUSINESS_REDIRECT_URI`
+defaulting to `${NEXTAUTH_URL}/api/google/callback`; all values are read at request
+time and a missing one fails closed. `liveClient()` returns this client only when
+configured. Still missing: OAuth connect routes and the location picker, sync status
+in the UI, scheduling the sync in the worker, and the mandatory live test with
+sanitized evidence. The offline suite (`scripts/test-google-business.ts`) injects a
+fake fetch; no Google endpoint has been called for real.
+
 ## Apify Google reviews stopgap (#232) — accepted 2026-11-04
 
 Status: built. One owner-approved live run on 2026-11-04, on the owner's own place with a
