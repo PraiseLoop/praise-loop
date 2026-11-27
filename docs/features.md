@@ -488,6 +488,30 @@ own, and starts a fetch. The page polls until it finishes and shows what was imp
 - **Tests:** `scripts/test-apify-reviews.ts`, using a fake adapter and synthetic data.
 - **Rollback:** unset `APIFY_TOKEN` to hide it. Migration 023 only adds, so it can stay in place.
 
+## Google Business Profile sync (#46)
+
+When the operator turns on `GOOGLE_REVIEW_SYNC`, a paid owner sees a "Google
+Business Profile" card on `/reviews`. Connecting opens Google's consent screen;
+the owner must be signed in as the same PraiseLoop owner who started it. If the
+account has one location it is connected straight away; with several, the card
+lists their titles and addresses and the owner picks one. The card then shows the
+chosen location, when reviews were last synced and how many came in, or "Not
+synced yet. Reviews arrive within a few hours." A readable line explains a
+revoked or failed sync, and Disconnect removes our copy of the token.
+
+- **Availability:** the card is hidden unless the flag and OAuth config are
+  present. Free plans see a short plan-required line linking to `/plans`; every
+  connect, callback and location write is refused on the server with
+  `plan_required`. Disconnect always works, including after the flag is turned
+  off.
+- **Status:** only short codes are stored (`access_revoked`, `google_<status>`,
+  `sync_failed`); no token, OAuth code, state or Google error text is returned.
+- **Tests:** `scripts/test-google-connect.ts`, with an injected fake Google
+  client and synthetic data. The worker schedule is a separate task, so no
+  periodic sync has been wired up yet.
+- **Rollback:** unset `GOOGLE_REVIEW_SYNC` to hide the card and fail writes
+  closed; migration 033 only adds a column and two tables, so it can stay.
+
 ## CSV review import
 
 CSV imports are limited to 1 MB / 1000 logical rows; quoted multiline cells are
@@ -618,8 +642,9 @@ is what lets the plan limit "more than one business".
 Only limits with a feature behind them are sold as included (#218). The four
 quote-card designs are shipped and `templates` is compared on the plan page,
 account page and phone. `reviewSync` and `aiReplies` stay in `PLAN_LIMITS` for
-later features and read as planned, never included. When #46 or #96 ships it
-must check its limit on the server as part of its acceptance criteria.
+later features and read as planned, never included. The #46 connect flow checks
+its limit on every write path while the table still says planned; #96 has no
+shipped flow yet.
 
 The limits live in `lib/services/entitlements.ts` and are enforced on the server:
 

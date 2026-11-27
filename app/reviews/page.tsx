@@ -36,6 +36,45 @@ const apifyErrors: Record<string, string> = {
 };
 const apifyError = (code: string | null | undefined) => apifyErrors[code ?? ""] ?? "Something went wrong fetching reviews. Try again.";
 
+type GoogleLocation = { name: string; title: string; address: string | null };
+type GoogleConnection = {
+  enabled: boolean;
+  planAllows: boolean;
+  status: "none" | "active" | "revoked" | "disconnected";
+  locationTitle: string | null;
+  lastSyncAt: string | null;
+  lastSyncCount: number;
+  lastErrorCode: string | null;
+  pending: { locations: GoogleLocation[] } | null;
+};
+const googleOutcomes: Record<string, string> = {
+  connected: "Google connected. Your reviews will arrive soon.",
+  pick_location: "Choose which Google location to sync.",
+  no_locations: "We couldn’t find a Google location you manage. Add one in Business Profile first.",
+  denied: "Google connection was cancelled.",
+  missing_scope: "Google wasn’t allowed to manage Business Profile. Connect again and approve access.",
+  expired: "That Google request expired. Start again.",
+  failed: "Google connection didn’t finish. Try again.",
+  not_configured: "Google review sync isn’t available yet.",
+  plan_required: "Review sync needs a paid plan."
+};
+const googleOutcomeMessage = (outcome: string | null) => googleOutcomes[outcome ?? ""] ?? "Google connection didn’t finish. Try again.";
+const googleError = (code: string) => {
+  if (code === "access_revoked") return "Google access was removed. Reconnect to keep syncing.";
+  if (code === "google_429") return "Google is rate-limiting us. Sync will try again later.";
+  if (code.startsWith("google_")) return "Google couldn’t finish the last sync. We’ll try again.";
+  return "The last sync didn’t finish. We’ll try again.";
+};
+function relativeTime(iso: string) {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
 const statusLabels: Record<string, [string, string]> = {
   ready: ["pl-badge-approved", "Ready"],
   used: ["pl-badge-scheduled", "In a post"],
@@ -61,6 +100,11 @@ export default function ReviewsPage() {
   const [apify, setApify] = useState<ApifyStatus | null>(null);
   const [apifyMessage, setApifyMessage] = useState("");
   const [apifyBusy, setApifyBusy] = useState(false);
+  const [google, setGoogle] = useState<GoogleConnection | null>(null);
+  const [googleMessage, setGoogleMessage] = useState("");
+  const [googleOutcome, setGoogleOutcome] = useState("");
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [googleLocation, setGoogleLocation] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const currentId = useRef(businessId);
   currentId.current = businessId;
@@ -91,15 +135,42 @@ export default function ReviewsPage() {
     if (data.run?.importedAt) await load(id, isCurrent);
   }, [load]);
 
+  // The flag lives on the server: a non-OK or disabled view hides the whole card.
+  const loadGoogle = useCallback(async (id: number | string, isCurrent: () => boolean = () => true) => {
+    try {
+      const response = await apiFetch(`/api/businesses/${id}/google/connection`);
+      if (!isCurrent()) return;
+      if (!response.ok) { setGoogle(null); return; }
+      const data = await response.json().catch(() => null) as GoogleConnection | null;
+      if (!isCurrent()) return;
+      setGoogle(data?.enabled ? data : null);
+    } catch {
+      if (isCurrent()) setGoogle(null);
+    }
+  }, []);
+
   useEffect(() => {
     setReviews([]); setCounts({}); setResult(null); setMessage("");
     setApify(null); setApifyMessage("");
+    setGoogle(null); setGoogleMessage(""); setGoogleLocation("");
     if (!businessId) return;
     let current = true;
     void load(businessId, () => current);
     void loadApify(businessId, () => current);
+    void loadGoogle(businessId, () => current);
     return () => { current = false; };
-  }, [businessId, load, loadApify]);
+  }, [businessId, load, loadApify, loadGoogle]);
+
+  // The callback returns here with a fixed outcome code. Show it once, then drop
+  // it so a refresh doesn't repeat it; keep businessId for the selected business.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const outcome = url.searchParams.get("google");
+    if (outcome === null) return;
+    setGoogleOutcome(googleOutcomeMessage(outcome));
+    url.searchParams.delete("google");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
 
   const apifyPolling = Boolean(apify?.run && (apify.run.inProgress || (apify.run.status === "SUCCEEDED" && !apify.run.importedAt)));
   useEffect(() => {
@@ -179,6 +250,73 @@ export default function ReviewsPage() {
     } finally { setApifyBusy(false); }
   }
 
+  async function connectGoogle() {
+    if (!businessId) return;
+    const startedFor = businessId, stillCurrent = () => currentId.current === startedFor;
+    setGoogleBusy(true); setGoogleMessage("");
+    try {
+      const response = await apiFetch(`/api/businesses/${businessId}/google/connect`, { method: "POST" });
+      const data = await response.json().catch(() => null) as { url?: unknown; error?: string } | null;
+      if (!stillCurrent()) return;
+      if (!response.ok || typeof data?.url !== "string") {
+        setGoogleMessage(data?.error === "plan_required" ? "Review sync needs a paid plan." : "We couldn’t start Google connection. Try again.");
+        return;
+      }
+      // Only follow a consent URL from our own server's Google client.
+      let target: URL;
+      try { target = new URL(data.url); } catch { setGoogleMessage("We couldn’t start Google connection. Try again."); return; }
+      if (target.protocol !== "https:" || target.hostname !== "accounts.google.com") {
+        setGoogleMessage("We couldn’t start Google connection. Try again.");
+        return;
+      }
+      window.location.assign(target.toString());
+    } catch {
+      if (stillCurrent()) setGoogleMessage("Connection problem. Try again.");
+    } finally { setGoogleBusy(false); }
+  }
+
+  async function chooseGoogleLocation() {
+    if (!businessId || !googleLocation) return;
+    const startedFor = businessId, stillCurrent = () => currentId.current === startedFor;
+    setGoogleBusy(true); setGoogleMessage("");
+    try {
+      const response = await apiFetch(`/api/businesses/${businessId}/google/location`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ location: googleLocation })
+      });
+      const data = await response.json().catch(() => null) as GoogleConnection | { error?: string } | null;
+      if (!stillCurrent()) return;
+      if (!response.ok) {
+        const code = (data as { error?: string } | null)?.error;
+        setGoogleMessage(code === "plan_required" ? "Review sync needs a paid plan."
+          : code === "expired" ? "That request expired. Connect Google again."
+          : code === "invalid_location" ? "Choose a location from the list."
+          : "We couldn’t save that location. Try again.");
+        return;
+      }
+      const view = data as GoogleConnection;
+      setGoogle(view.enabled ? view : null);
+      setGoogleLocation("");
+      void load(startedFor, stillCurrent);
+    } catch {
+      if (stillCurrent()) setGoogleMessage("Connection problem. Try again.");
+    } finally { setGoogleBusy(false); }
+  }
+
+  async function disconnectGoogle() {
+    if (!businessId) return;
+    const startedFor = businessId, stillCurrent = () => currentId.current === startedFor;
+    setGoogleBusy(true); setGoogleMessage("");
+    try {
+      const response = await apiFetch(`/api/businesses/${businessId}/google/connection`, { method: "DELETE" });
+      if (stillCurrent() && response.ok) await loadGoogle(startedFor, stillCurrent);
+      else if (stillCurrent()) setGoogleMessage("We couldn’t disconnect Google. Try again.");
+    } catch {
+      if (stillCurrent()) setGoogleMessage("Connection problem. Try again.");
+    } finally { setGoogleBusy(false); }
+  }
+
   if (status === "loading") return <p className="pl-muted" role="status">Loading reviews…</p>;
   if (!business) return <div className="pl-empty"><h2>Set up your business first</h2><Link href="/onboarding" className="pl-btn pl-btn-primary">Get started</Link></div>;
 
@@ -194,6 +332,61 @@ export default function ReviewsPage() {
           <p className="pl-lede">Everything your customers have said, and which reviews we can turn into posts.</p>
         </div>
       </header>
+
+      {google?.enabled ? (
+        <section aria-labelledby="google-h" className="pl-panel" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div>
+            <h2 id="google-h" className="pl-h2" style={{ fontSize: 18, marginBottom: 4 }}>Google Business Profile</h2>
+            <p className="pl-small pl-muted" style={{ margin: 0 }}>
+              Connect your business location to bring its customer reviews into PraiseLoop automatically. Nothing is posted without your approval.
+            </p>
+          </div>
+          {googleOutcome ? <p role="status" className="pl-small" style={{ margin: 0 }}>{googleOutcome}</p> : null}
+          {!google.planAllows ? (
+            <p className="pl-small" style={{ margin: 0 }}>
+              Review sync is a paid feature. <Link href="/plans" style={{ display: "inline-flex", alignItems: "center", minHeight: 44, fontWeight: 600 }}>See plans</Link>.
+            </p>
+          ) : google.pending ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <p className="pl-small pl-muted" style={{ margin: 0 }}>Choose the location to sync:</p>
+              {google.pending.locations.map(loc => (
+                <label key={loc.name} className="pl-small" style={{ display: "flex", alignItems: "flex-start", gap: 10, fontWeight: 400, minHeight: 44 }}>
+                  <input
+                    type="radio"
+                    name="google-location"
+                    value={loc.name}
+                    checked={googleLocation === loc.name}
+                    onChange={() => setGoogleLocation(loc.name)}
+                    style={{ marginTop: 3 }}
+                  />
+                  <span><strong>{loc.title}</strong>{loc.address ? <><br /><span className="pl-muted">{loc.address}</span></> : null}</span>
+                </label>
+              ))}
+              <button type="button" className="pl-btn pl-btn-primary" disabled={googleBusy || !googleLocation} onClick={chooseGoogleLocation}>Use this location</button>
+            </div>
+          ) : google.status === "active" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
+              <p style={{ margin: 0 }}>{google.locationTitle ?? "Google location"}</p>
+              <p className="pl-small pl-muted" style={{ margin: 0 }}>
+                {google.lastSyncAt
+                  ? `Last synced ${relativeTime(google.lastSyncAt)} · ${google.lastSyncCount} reviews`
+                  : "Not synced yet. Reviews arrive within a few hours."}
+              </p>
+              {google.lastErrorCode ? (
+                <p role="status" className="pl-small" style={{ margin: 0, color: "#A3361F", fontWeight: 600 }}>{googleError(google.lastErrorCode)}</p>
+              ) : null}
+              <button type="button" className="pl-btn" disabled={googleBusy} onClick={disconnectGoogle}>Disconnect</button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
+              {google.status === "revoked" ? <p className="pl-small" style={{ margin: 0 }}>Google access was removed. Reconnect to keep syncing.</p> : null}
+              {google.status === "disconnected" ? <p className="pl-small pl-muted" style={{ margin: 0 }}>Google sync is off. Connect again whenever you like.</p> : null}
+              <button type="button" className="pl-btn pl-btn-primary" disabled={googleBusy} onClick={connectGoogle}><Icon name="reviews" size={18} />Connect Google</button>
+            </div>
+          )}
+          {googleMessage ? <p role="status" className="pl-small" style={{ margin: 0, color: "#A3361F", fontWeight: 600 }}>{googleMessage}</p> : null}
+        </section>
+      ) : null}
 
       {apify?.enabled ? (
         <form key={businessId} onSubmit={fetchGoogleReviews} className="pl-panel" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
