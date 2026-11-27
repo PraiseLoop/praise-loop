@@ -106,9 +106,9 @@ answers 404 for the demo sign-in even if the flag is set.
    import code as the app's CSV upload. Drafts cover every status: `draft`,
    `approved`, `shared`, `archived` and `failed` (a failed generation has a quote
    but no caption or image). Images are rendered locally, with the watermark on
-   the Free owner's. The Pro owner also gets a synthetic push token and a stub
-   Google connection on the café (no refresh token, so nothing can sync). The
-   current week's generation period is reserved so the worker does not add more.
+   the Free owner's. The Pro owner also gets a synthetic push token. No Google
+   connection is seeded: the owner connects a location through the reviews page.
+   The current week's generation period is reserved so the worker does not add more.
    The fake push token may make the worker contact Expo once; Expo rejects it and
    the token is dropped.
 
@@ -557,7 +557,9 @@ runs as its own stack and reaches the app over a shared Docker network.
 The stack's one-shot `seed` service runs after `migrate` on every deploy. On the dev stack it
 resets the demo owners to the synthetic seed data (the same businesses, reviews and drafts as
 `npm run dev:seed`, from `scripts/seed/fixtures.ts` and `sample-data/csv/`). Anything done to
-those accounts since the last deploy is lost; other owners are never touched. Set these in
+those accounts since the last deploy is lost; other owners are never touched. Each reset also
+deletes any Google Business Profile connection the demo owners made, so a live Google test must
+be reconnected after any deploy (including one triggered by merging to `master`). Set these in
 the **dev** stack's environment only:
 
 | Variable | Value |

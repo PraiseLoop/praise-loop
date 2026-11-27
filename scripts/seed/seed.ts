@@ -193,13 +193,6 @@ async function seedBusiness(seed: BusinessSeed, owner: string, plan: Plan) {
   const week = await reserveWeek(businessId, seed, plan);
   for (const draft of seed.drafts) await seedDraft(businessId, owner, seed, plan, week, draft);
 
-  if (seed.googleLocation) {
-    await query(
-      `INSERT INTO google_connections(business_id,owner_id,location_name,status,last_sync_at,last_sync_count)
-       VALUES($1,$2,$3,'active',now() - interval '1 day',$4)`,
-      [businessId, owner, seed.googleLocation, summary.imported]
-    );
-  }
   return businessId;
 }
 

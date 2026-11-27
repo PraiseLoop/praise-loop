@@ -376,9 +376,9 @@ v1 APIs (including `nextPageToken` paging), and review listing through the v4
 defaulting to `${NEXTAUTH_URL}/api/google/callback`; all values are read at request
 time and a missing one fails closed. `liveClient()` returns this client only when
 configured. The connect routes, picker and status view are described below, and
-the worker schedule below them. Still missing: the mandatory live test with
-sanitized evidence. The offline suite (`scripts/test-google-business.ts`) injects a
-fake fetch; no Google endpoint has been called for real.
+the worker schedule below them. The owner's live test is noted at the end of this
+section. The offline suite (`scripts/test-google-business.ts`) injects a
+fake fetch; no Google endpoint is called in tests.
 
 ### Owner connect, location picker and status — 2026-11-27
 
@@ -447,6 +447,10 @@ which `logTick` records; no token, OAuth code, ciphertext, review text or Google
 error message is logged. `scripts/test-google-sync-schedule.ts` covers the flag,
 plan gate, interval and batch parsing, claiming and backoff, a throwing
 connection, revocation and reconnect with an injected client and synthetic data.
+
+**Owner live test — 2026-11-27:** the owner's live test on dev passed (1 location,
+17 reviews imported, 0 errors; no review content recorded). Reconnect now clears the
+old sync stats, and the dev seeder no longer creates a fake connection.
 
 ## Apify Google reviews stopgap (#232) — accepted 2026-11-04
 

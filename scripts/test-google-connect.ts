@@ -12,7 +12,7 @@ import {
   GoogleConnectionError,
   startGoogleConnect
 } from "../lib/services/googleConnection";
-import { googleReviewSyncEnabled } from "../lib/integrations/googleReviews";
+import { connect, googleReviewSyncEnabled } from "../lib/integrations/googleReviews";
 import { GOOGLE_BUSINESS_SCOPE, GoogleApiError, type GoogleBusinessClient, type GoogleLocation } from "../lib/integrations/googleBusiness";
 
 const ENV = {
@@ -244,6 +244,15 @@ async function main() {
       assert.deepEqual([chosenRow.location_name, chosenRow.location_title], [LOCATION_TWO.name, LOCATION_TWO.title]);
       assert.equal(many.calls.revoked.length, 0, "choosing a location does not revoke the grant");
       assert.doesNotMatch(JSON.stringify(chosen), /v1\.|synthetic-refresh-token/);
+
+      // Reconnecting (possibly to another location) clears the previous connection's
+      // sync stats, so the status card reports "Not synced yet" until the first sync.
+      await client.query("UPDATE google_connections SET last_sync_at=now()-interval '1 day', last_sync_count=21 WHERE business_id=$1", [manyBiz]);
+      assert.ok(await connect("gc-owner", manyBiz, LOCATION_THREE.name, "synthetic-reconnect-token", LOCATION_THREE.title));
+      const rewired = (await client.query("SELECT location_name,last_sync_at,last_sync_count FROM google_connections WHERE business_id=$1", [manyBiz])).rows[0];
+      assert.deepEqual([rewired.location_name, rewired.last_sync_at, rewired.last_sync_count], [LOCATION_THREE.name, null, 0], "reconnect clears old sync stats");
+      const fresh = await getGoogleConnection("gc-owner", manyBiz, { env: ENV });
+      assert.deepEqual([fresh.status, fresh.locationTitle, fresh.lastSyncAt, fresh.lastSyncCount], ["active", LOCATION_THREE.title, null, 0], "the view reports no last sync");
 
       // Location choice is also a write path: a free plan is refused, pending kept.
       const lapsePickState = stateOf(await startGoogleConnect("gc-owner", expiryBiz, { env: ENV }));

@@ -168,7 +168,7 @@ async function main() {
       assert.equal(one.images, one.drafts.filter(d => d.has_image).length, "one rendered file per imaged draft");
       for (const file of readdirSync(media)) assert.ok(file.endsWith(".png"));
       assert.equal(one.tokens.length, 1);
-      assert.deepEqual(one.google.map(g => [g.name, g.no_token]), [["Demo — Copper Kettle Café", true]]);
+      assert.deepEqual(one.google, [], "no demo owner has a fake Google connection");
       assert.equal(one.periods.length, SEED_BUSINESSES.length);
       assert.ok(one.periods.find(p => p.name.includes("Harbour"))!.target <= 1, "the Free business is capped at its plan");
       assert.match(one.businesses.find(b => b.name.includes("Copper Kettle"))!.brand_voice, /Warm, neighbourly/, "the Pro demo business has a sample voice");

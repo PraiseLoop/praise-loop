@@ -51,10 +51,14 @@ export function decryptToken(blob: string, owner: string, business: number) {
 export async function connect(owner: string, businessId: number, location: string, refreshToken: string, locationTitle?: string | null) {
   const own = await query("SELECT 1 FROM businesses WHERE id=$1 AND owner_id=$2", [businessId, owner]);
   if (!own.rowCount) return null;
+  // A reconnect starts a new connection (possibly to another location): clear the old
+  // sync stats too, so the card reads "Not synced yet" until this credential first syncs.
+  // last_sync_count is NOT NULL DEFAULT 0 (migration 015), so reset to that default.
   const r = await query<{ id: string }>(
     `INSERT INTO google_connections(business_id,owner_id,location_name,encrypted_refresh_token,location_title)
      VALUES($1,$2,$3,$4,$5) ON CONFLICT(business_id) DO UPDATE SET location_name=$3, encrypted_refresh_token=$4,
-     location_title=$5, status='active', page_checkpoint=NULL, last_error_code=NULL, last_attempt_at=NULL
+     location_title=$5, status='active', page_checkpoint=NULL, last_error_code=NULL, last_attempt_at=NULL,
+     last_sync_at=NULL, last_sync_count=0
      WHERE google_connections.owner_id=$2 RETURNING id`,
     [businessId, owner, location, encryptToken(refreshToken, owner, businessId), locationTitle ?? null]);
   return r.rows[0]?.id ?? null;
