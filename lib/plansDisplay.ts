@@ -25,9 +25,9 @@ const notAvailable = "Planned — not available yet";
 // Limits with a feature that exists and is enforced on the server. A row may
 // only show a plan's value for one of these; scripts/test-plans.ts fails when a
 // limit without a feature behind it is advertised as available.
-export const SHIPPED_LIMITS = ["postsPerWeek", "templates", "watermark", "automaticPosting", "brandVoice", "businesses"] as const;
+export const SHIPPED_LIMITS = ["postsPerWeek", "templates", "watermark", "automaticPosting", "reviewSync", "brandVoice", "businesses"] as const;
 // Limits with no feature behind them yet: they read as planned, never included.
-export const PLANNED_LIMITS = ["reviewSync", "aiReplies"] as const;
+export const PLANNED_LIMITS = ["aiReplies"] as const;
 // Kept off the comparison until the feature ships.
 export const UNLISTED_LIMITS = [] as const;
 
@@ -41,12 +41,7 @@ export const PLAN_ROWS: PlanComparisonRow[] = [
     note: "Automatic posting sends an approved post to your connected Instagram or Facebook account at the time you choose. You still approve every post, and nothing posts without that.",
     value: l => l.automaticPosting ? "Instagram and Facebook, with your approval" : "Not included"
   },
-  {
-    key: "reviewSync",
-    label: "Automatic review sync",
-    note: "Automatic review sync (Google reviews) is planned for Pro and Business but is not available yet, so every plan starts with a spreadsheet import.",
-    value: l => l.reviewSync ? notAvailable : "Not included"
-  },
+  { key: "reviewSync", label: "Google review sync", value: l => l.reviewSync ? "Included" : "Not included" },
   {
     key: "aiReplies",
     label: "AI review replies",

@@ -4,6 +4,8 @@ import { pushTick } from "../lib/services/push";
 import { emailTick } from "../lib/services/weeklyEmail";
 import { generationQueue, generationTick } from "../lib/services/generationQueue";
 import { postingMode, postingTick } from "../lib/services/bufferPosting";
+import { googleReviewSyncEnabled } from "../lib/integrations/googleReviews";
+import { googleSyncTick } from "../lib/services/googleSync";
 const { queue,worker } = generationQueue();
 let active: Promise<void> | undefined, stopped = false;
 // A tick is quiet (debug) when nothing happened and an info line when something did. A failure is
@@ -16,6 +18,7 @@ function tick() {
     .then(() => step("posting", () => postingTick()))
     .then(() => step("push", () => pushTick()))
     .then(() => step("email", () => emailTick()))
+    .then(() => step("google_sync", () => googleSyncTick()))
     .finally(() => { active = undefined; });
 }
 const configured = Number(process.env.DRAFT_PIPELINE_INTERVAL_MS ?? 60000);
@@ -25,6 +28,7 @@ const timer = setInterval(tick,interval);
 log.info("worker_started", {
   logLevel: logLevel(), appEnv: process.env.APP_ENV || "prod", intervalMs: interval,
   postingMode: postingMode(),
+  googleReviewSync: googleReviewSyncEnabled(),
   bufferConfigured: !!(process.env.BUFFER_CLIENT_ID && process.env.BUFFER_CLIENT_SECRET && process.env.CREDENTIAL_ENCRYPTION_KEY),
   metaConfigured: !!(process.env.META_APP_ID && process.env.META_APP_SECRET && process.env.CREDENTIAL_ENCRYPTION_KEY),
   mediaBaseIsHttps: (process.env.NEXTAUTH_URL ?? "").startsWith("https://"),

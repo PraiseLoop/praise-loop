@@ -33,8 +33,9 @@ All-containers workflows, configuration, tests and deployment:
 
 ## Current limitations
 
-- Reviews come from manual CSV import; Google review sync is blocked on provider
-  access ([integrations](docs/integrations.md)).
+- Reviews come from manual CSV import or the scheduled Google Business Profile
+  sync when enabled behind `GOOGLE_REVIEW_SYNC`; the owner live test is still
+  pending ([integrations](docs/integrations.md)).
 - Real publishing isn't configured; scheduling fails closed
   ([integrations](docs/integrations.md)). The mobile plan replaces it with the
   phone's share sheet for the MVP.

@@ -6,9 +6,9 @@ const planNames: Record<string, string> = { free: "Free", pro: "Pro", business: 
 const planName = (plan: string) => planNames[plan] ?? `${plan.charAt(0).toUpperCase()}${plan.slice(1)}`;
 const posts = (count: number) => `${count} post${count === 1 ? "" : "s"}`;
 const businesses = (count: number) => `${count} business${count === 1 ? "" : "es"}`;
-// Review sync (#46) and AI replies (#96) have no feature behind them yet, so a
-// plan that allows them still reads as planned, never as available.
-const featureState = (value: boolean) => value ? "planned, not available yet" : "not included";
+// Google review sync (#46) ships; AI replies (#96) still read as planned.
+const featureState = (value: boolean) => value ? "included" : "not included";
+const plannedState = (value: boolean) => value ? "planned, not available yet" : "not included";
 
 /**
  * A business over the plan's limit is paused, not deleted. Unlike the web copy this never
@@ -45,7 +45,7 @@ export function planLines(plan: Entitlements, usage: WeeklyUsage | null): string
   const lines = [
     `${planName(plan.plan)} plan`,
     `${posts(limits.postsPerWeek)} a week per business, ${limits.businesses} ${limits.businesses === 1 ? "business" : "businesses"}`,
-    `${limits.templates} quote-card ${limits.templates === 1 ? "design" : "designs"}. Watermark: ${limits.watermark ? "yes" : "no"}. Review sync: ${featureState(limits.reviewSync)}. AI replies: ${featureState(limits.aiReplies)}`
+    `${limits.templates} quote-card ${limits.templates === 1 ? "design" : "designs"}. Watermark: ${limits.watermark ? "yes" : "no"}. Google review sync: ${featureState(limits.reviewSync)}. AI replies: ${plannedState(limits.aiReplies)}`
   ];
   const note = expiryNote(plan);
   if (note) lines.push(note);

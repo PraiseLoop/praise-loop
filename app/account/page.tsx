@@ -14,8 +14,8 @@ import PasswordForm from "./PasswordForm";
 import SignOutOtherDevices from "./SignOutOtherDevices";
 
 const sources = { default: "Default plan", manual: "Set manually or by our team", store: "App store subscription", stripe: "Web subscription" } as const;
-// Review sync (#46) and AI replies (#96) have no feature behind them yet, so a
-// plan that allows them still reads as planned, never as included.
+// AI replies (#96) have no feature behind them yet, so a plan that allows them
+// still reads as planned. Google review sync (#46) ships and reads plainly.
 const plannedOrNo = (value: boolean) => value ? "Planned — not available yet" : "Not included";
 
 type AuthMethod = { provider: string; email: string | null; addedAt: string | null; lastUsedAt: string | null };
@@ -161,7 +161,7 @@ export default function AccountPage() {
     ["Quote-card designs", `${limits.templates} ${limits.templates === 1 ? "design" : "designs"}`],
     ["Watermark on images", limits.watermark ? "Yes" : "No"],
     ["Automatic posting", limits.automaticPosting ? "Instagram and Facebook, with your approval" : "Not included"],
-    ["Automatic review sync", plannedOrNo(limits.reviewSync)],
+    ["Google review sync", limits.reviewSync ? "Included" : "Not included"],
     ["AI review replies", plannedOrNo(limits.aiReplies)],
     ["Brand voice", limits.brandVoice ? "Learn from your website" : "Not included"],
     ["Businesses", String(limits.businesses)]
