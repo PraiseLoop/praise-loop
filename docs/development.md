@@ -538,6 +538,14 @@ runs as its own stack and reaches the app over a shared Docker network.
   without them. The rest match `.env.example`. If the images are private, add `ghcr.io`
   registry credentials to the tool first.
 - Pin `PRAISELOOP_TAG` to a release tag, or leave it at `latest` to follow master.
+- **Automatic dev deploys:** CI's `deploy-dev` job calls the dev stack's Dockhand webhook after
+  every push to `master`, once the `images` job has published the new `latest`. Do not add the
+  Dockhand URL as a GitHub repository webhook instead: GitHub fires that on push, before the
+  images exist, so Dockhand would redeploy the previous build. The job signs a GitHub-style push
+  payload (`X-Hub-Signature-256`, HMAC-SHA256) with the repository secrets
+  `DOCKHAND_WEBHOOK_URL` and `DOCKHAND_WEBHOOK_SECRET`; the secret must match the one set on the
+  stack's webhook in Dockhand. Without those secrets the job skips with a notice. A non-2xx
+  response fails the job. Rotate the secret in both places together.
 
 #### Resetting the demo accounts on every dev deploy (#300)
 
