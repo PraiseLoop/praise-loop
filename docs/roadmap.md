@@ -5,7 +5,7 @@ promise: the GitHub issues are the source of truth for scope and acceptance crit
 and this file says which ones to take, in what order, and what is waiting on the owner.
 **Update it in the same PR that finishes or reshapes an item** (see the last section).
 
-Last updated: 2026-11-26 (demo accounts reset on dev deploys, #300; Google Takeout format confirmed on a real export, #233; website privacy policy: real backups and Apify, no lawyer review; legal pages: the app links to praiseloop.ca, #292; public privacy, terms and support pages, #262; set a password while signed in and breached-password check, #286; sign out of all other devices, #285). Trackers: #225 (billing and the paid pilot), #271 (owner
+Last updated: 2026-11-27 (CI triggers the dev stack redeploy after images are pushed; demo accounts reset on dev deploys, #300; Google Takeout format confirmed on a real export, #233; website privacy policy: real backups and Apify, no lawyer review; legal pages: the app links to praiseloop.ca, #292; public privacy, terms and support pages, #262; set a password while signed in and breached-password check, #286; sign out of all other devices, #285). Trackers: #225 (billing and the paid pilot), #271 (owner
 approvals, order and costs), #99 (native app, parked).
 
 **Current strategy: validate on the web first, for $0** (decided 2026-11-10, see
@@ -86,7 +86,9 @@ The full ordered list with steps and costs is **#271**. In short:
 - **Deployment of the invite gate:** `SIGNUP_MODE=invite` and `INVITED_EMAILS=...` must be set
   on every environment that should be gated (dev stack and production). The default is
   `open`, so nothing is gated until they are set. Redeploy with an image pull after each
-  merge to `master`; migrations run on start (latest at time of writing: `032`).
+  merge to `master` (CI now triggers the dev stack's Dockhand webhook after the images are pushed;
+  confirm on the first merge that the dev stack pulls the new image, see development.md);
+  migrations run on start (latest at time of writing: `032`).
 - **Legal pages live only on the website (decided 2026-11-14 and 2026-11-23, #292).** `praiseloop.ca`
   is a static GitHub Pages site from `PraiseLoop/praiseloop.github.io`. Give Meta, Google and
   Stripe `https://praiseloop.ca/privacy/`, `/terms/` and `/support/`. Support contact is
