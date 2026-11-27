@@ -4,7 +4,7 @@
 who are about to change it. It summarises and links; the detailed, authoritative text lives in the
 other docs. When you change behaviour, update the detailed doc and the matching line here.
 
-Last reviewed: 2026-11-27 (Google Business Profile owner connect, location picker and status built behind a flag, #46; Google Takeout format confirmed, #233; legal and support pages moved to praiseloop.ca, #292; public privacy, terms and support pages, #262; set a password while signed in and breached-password check, #286; sign out of all other devices, #285; email and password sign-in, #159; phone-width owner screens, #276; weekly "posts ready" email, #275; web Sign in with Apple, #92; new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
+Last reviewed: 2026-11-27 (Google Business Profile scheduled review sync in the worker and plan copy shipped, #46 part 3; owner connect, location picker and status built behind a flag, #46; Google Takeout format confirmed, #233; legal and support pages moved to praiseloop.ca, #292; public privacy, terms and support pages, #262; set a password while signed in and breached-password check, #286; sign out of all other devices, #285; email and password sign-in, #159; phone-width owner screens, #276; weekly "posts ready" email, #275; web Sign in with Apple, #92; new-sign-in alerts, #260; provider-neutral plan and account copy, #234; Stripe checkout, webhook and portal, #223; direct Meta publishing, #234; invite-only sign-up, #195; Google Takeout review import, #233).
 
 | Doc | What it is the source of truth for |
 | --- | --- |
@@ -72,7 +72,7 @@ business has reviews, a brand, drafts and a weekly target.
 
 ### Pipeline
 
-reviews (CSV import, `source='manual'`; Google Takeout import, `source='google_takeout'`; Google sync is stubbed; the removable Apify stopgap writes `source='apify_google'`) → `quoteSelector` ranks candidate
+reviews (CSV import, `source='manual'`; Google Takeout import, `source='google_takeout'`; scheduled Google Business Profile sync writes `source='google'` behind `GOOGLE_REVIEW_SYNC`; the removable Apify stopgap writes `source='apify_google'`) → `quoteSelector` ranks candidate
 quotes → `lib/services/generation.ts` reserves the week's quota (`generation_periods`) and enqueues
 `generation_jobs` → worker writes caption + rendered PNG into `draft_posts` → owner approves →
 owner shares from the phone and confirms "I posted it" (`shared`).
@@ -171,7 +171,7 @@ transactional.
   tables. Free: 1 post/week, the Classic quote-card design, watermark, 1 business, no automatic posting. Pro: 5 posts/week, no
   watermark, brand voice, automatic posting to Instagram and Facebook (through Buffer or direct
   publishing), all four quote-card designs, 1 business;
-  review sync and AI replies are planned and are not sold until the server enforces them (#218). Business: Pro's features plus 5 businesses. Expired Pro or
+  Google review sync ships on paid plans (connect, worker schedule and plan copy all enforce `reviewSync`); AI replies are planned and are not sold until the server enforces them (#218). Business: Pro's features plus 5 businesses. Expired Pro or
   Business falls back to Free without deleting data, so automatic posting is refused and queued
   posts fail closed, and a saved Pro design stays saved but new images render the Classic design.
   After any downgrade only the oldest
@@ -236,7 +236,7 @@ Expo Router screens: `sign-in`, `queue`, `draft/[id]`, `profile`. Design rules t
 | Google native, Apple, Microsoft | phone sign-in; Apple and Microsoft also on web | built, tested with local keys only, never run live |
 | Buffer | automatic posting for Pro and Business owners with a Business/Creator Instagram or a Facebook Page (#29, #216) | **feasibility spike done 2026-11-01**: live API key works, an app client exists; adapter and encrypted credentials built against mocks only; **Connect backend built (#29 part 1)**: OAuth, encrypted tokens, channel selection; **web Connect screen built (#29 part 2)**: connect/reconnect/disconnect and one channel per business, posting still off; **automatic posting is now paid (#216)**: Free and expired plans are refused on every write path and the worker fails a queued post closed; **worker submission, media-URL policy and the off/draft/live gate built (#29 part 3)**; phone UI **not built**; never run live; see below |
 | Direct Meta publishing | replacement for Buffer (#234) | feasibility checked 2026-11-05; stub and fake adapter built behind the existing `SchedulerAdapter`; OAuth connect/disconnect, encrypted Page tokens and one target per business built; **worker publishing, the JPEG variant and the `/connections` setup screen built and tested with a fake client**; live Graph client and the owner-approved live connect/publish test **not built/run**; app review and business verification are owner tasks |
-| Google Business Profile | review sync (#46) | access approved 2026-11-27; live REST client built (`googleBusiness.ts`), fails closed without `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`; owner connect, location picker and status UI built behind `GOOGLE_REVIEW_SYNC`; worker schedule not built yet |
+| Google Business Profile | review sync (#46) | access approved 2026-11-27; live REST client built (`googleBusiness.ts`), fails closed without `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`; owner connect, location picker, status UI and worker schedule built behind `GOOGLE_REVIEW_SYNC`; plan copy shipped; no live test run yet |
 | Apify | owner's own Google reviews, removable stopgap (#232) | client proven with one live run; full flow tested with the fake adapter only; hidden without `APIFY_TOKEN`; Google can block scraping at any time |
 
 ### Buffer (#29): findings and decisions, 2026-11-01
@@ -318,7 +318,7 @@ endpoints take the Page token or the User token, to be settled by the owner-appr
 | Android APK release pipeline | merged; not yet run | #190 |
 | Real scheduler through Buffer | Paid (Pro and Business) automatic posting; Connect + screen built; worker posting, image links, cancel and the off/draft/live gate built (#29 part 3); **never run live**; status display and `unknown` resolution not built | #29, #216 |
 | Direct Instagram/Facebook publishing | Worker publishing, provider choice, idempotent container resume, JPEG variant, owner status, Connect backend and the `/connections` setup screen built; provider-neutral posting banner, optional onboarding link and plan/account copy built; **live client not built and the live connect/publish test not run** | #234, #244 |
-| Google review sync, AI review replies | in progress: API access approved, live client and owner connect/location picker/status built behind a flag; worker schedule pending; review-reuse policy answer still open | #46, #96 |
+| Google review sync, AI review replies | review sync shipped behind `GOOGLE_REVIEW_SYNC`: live client, owner connect/location picker/status, worker schedule and paid-plan copy; owner live test and the review-reuse policy answer still open. AI replies planned | #46, #96 |
 | Apify Google reviews stopgap | built; client proven with one live run, full flow not yet run live; hidden without `APIFY_TOKEN` | #232 |
 | Google Takeout review import | built; format confirmed on a real export (2026-11-25) | #233 |
 | Business tier | planned, see [billing.md](billing.md) | #222, #225 |
@@ -402,7 +402,7 @@ Open work and blockers are tracked in GitHub issues; this table is a snapshot.
 ## 11. Known gaps and decisions still open
 
 - **Owner setup not done**: Microsoft Entra app, Apple developer account and keys, Expo/EAS and
-  Firebase for push, Google Business Profile API access, hosting/domain for the pilot (#90, #91).
+  Firebase for push, Google Business Profile live test and review-reuse answer (#46, #264), hosting/domain for the pilot (#90, #91).
 - **Apple-only owners** can now set up a business on the web with Apple sign-in (#92); the phone
   still has no setup flow. Linking Apple from a signed-in session remains the API/phone path, and a
   phone-to-web session handoff is still the convenient follow-up.

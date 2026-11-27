@@ -20,6 +20,8 @@ assert.deepEqual(
   "classify every plan limit as shipped, planned or unlisted"
 );
 assert.ok(includesKey(SHIPPED_LIMITS, "templates"), "templates are compared now that several designs exist and the limit is enforced (#230)");
+assert.ok(includesKey(SHIPPED_LIMITS, "reviewSync"), "Google review sync is shipped and enforced in the worker (#46)");
+assert.ok(includesKey(PLANNED_LIMITS, "aiReplies"), "AI replies still have no feature behind them (#96)");
 assert.deepEqual(PLAN_ROWS.map(row => row.key).sort(), [...SHIPPED_LIMITS, ...PLANNED_LIMITS].sort(), "only shipped and planned limits get a comparison row");
 assert.deepEqual(PLAN_ORDER, ["free", "pro", "business"]);
 assert.equal(PLAN_LIMITS.pro.businesses, 1, "Pro keeps one business; several move to Business");
@@ -35,7 +37,7 @@ assert.deepEqual(rows.map(row => ({ label: row.label, free: row.values.free, pro
   { label: "Quote-card designs", free: "1 design", pro: "4 designs", business: "4 designs" },
   { label: "Watermark on images", free: "Small PraiseLoop watermark", pro: "No watermark", business: "No watermark" },
   { label: "Automatic posting", free: "Not included", pro: "Instagram and Facebook, with your approval", business: "Instagram and Facebook, with your approval" },
-  { label: "Automatic review sync", free: "Not included", pro: "Planned — not available yet", business: "Planned — not available yet" },
+  { label: "Google review sync", free: "Not included", pro: "Included", business: "Included" },
   { label: "AI review replies", free: "Not included", pro: "Planned — not available yet", business: "Planned — not available yet" },
   { label: "Brand voice", free: "Not included", pro: "Learn from your website", business: "Learn from your website" },
   { label: "Businesses", free: "1 business", pro: "1 business", business: "5 businesses" }
@@ -58,7 +60,6 @@ for (const row of rows) {
 // Unshipped features stay honest: the labels and notes must not claim they work.
 assert.deepEqual(planNotes(rows), [
   "Automatic posting sends an approved post to your connected Instagram or Facebook account at the time you choose. You still approve every post, and nothing posts without that.",
-  "Automatic review sync (Google reviews) is planned for Pro and Business but is not available yet, so every plan starts with a spreadsheet import.",
   "AI review replies are planned for Pro and Business but are not available yet.",
   "Brand voice learns a short, editable profile from your own public website; nothing is scraped from social accounts."
 ]);
@@ -69,6 +70,8 @@ const page = read("app/plans/page.tsx");
 assert.match(page, /planComparison\(PLAN_LIMITS\)/, "the plans page must render from PLAN_LIMITS");
 assert.match(page, /planNotes\(/, "the plans page must show the honesty notes");
 assert.match(page, /ProPlanCta/, "the Pro card must offer the web upgrade");
+assert.match(read("app/account/page.tsx"), /\["Google review sync", limits\.reviewSync \? "Included" : "Not included"\]/, "the account page must show review sync as shipped");
+assert.match(read("mobile/src/queue/planSummary.ts"), /Google review sync: \$\{featureState\(limits\.reviewSync\)\}/, "the phone must show review sync as shipped");
 assert.doesNotMatch(page, /Upgrade to Business/i, "Business pricing is open (#222), so it has no upgrade button");
 
 // Prices wait for a recorded decision. When docs/decisions.md records pricing, the

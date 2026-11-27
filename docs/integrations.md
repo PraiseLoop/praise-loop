@@ -358,12 +358,10 @@ Retry-After; `invalid_grant` marks the connection `revoked` and drops the token;
 disconnect removes the token locally and revokes at Google best-effort; last sync,
 count and a sanitized error code are stored.
 
-Still unverified/missing (so #46 stays open, `Refs #46`): the live client and
-OAuth consent routes/location picker, exposing sync status in the UI, scheduling
-the sync in the #43 worker, periodic full reconciliation for deleted reviews,
-review-reuse/retention policy confirmation from Google, key rotation, and the
-mandatory live test with sanitized evidence. Add `GOOGLE_TOKEN_KEY` to deploy secrets
-before use.
+Still unverified/missing (so the live test stays open): periodic full
+reconciliation for deleted reviews, review-reuse/retention policy confirmation
+from Google, key rotation, and the mandatory live test with sanitized evidence.
+Add `GOOGLE_TOKEN_KEY` to deploy secrets before use.
 
 ### Live client built — 2026-11-27
 
@@ -377,8 +375,8 @@ v1 APIs (including `nextPageToken` paging), and review listing through the v4
 `GOOGLE_CLIENT_SECRET` from Google sign-in, with optional `GOOGLE_BUSINESS_REDIRECT_URI`
 defaulting to `${NEXTAUTH_URL}/api/google/callback`; all values are read at request
 time and a missing one fails closed. `liveClient()` returns this client only when
-configured. The connect routes, picker and status view are described below. Still
-missing: scheduling the sync in the worker, and the mandatory live test with
+configured. The connect routes, picker and status view are described below, and
+the worker schedule below them. Still missing: the mandatory live test with
 sanitized evidence. The offline suite (`scripts/test-google-business.ts`) injects a
 fake fetch; no Google endpoint has been called for real.
 
@@ -418,11 +416,37 @@ never returned, stored in plaintext or logged.
 exactly): `https://dev.praiseloop.ca/api/google/callback` for the dev tunnel and
 `http://localhost:3000/api/google/callback` for local development. The default
 is `${NEXTAUTH_URL}/api/google/callback`; `GOOGLE_BUSINESS_REDIRECT_URI` overrides
-it. The worker schedule is deliberately not part of this slice, so the UI says
-reviews arrive within a few hours. `scripts/test-google-connect.ts` covers the
+it. The worker schedule below is why the UI says reviews arrive within a few
+hours. `scripts/test-google-connect.ts` covers the
 flag, plan gate, state isolation, expiry, one/many/zero locations, the picker,
 disconnect, cascade deletion and routes with an injected fake client; no Google
 endpoint is called in tests.
+
+### Worker review sync schedule — 2026-11-27
+
+`lib/services/googleSync.ts` runs as `step("google_sync")` in `worker/index.ts`,
+after the email tick. With `GOOGLE_REVIEW_SYNC` off it returns all-zero counts
+without reading the database or building a client. A connection is due when it is
+`active`, still holds a refresh token, and `coalesce(last_attempt_at, '-infinity')`
+is older than `GOOGLE_SYNC_INTERVAL_HOURS` (default 6, clamped to 1–168, invalid
+values use the default). A new connection starts with `last_attempt_at` NULL, so
+it is due on the next tick; reconnecting clears the column for the same reason.
+
+Before any provider call the worker claims each due row by setting
+`last_attempt_at = now()` in an `UPDATE ... WHERE id IN (SELECT ... FOR UPDATE
+SKIP LOCKED LIMIT n) RETURNING ...`, so two workers cannot sync one location and a
+failure backs off for a whole interval instead of retrying every minute. It
+processes at most `GOOGLE_SYNC_BATCH` connections per tick (default 3, positive
+integers only), one at a time, through `syncReviews(client, businessId)` with the
+live read-only client. The owner's plan is re-checked with `entitlementsFor` on
+each claimed row: free and lapsed plans are counted as `skipped` and their
+connection is left intact, never deleted. A thrown error for one connection is
+counted as `failed` and cannot stop the rest of the batch. The tick returns only
+counts (`due`, `synced`, `failed`, `revoked`, `skipped`, `imported`, `updated`),
+which `logTick` records; no token, OAuth code, ciphertext, review text or Google
+error message is logged. `scripts/test-google-sync-schedule.ts` covers the flag,
+plan gate, interval and batch parsing, claiming and backoff, a throwing
+connection, revocation and reconnect with an injected client and synthetic data.
 
 ## Apify Google reviews stopgap (#232) — accepted 2026-11-04
 

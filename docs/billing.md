@@ -202,7 +202,8 @@ Google Play's rules weren't checked either.
 | Watermark | Yes | No | No |
 | Brand voice | No | Yes | Yes |
 | Automatic posting (Buffer or direct Instagram/Facebook) | No | Yes | Yes |
-| Review sync, AI replies (once built) | No | Yes | Yes |
+| Google review sync | No | Yes | Yes |
+| AI replies (once built) | No | Yes | Yes |
 
 This moves the multi-business limit from Pro to Business. The app isn't in production, so no live
 owners need moving. Approval stays required on every plan, and nothing auto-posts.
@@ -224,7 +225,7 @@ reason `plan_required`, and the owner sees why on the approval card and schedule
 | Any plan except `free` or `pro` makes installed phone apps throw, so this fix ships first | `mobile/src/api/entitlements.ts` | #214 |
 | The phone's limits type is missing `brandVoice` | `mobile/src/api/entitlements.ts` | #214 |
 | `free` and `pro` were hardcoded in checks, types, scripts and display helpers; the Business tier replaces that (#215) | Migration 012, `entitlements.ts`, `set-plan.ts`, display helpers | #215 |
-| Review sync and AI replies have nothing enforcing them, because the features don't exist yet | `PLAN_LIMITS` | #218 |
+| Review sync and AI replies had nothing enforcing them when the tiers were set; review sync is now enforced on connect and in the worker (#46), AI replies are still planned | `PLAN_LIMITS` | #218 |
 | Free owners can post through Buffer | `lib/services/bufferPosting.ts`, `app/api/buffer/` | #216 |
 | The business limit is only checked at creation, so a lapsed owner keeps every business generating; #217 pauses the extra businesses and resumes them on upgrade | `lib/services/generation.ts` | #217 |
 | Deleting an account would not cancel a Stripe subscription, so a deleted owner could keep being charged; now cancelled first, and a failed cancel blocks deletion | `lib/services/accountDeletion.ts` | #220 |

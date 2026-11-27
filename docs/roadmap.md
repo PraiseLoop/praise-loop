@@ -5,7 +5,7 @@ promise: the GitHub issues are the source of truth for scope and acceptance crit
 and this file says which ones to take, in what order, and what is waiting on the owner.
 **Update it in the same PR that finishes or reshapes an item** (see the last section).
 
-Last updated: 2026-11-27 (Google Business Profile API access approved, live client and the owner connect/location picker/status UI built, #264, #46; CI triggers the dev stack redeploy after images are pushed; demo accounts reset on dev deploys, #300; Google Takeout format confirmed on a real export, #233; website privacy policy: real backups and Apify, no lawyer review; legal pages: the app links to praiseloop.ca, #292; public privacy, terms and support pages, #262; set a password while signed in and breached-password check, #286; sign out of all other devices, #285). Trackers: #225 (billing and the paid pilot), #271 (owner
+Last updated: 2026-11-27 (Google Business Profile worker schedule built and review sync marked shipped, #46 part 3; API access approved, live client and the owner connect/location picker/status UI built, #264, #46; CI triggers the dev stack redeploy after images are pushed; demo accounts reset on dev deploys, #300; Google Takeout format confirmed on a real export, #233; website privacy policy: real backups and Apify, no lawyer review; legal pages: the app links to praiseloop.ca, #292; public privacy, terms and support pages, #262; set a password while signed in and breached-password check, #286; sign out of all other devices, #285). Trackers: #225 (billing and the paid pilot), #271 (owner
 approvals, order and costs), #99 (native app, parked).
 
 **Current strategy: validate on the web first, for $0** (decided 2026-11-10, see
@@ -63,10 +63,10 @@ Take the first item that is not blocked. Each is one PR per issue (see CONTRIBUT
    account copy is already provider-neutral, #258). The live
    connect and publish test is **blocked** on #263 (Meta verification and App Review).
 2. **#46 Google Business Profile sync:** API access approved 2026-11-27 (#264); the live
-   client and the owner connect flow, location picker and sync status UI are built behind
-   `GOOGLE_REVIEW_SYNC` (#46 part 2). Next: the worker schedule, then one live test on the
-   owner's own location. Turning it on for
-   customers waits on Google's answer about reusing review text (#264). **#29 real scheduler**
+   client, owner connect flow, location picker, sync status UI (#46 part 2) and the worker
+   schedule with paid-plan copy (#46 part 3) are built behind `GOOGLE_REVIEW_SYNC`.
+   Remaining: one owner live test on their own location, and Google's answer about
+   reusing review text (#264) before turning it on for customers. **#29 real scheduler**
    is still blocked on owner access.
 3. **Parked until the web pilot is validated:** the native app's device checks and store
    release (#85, #86, #87, #89 device runs; #270), the phone password sign-in UI (#286, bearer
@@ -92,7 +92,7 @@ The full ordered list with steps and costs is **#271**. In short:
   `open`, so nothing is gated until they are set. Redeploy with an image pull after each
   merge to `master` (CI now triggers the dev stack's Dockhand webhook after the images are pushed;
   confirm on the first merge that the dev stack pulls the new image, see development.md);
-  migrations run on start (latest at time of writing: `032`).
+  migrations run on start (latest at time of writing: `034`).
 - **Legal pages live only on the website (decided 2026-11-14 and 2026-11-23, #292).** `praiseloop.ca`
   is a static GitHub Pages site from `PraiseLoop/praiseloop.github.io`. Give Meta, Google and
   Stripe `https://praiseloop.ca/privacy/`, `/terms/` and `/support/`. Support contact is

@@ -54,7 +54,7 @@ export async function connect(owner: string, businessId: number, location: strin
   const r = await query<{ id: string }>(
     `INSERT INTO google_connections(business_id,owner_id,location_name,encrypted_refresh_token,location_title)
      VALUES($1,$2,$3,$4,$5) ON CONFLICT(business_id) DO UPDATE SET location_name=$3, encrypted_refresh_token=$4,
-     location_title=$5, status='active', page_checkpoint=NULL, last_error_code=NULL
+     location_title=$5, status='active', page_checkpoint=NULL, last_error_code=NULL, last_attempt_at=NULL
      WHERE google_connections.owner_id=$2 RETURNING id`,
     [businessId, owner, location, encryptToken(refreshToken, owner, businessId), locationTitle ?? null]);
   return r.rows[0]?.id ?? null;

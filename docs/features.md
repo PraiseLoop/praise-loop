@@ -506,11 +506,18 @@ revoked or failed sync, and Disconnect removes our copy of the token.
   off.
 - **Status:** only short codes are stored (`access_revoked`, `google_<status>`,
   `sync_failed`); no token, OAuth code, state or Google error text is returned.
-- **Tests:** `scripts/test-google-connect.ts`, with an injected fake Google
-  client and synthetic data. The worker schedule is a separate task, so no
-  periodic sync has been wired up yet.
-- **Rollback:** unset `GOOGLE_REVIEW_SYNC` to hide the card and fail writes
-  closed; migration 033 only adds a column and two tables, so it can stay.
+- **Schedule:** the worker syncs a due connection every six hours by default
+  (`GOOGLE_SYNC_INTERVAL_HOURS`, 1–168), up to three connections per tick
+  (`GOOGLE_SYNC_BATCH`). A new or reconnected location is due on the next tick;
+  a failure sets `last_attempt_at` and is not retried until the interval passes.
+  Paid plans only: a lapsed or free plan is skipped without deleting the
+  connection. Nothing is ever posted automatically.
+- **Tests:** `scripts/test-google-connect.ts` and
+  `scripts/test-google-sync-schedule.ts`, with injected fake Google clients and
+  synthetic data; no live endpoint is called.
+- **Rollback:** unset `GOOGLE_REVIEW_SYNC` to hide the card, fail writes closed
+  and stop the worker tick; migrations 033 and 034 only add tables/columns, so
+  they can stay.
 
 ## CSV review import
 
@@ -634,17 +641,17 @@ is what lets the plan limit "more than one business".
 | Quote-card designs | 1 (Classic) | 4 | 4 |
 | Image watermark | Yes | No | No |
 | Automatic posting (Buffer or Instagram/Facebook) | No | Yes | Yes |
-| Automatic review sync | No | Planned | Planned |
+| Google review sync | No | Yes | Yes |
 | AI review replies | No | Planned | Planned |
 | Brand voice from your website | No | Yes | Yes |
 | Owned businesses | 1 | 1 | 5 |
 
 Only limits with a feature behind them are sold as included (#218). The four
-quote-card designs are shipped and `templates` is compared on the plan page,
-account page and phone. `reviewSync` and `aiReplies` stay in `PLAN_LIMITS` for
-later features and read as planned, never included. The #46 connect flow checks
-its limit on every write path while the table still says planned; #96 has no
-shipped flow yet.
+quote-card designs and Google review sync are shipped and `templates` and
+`reviewSync` are compared on the plan page, account page and phone. `aiReplies`
+stays in `PLAN_LIMITS` for a later feature and reads as planned, never included.
+The #46 connect flow and worker schedule check `reviewSync` on every path; #96
+has no shipped flow yet.
 
 The limits live in `lib/services/entitlements.ts` and are enforced on the server:
 
@@ -718,8 +725,8 @@ plan has lapsed.
 - **Plan page** (`/account`, reached from the profile menu; #150): the plan, where it came from
   (default, manual, store or web subscription), its expiry, what it includes (posts per week,
   quote-card designs, watermark, automatic posting, review sync, AI replies, businesses) and
-  per-business usage such as "1 of 1 post this week" with the reset date. Review
-  sync and AI replies read as planned, never included (#218).
+  per-business usage such as "1 of 1 post this week" with the reset date. Google
+  review sync reads as included on paid plans; AI replies read as planned (#218).
 - **Expired Pro or Business** reads as Free with a note saying when that plan expired.
 - **This Week** says "You've reached this week's limit" and names the plan
   limit, instead of "All caught up", when the weekly quota is used up. It
@@ -783,7 +790,7 @@ configured.
 ### Public plans page (#134)
 
 `/plans` is public: a signed-out visitor sees the Free, Pro and Business cards, what
-differs (posts each week per business, watermark, automatic posting, review sync, AI replies, brand
+differs (posts each week per business, watermark, automatic posting, Google review sync, AI replies, brand
 voice, businesses) and a "Continue with Google" call to action. Pro shows
 CA$29.99 a month plus tax and an **Upgrade to Pro** button; Business says
 "Contact us for pricing" and has no button because #222 is open. The landing
@@ -805,8 +812,9 @@ sign-in wall does not hide it.
   price appears before the decision, or if the Pro price differs. Business has no
   number until #222.
 - Wording is honest about what ships: Free's small watermark is stated plainly,
-  the four quote-card designs are compared, and review sync and AI replies read
-  "Planned — not available yet". Nothing implies posting is connected.
+  the four quote-card designs are compared, Google review sync reads "Included"
+  on paid plans, and AI replies still read "Planned — not available yet".
+  Nothing implies posting is connected.
 - The page never starts a checkout. Its Pro button uses the session: a signed-in
   owner goes to `/account?plan=pro`, and a signed-out visitor signs in with
   Google first. Checkout, step-up and the portal live only on `/account` (#223).
