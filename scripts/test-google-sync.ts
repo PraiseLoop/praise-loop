@@ -19,7 +19,22 @@ async function main() {
   const t = g.encryptToken("refresh-secret", "o1", 1);
   assert.ok(!t.includes("refresh-secret")); assert.equal(g.decryptToken(t, "o1", 1), "refresh-secret");
   assert.throws(() => g.decryptToken(t, "o2", 1), "ciphertext is bound to owner/business");
-  assert.throws(() => g.liveClient(), /not approved/);
+  // The live client now exists; with no OAuth config it must fail closed. Clear
+  // the keys so the assertion is the same on a machine with Google sign-in env.
+  const saved = {
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    GOOGLE_BUSINESS_REDIRECT_URI: process.env.GOOGLE_BUSINESS_REDIRECT_URI,
+    NEXTAUTH_URL: process.env.NEXTAUTH_URL
+  };
+  for (const key of Object.keys(saved)) delete process.env[key];
+  try {
+    assert.throws(() => g.liveClient(), /google_business_not_configured/);
+  } finally {
+    for (const [key, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[key]; else process.env[key] = v;
+    }
+  }
   const noSleep = { sleep: async () => {} };
   await databaseFixture(async c => {
     await c.query("INSERT INTO auth_users(id,email) VALUES('g-a','ga@example.invalid'),('g-b','gb@example.invalid')");

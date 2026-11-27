@@ -1,19 +1,18 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { query, transaction } from "../db";
+import { GoogleApiError, googleBusinessClient, googleBusinessConfig } from "./googleBusiness";
 
-/** Read-only view of the Business Profile review API. The live client is not built (#46 is blocked on Google approval). */
-export type GoogleReview = { reviewId: string; rating: number; comment: string; reviewerName: string | null; createTime: string; updateTime: string };
-export interface GoogleReviewsClient {
-  /** Exchange a refresh token for a short-lived access token. */
-  refreshAccessToken(refreshToken: string): Promise<string>;
-  listReviews(accessToken: string, location: string, pageToken?: string): Promise<{ reviews: GoogleReview[]; nextPageToken?: string }>;
-  revoke(refreshToken: string): Promise<void>;
-}
-export class GoogleApiError extends Error {
-  constructor(public status: number, public code: string, public retryAfterMs = 0) { super(code); }
-}
+// The REST client owns the error class and the shared read-only contract; the
+// sync keeps importing them from here so existing callers do not change.
+export { GoogleApiError };
+export type { GoogleReview, GoogleReviewsClient } from "./googleBusiness";
+import type { GoogleReviewsClient } from "./googleBusiness";
+
+/** Read-only view of the Business Profile review API (#46), live when configured. */
 export function liveClient(): GoogleReviewsClient {
-  throw new Error("Google Business Profile API access is not approved; no live client exists");
+  const config = googleBusinessConfig();
+  if (!config) throw new Error("google_business_not_configured");
+  return googleBusinessClient({ config });
 }
 
 // Key management stays outside the repo: GOOGLE_TOKEN_KEY is 32 random bytes, base64.

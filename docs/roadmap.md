@@ -5,7 +5,7 @@ promise: the GitHub issues are the source of truth for scope and acceptance crit
 and this file says which ones to take, in what order, and what is waiting on the owner.
 **Update it in the same PR that finishes or reshapes an item** (see the last section).
 
-Last updated: 2026-11-27 (CI triggers the dev stack redeploy after images are pushed; demo accounts reset on dev deploys, #300; Google Takeout format confirmed on a real export, #233; website privacy policy: real backups and Apify, no lawyer review; legal pages: the app links to praiseloop.ca, #292; public privacy, terms and support pages, #262; set a password while signed in and breached-password check, #286; sign out of all other devices, #285). Trackers: #225 (billing and the paid pilot), #271 (owner
+Last updated: 2026-11-27 (Google Business Profile API access approved and live client built, #264, #46; CI triggers the dev stack redeploy after images are pushed; demo accounts reset on dev deploys, #300; Google Takeout format confirmed on a real export, #233; website privacy policy: real backups and Apify, no lawyer review; legal pages: the app links to praiseloop.ca, #292; public privacy, terms and support pages, #262; set a password while signed in and breached-password check, #286; sign out of all other devices, #285). Trackers: #225 (billing and the paid pilot), #271 (owner
 approvals, order and costs), #99 (native app, parked).
 
 **Current strategy: validate on the web first, for $0** (decided 2026-11-10, see
@@ -62,8 +62,11 @@ Take the first item that is not blocked. Each is one PR per issue (see CONTRIBUT
    Until then Buffer is the only automatic posting route and stays fully available (plan and
    account copy is already provider-neutral, #258). The live
    connect and publish test is **blocked** on #263 (Meta verification and App Review).
-2. **#29 real scheduler** and **#46 Google Business Profile sync:** blocked on owner access
-   (#264). Do not start without the owner confirming access exists.
+2. **#46 Google Business Profile sync:** API access approved 2026-11-27 (#264) and the live
+   client is built. Next: connect routes and location picker with sync status in the UI, then
+   the worker schedule, then one live test on the owner's own location. Turning it on for
+   customers waits on Google's answer about reusing review text (#264). **#29 real scheduler**
+   is still blocked on owner access.
 3. **Parked until the web pilot is validated:** the native app's device checks and store
    release (#85, #86, #87, #89 device runs; #270), the phone password sign-in UI (#286, bearer
    route already exists), #95 store subscriptions, and every paid approval (#265 Apple, #266
